@@ -1,0 +1,9 @@
+[Telegram]
+Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AccessCodes = whitelistcode,secondwhitelistcode
+
+[OpenAI]
+SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Model = gpt-3.5-turbo
+Temperature = 0.7
+MaxTokens = 500
