@@ -10,6 +10,8 @@ This is a Telegram bot that uses the OpenAI [ChatGPT API](https://beta.openai.co
 
 Whitelist.txt, .config and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
+Bot is designed to talk to you in a style of a knight in the middle ages. You can change that in the `gptproc.py` file.
+
 ## Configuration
 The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file) and should contain the following fields:
 ```
