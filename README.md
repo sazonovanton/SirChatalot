@@ -1,6 +1,6 @@
 # SirChatalot
 
-This is a Telegram bot that uses the OpenAI [ChatGPT API](https://beta.openai.com/docs/api-reference/chat) to generate responses to messages. I just wanted to test the OpenAI ChatGPT API and I thought that a Telegram bot would be a good way to do it.
+This is a Telegram bot that uses the OpenAI [ChatGPT API](https://beta.openai.com/docs/api-reference/chat) to generate responses to messages. I just wanted to test the OpenAI ChatGPT API and I thought that a Telegram bot would be a good way to do it. Some things can be unnecessary complicated. 
 
 ## Getting Started
 * Clone the repository.
@@ -54,6 +54,7 @@ To generate a response, send the bot a message. The bot will then generate a res
 * Configurations are stored in plain text. The file is not encrypted and should not be shared with anyone.
 * The bot can store messages in a log file in a event of an error. The file is not encrypted and should not be shared with anyone.
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
+* Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
 ## License
 This project is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license. See the LICENSE file for more details.
