@@ -12,7 +12,7 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 * Create a .config file in the data directory using the config.example file as a template.
 * Run the bot by running the command `python3 main.py`.
 
-Whitelist.txt, .config and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
+Whitelist.txt, .config, stats.pickle and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
 Bot is designed to talk to you in a style of a knight in the middle ages. You can change that in the `gptproc.py` file.
 
@@ -42,6 +42,7 @@ The bot has the following commands:
 * `/start`: starts the conversation with the bot.
 * `/help`: shows the help message.
 * `/delete`: deletes the conversation history.
+* `/statistics`: shows the bot usage.
 * Any other message (including voice message) will generate a response from the bot.
 
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the /start command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.

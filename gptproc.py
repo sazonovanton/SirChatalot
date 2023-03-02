@@ -27,19 +27,83 @@ class GPT:
         '''
         try:
             openai.api_key = config.get("OpenAI", "SecretKey")
-            self.model = config.get("OpenAI", "Model")
+            self.model = config.get("OpenAI", "ChatModel")
+            self.model_price = float(config.get("OpenAI", "ChatModelPrice")) # per 1000 tokens
             self.temperature = float(config.get("OpenAI", "Temperature"))
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
 
             # load chat history from file if exists or create new 
             try:
-                # using pickle to load dict from file is not a safe way, but it's ok for this example
+                # using pickle is not a safe way, but it's ok for this example
                 # pickle can be manipulated to execute arbitrary code
                 self.chats = pickle.load(open("./data/chats.pickle", "rb")) 
             except:
                 self.chats = {}
+
+            # load statistics by users from file if exists or create new
+            try:
+                # using pickle is not a safe way, but it's ok for this example
+                # pickle can be manipulated to execute arbitrary code
+                self.stats = pickle.load(open("./data/stats.pickle", "rb")) 
+            except:
+                self.stats = {}
+
         except Exception as e:
             logger.exception('Could not initialize GPT class')
+
+    def add_stats(self, id=None, tokens_used=None, speech2text_minutes=None, messages_sent=None, voice_messages_sent=None) -> None:
+        '''
+        Add statistics (tokens used, messages sent, voice messages sent) by user
+        Input id of user, tokens used, speech2text in minutes used, messages sent, voice messages sent
+        '''
+        try:
+            # add statistics by user
+            if id is not None:
+                if id not in self.stats:
+                    self.stats[id] = {'Tokens used': 0, 'Speech2text minutes': 0, 'Messages sent': 0, 'Voice messages sent': 0}
+                if tokens_used is not None:
+                    try:
+                        self.stats[id]['Tokens used'] += tokens_used
+                    except:
+                        self.stats[id]['Tokens used'] = tokens_used
+                if speech2text_minutes is not None:
+                    try:
+                        self.stats[id]['Speech2text minutes'] += speech2text_minutes
+                    except:
+                        self.stats[id]['Speech2text minutes'] = speech2text_minutes
+                if messages_sent is not None:
+                    try:
+                        self.stats[id]['Messages sent'] += messages_sent
+                    except:
+                        self.stats[id]['Messages sent'] = messages_sent
+                if voice_messages_sent is not None:
+                    try:
+                        self.stats[id]['Voice messages sent'] += voice_messages_sent
+                    except:
+                        self.stats[id]['Voice messages sent'] = voice_messages_sent
+            # save statistics to file (unsafe way)
+            pickle.dump(self.stats, open("./data/stats.pickle", "wb"))
+        except Exception as e:
+            logger.exception('Could not add statistics for user: ' + str(id))
+
+    def get_stats(self, id=None) -> str:
+        '''
+        Get statistics (tokens used, speech2text in minutes used, messages sent, voice messages sent) by user
+        Input id of user
+        '''
+        try:
+            # get statistics by user
+            if id is not None and id in self.stats:
+                statisitics = ''
+                for key, value in self.stats[id].items():
+                    statisitics += key + ': ' + str(value) + '\n'
+                statisitics += '\nSpeech to text minutes is not counted by now.'
+                statisitics += '\nAppoximate cost of usage is $' + str(round(self.stats[id]['Tokens used'] / 1000 * self.model_price, 4)) + '\nDo not worry, it is free for you 😊'
+                return statisitics
+            return None
+        except Exception as e:
+            logger.exception('Could not get statistics for user: ' + str(id))
+            return None
 
     def delete_chat(self, id=0) -> bool:
         '''
@@ -103,28 +167,8 @@ class GPT:
             else:
                 logger.error('No audio file provided for voice chat')
                 return None
-            # get chat history
-            try:
-                messages = self.chats[id]
-            except:
-                messages = [{"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages."}]
-            # add new message
-            messages.append({"role": "user", "content": transcript})
-            # get response from GPT
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=self.max_tokens,
-                messages=messages
-            )
-            response = response["choices"][0]['message']['content']
-            # add response to chat history
-            messages.append({"role": "assistant", "content": response})
-            # save chat history
-            self.chats[id] = messages
-            # save chat history to file
-            # this can be unsafe, but it's ok for this example
-            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            # chat with GPT
+            response = self.chat(id=id, message=transcript)
             return response
         except Exception as e:
             logger.exception('Could not voice chat with GPT')
@@ -150,6 +194,12 @@ class GPT:
                 max_tokens=self.max_tokens,
                 messages=messages
             )
+            # add statistics
+            try:
+                self.add_stats(id=id, tokens_used=int(response["usage"]['total_tokens']))
+            except Exception as e:
+                logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
+            # process response
             response = response["choices"][0]['message']['content']
             # add response to chat history
             messages.append({"role": "assistant", "content": response})
@@ -159,7 +209,6 @@ class GPT:
             # this can be expensive operation
             # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
             pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
-            
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
@@ -169,5 +218,5 @@ class GPT:
 if __name__ == "__main__":
     # test GPT class
     gpt = GPT()
-    print(gpt.chat())
-    print(gpt.delete_chat())
+    # gpt.chat(id=0, message="Hi! Who are you?")
+    print(gpt.stats)

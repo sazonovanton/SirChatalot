@@ -56,6 +56,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = 'This bot is an example of OpenAI ChatGPT API usage. Have fun! To delete your chat history, use /delete command. You can also send voice messages.'
     await update.message.reply_text(help_text)
 
+async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Send a message with statistics when the command /statistics is issued
+    '''
+    # check if user is in whitelist
+    access = await check_user(update, update.message.text)
+    # if not, return None
+    if access != True:
+        return None
+    # if yes, send statistics
+    stats_text = gpt.get_stats(id=update.effective_user.id)
+    if stats_text is None or stats_text == '':
+        stats_text = "Sorry, there is no statistics yet or something went wrong. Please try again later."
+        logger.error('Could not get statistics for user: ' + str(update.effective_user.id))
+    await update.message.reply_text(stats_text)
+
 async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Delete chat history when the command /delete is issued
@@ -85,6 +101,8 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return None
     # if yes, get answer
     answer = gpt.chat(id=update.effective_user.id, message=update.message.text)
+    # add stats
+    gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
         answer = "Sorry, something went wrong. Please try again later."
@@ -106,6 +124,8 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     voice_file_path = './data/voice/' + str(update.message.voice.file_id) + '.ogg'
     voice_message = await voice_file.download_to_drive(custom_path=voice_file_path)
     answer = gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
+    # add stats
+    gpt.add_stats(id=update.effective_user.id, voice_messages_sent=1)
     # send message with a result
     if answer is None:
         answer = "Sorry, something went wrong. Please try again later."
@@ -186,6 +206,7 @@ def main() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("delete", delete_command))
+    application.add_handler(CommandHandler("statistics", statistics_command))
 
     # on non command i.e message - answer the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))

@@ -4,6 +4,7 @@ AccessCodes = whitelistcode,secondwhitelistcode
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-Model = gpt-3.5-turbo
+ChatModel = gpt-3.5-turbo
+ChatModelPrice = 0.002
 Temperature = 0.7
 MaxTokens = 500
