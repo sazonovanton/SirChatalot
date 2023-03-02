@@ -25,14 +25,20 @@ AccessCodes = whitelistcode,secondwhitelistcode
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-Model = gpt-3.5-turbo
+ChatModel = gpt-3.5-turbo
+ChatModelPrice = 0.002
+WhisperModel = whisper-1
+WhisperModelPrice = 0.006
 Temperature = 0.7
 MaxTokens = 500
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
-* OpenAI.Model: The model to use for generating responses (ChatGPT is powered by `gpt-3.5-turbo` for now).
+* OpenAI.ChatModel: The model to use for generating responses (Chat can be powered by `gpt-3.5-turbo` for now).
+* OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
+* OpenAI.WhisperModel: The model to use for speech recognition (Speect-to-text can be powered by `whisper-1` for now).
+* OpenAI.WhisperModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
 * OpenAI.Temperature: The temperature to use for generating responses.
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 

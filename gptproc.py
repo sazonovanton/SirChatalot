@@ -19,6 +19,7 @@ config.read('./data/.config')
 import pickle
 import openai
 import os
+from pydub import AudioSegment
 
 class GPT:
     def __init__(self) -> None:
@@ -29,6 +30,8 @@ class GPT:
             openai.api_key = config.get("OpenAI", "SecretKey")
             self.model = config.get("OpenAI", "ChatModel")
             self.model_price = float(config.get("OpenAI", "ChatModelPrice")) # per 1000 tokens
+            self.s2t_model = config.get("OpenAI", "WhisperModel")
+            self.s2t_model_price = float(config.get("OpenAI", "WhisperModelPrice")) # per minute
             self.temperature = float(config.get("OpenAI", "Temperature"))
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
 
@@ -51,26 +54,26 @@ class GPT:
         except Exception as e:
             logger.exception('Could not initialize GPT class')
 
-    def add_stats(self, id=None, tokens_used=None, speech2text_minutes=None, messages_sent=None, voice_messages_sent=None) -> None:
+    def add_stats(self, id=None, tokens_used=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None) -> None:
         '''
         Add statistics (tokens used, messages sent, voice messages sent) by user
-        Input id of user, tokens used, speech2text in minutes used, messages sent, voice messages sent
+        Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
         '''
         try:
             # add statistics by user
             if id is not None:
                 if id not in self.stats:
-                    self.stats[id] = {'Tokens used': 0, 'Speech2text minutes': 0, 'Messages sent': 0, 'Voice messages sent': 0}
+                    self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0}
                 if tokens_used is not None:
                     try:
                         self.stats[id]['Tokens used'] += tokens_used
                     except:
                         self.stats[id]['Tokens used'] = tokens_used
-                if speech2text_minutes is not None:
+                if speech2text_seconds is not None:
                     try:
-                        self.stats[id]['Speech2text minutes'] += speech2text_minutes
+                        self.stats[id]['Speech2text seconds'] += round(speech2text_seconds)
                     except:
-                        self.stats[id]['Speech2text minutes'] = speech2text_minutes
+                        self.stats[id]['Speech2text seconds'] = round(speech2text_seconds)
                 if messages_sent is not None:
                     try:
                         self.stats[id]['Messages sent'] += messages_sent
@@ -88,7 +91,7 @@ class GPT:
 
     def get_stats(self, id=None) -> str:
         '''
-        Get statistics (tokens used, speech2text in minutes used, messages sent, voice messages sent) by user
+        Get statistics (tokens used, speech2text in seconds used, messages sent, voice messages sent) by user
         Input id of user
         '''
         try:
@@ -97,8 +100,8 @@ class GPT:
                 statisitics = ''
                 for key, value in self.stats[id].items():
                     statisitics += key + ': ' + str(value) + '\n'
-                statisitics += '\nSpeech to text minutes is not counted by now.'
-                statisitics += '\nAppoximate cost of usage is $' + str(round(self.stats[id]['Tokens used'] / 1000 * self.model_price, 4)) + '\nDo not worry, it is free for you 😊'
+                cost = self.stats[id]['Tokens used'] / 1000 * self.model_price + self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
+                statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4)) + '\nDo not worry, it is free for you 😊'
                 return statisitics
             return None
         except Exception as e:
@@ -127,7 +130,7 @@ class GPT:
             # convert voice to text
             audio_file = self.convert_ogg_to_wav(audio_file)
             audio_file = open(audio_file, "rb")
-            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            transcript = openai.Audio.transcribe(self.s2t_model, audio_file)
             audio_file.close()
             transcript = transcript['text']
             return transcript
@@ -159,6 +162,13 @@ class GPT:
             if audio_file is not None:
                 transcript = self.speech_to_text(audio_file)
                 if transcript is not None:
+                    # add statistics
+                    try:
+                        audio = AudioSegment.from_wav(audio_file.replace('.ogg', '.wav'))
+                        self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
+                    except Exception as e:
+                        logger.exception('Could not add s2t statistics for user: ' + str(id))
+                    # delete audio file
                     try:
                         os.remove(audio_file.replace('.ogg', '.wav'))
                         logger.info('Wav audio file ' + audio_file.replace('.ogg', '.wav') + ' was deleted')

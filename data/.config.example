@@ -6,5 +6,7 @@ AccessCodes = whitelistcode,secondwhitelistcode
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ChatModel = gpt-3.5-turbo
 ChatModelPrice = 0.002
+WhisperModel = whisper-1
+WhisperModelPrice = 0.006
 Temperature = 0.7
 MaxTokens = 500
