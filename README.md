@@ -2,7 +2,7 @@
 
 This is a Telegram bot that uses the OpenAI [ChatGPT API](https://beta.openai.com/docs/api-reference/chat) to generate responses to messages. I just wanted to test the OpenAI ChatGPT API and I thought that a Telegram bot would be a good way to do it. Some things can be unnecessary complicated. 
 
-This bot can also used to generate responses to voice messages. The bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.
+This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.
 
 ## Getting Started
 * Clone the repository.
@@ -53,10 +53,11 @@ To add users to the whitelist, send the bot a message with one of the access cod
 To generate a response, send the bot a message (or a voice message). The bot will then generate a response and send it back to you.
 
 ## Warinings
-* The bot stores the whitelist in plain text. The file is not encrypted and should not be shared with anyone.
-* The bot stores chat history in as a pickle file. The file is not encrypted and should not be shared with anyone.
-* Configurations are stored in plain text. The file is not encrypted and should not be shared with anyone.
-* The bot can store messages in a log file in a event of an error. The file is not encrypted and should not be shared with anyone.
+* The bot stores the whitelist in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
+* The bot stores chat history in as a pickle file. The file is not encrypted and can be accessed by anyone with access to the server.
+* Configurations are stored in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
+* The bot can store messages in a log file in a event of an error. The file is not encrypted and can be accessed by anyone with access to the server.
+* The bot temporarily stores voice messages in `./data/voice` directory. The files are deleted after processing, but can remain on the server if the event of an error. The files are not encrypted and can be accessed by anyone with access to the server.
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
