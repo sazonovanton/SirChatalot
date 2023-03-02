@@ -3,11 +3,11 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-GPT")
-logger.setLevel(logging.INFO)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
+handler.setLevel(logging.INFO)
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 

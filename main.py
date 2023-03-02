@@ -3,11 +3,11 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-main")
-logger.setLevel(logging.INFO)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
+handler.setLevel(logging.INFO)
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
@@ -36,14 +36,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     Send a message when the command /start is issued.
     '''
     user = update.effective_user
+    # check if user is in whitelist
     access = await check_user(update, update.message.text)
+    # if yes, send welcome message
     if access == True:
         answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
             logger.error('Could not get answer to start message: ' + update.message.text)
         else:
-            await update.message.reply_html(answer)
+            await update.message.reply_text(answer)
     else:
         logger.info("Restricted access to: " + str(user))
 
@@ -69,7 +71,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if success:
         await update.message.reply_text("Chat history deleted.")
     else:
-        await update.message.reply_text("Could not delete chat history. Please try again later.")
+        await update.message.reply_text("Could not delete chat history. Maybe there is no history with you. Please try again later.")
         logger.error('Could not delete chat history for user: ' + str(update.effective_user.id))
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -87,7 +89,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if answer is None:
         answer = "Sorry, something went wrong. Please try again later."
         logger.error('Could not get answer to message: ' + update.message.text)
-    await update.message.reply_text(answer)
+    await update.message.reply_markdown(answer)
 
 def check_code(code, user_id) -> bool:
     '''
@@ -100,8 +102,8 @@ def check_code(code, user_id) -> bool:
             with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
                 f.write(str(user_id)+'\n')
             return True
-    except:
-        logger.exception('Could not add user to whitelist')
+    except Exception as e:
+        logger.exception('Could not add user to whitelist with code: ' + code + ' and user_id: ' + str(user_id))
     return False
 
 async def check_user(update, message=None) -> bool:
@@ -123,7 +125,7 @@ async def check_user(update, message=None) -> bool:
     # check if user is in whitelist
     if str(user.id) not in whitelist:
         # if not, check if user sent access code
-        logger.info("Restricted access to: " + str(user))
+        logger.warning("Restricted access to: " + str(user))
         if message is not None:
             if check_code(message, user.id):
                 # if yes, add user to whitelist and send welcome message
