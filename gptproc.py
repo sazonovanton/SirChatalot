@@ -20,24 +20,30 @@ import pickle
 import openai
 
 class GPT:
-    def __init__(self, model_capability='full') -> None:
+    def __init__(self) -> None:
         '''
         Initialize GPT class
         '''
-        openai.api_key = config.get("OpenAI", "SecretKey")
-        self.model = config.get("OpenAI", "Model")
-        self.temperature = float(config.get("OpenAI", "Temperature"))
-        self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
-
-        # load chat history from file if exists or create new 
         try:
-            self.chats = pickle.load(open("./data/chats.pickle", "rb"))
-        except:
-            self.chats = {}
+            openai.api_key = config.get("OpenAI", "SecretKey")
+            self.model = config.get("OpenAI", "Model")
+            self.temperature = float(config.get("OpenAI", "Temperature"))
+            self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
+
+            # load chat history from file if exists or create new 
+            try:
+                # using pickle to load dict from file is not a safe way, but it's ok for this example
+                # pickle can be manipulated to execute arbitrary code
+                self.chats = pickle.load(open("./data/chats.pickle", "rb")) 
+            except:
+                self.chats = {}
+        except Exception as e:
+            logger.exception('Could not initialize GPT class')
 
     def delete_chat(self, id=0) -> bool:
         '''
         Delete chat history
+        Input id of user
         '''
         try:
             del self.chats[id]
@@ -50,6 +56,7 @@ class GPT:
     def chat(self, id=0, message="Hi! Who are you?") -> str:
         '''
         Chat with GPT
+        Input id of user and message
         '''
         try:
             # get chat history
@@ -72,6 +79,8 @@ class GPT:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
+            # this can be expensive operation
+            # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
             pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
             
             return response
