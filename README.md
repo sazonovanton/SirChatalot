@@ -47,7 +47,7 @@ The bot has the following commands:
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the /start command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.
 
 ## Adding Users to the Whitelist
-To add users to the whitelist, send the bot a message with one of the access codes (see *Configuration*). The bot will then add the user to the whitelist and will send a message to the user confirming that they have been added to the whitelist.
+To add yourself to the whitelist, send the bot a message with one of the access codes (see *Configuration*). The bot will then add you to the whitelist and will send a message to you confirming that.
 
 ## Generating Responses
 To generate a response, send the bot a message (or a voice message). The bot will then generate a response and send it back to you.
