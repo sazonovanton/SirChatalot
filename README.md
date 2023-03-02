@@ -1,6 +1,6 @@
 # SirChatalot
 
-This is a Telegram bot that uses the OpenAI [ChatGPT API](https://beta.openai.com/docs/api-reference/chat) to generate responses to messages. I just wanted to test the OpenAI ChatGPT API and I thought that a Telegram bot would be a good way to do it. Some things can be unnecessary complicated. 
+This is a Telegram bot that uses the OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) to generate responses to messages. I just wanted to test the OpenAI ChatGPT API and I thought that a Telegram bot would be a good way to do it. Some things can be unnecessary complicated. 
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.
 
@@ -65,7 +65,7 @@ To generate a response, send the bot a message (or a voice message). The bot wil
 This project is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license. See the LICENSE file for more details.
 
 ## Acknowledgements
-* [OpenAI ChatGPT API](https://beta.openai.com/docs/api-reference/chat)
+* [OpenAI ChatGPT API](https://platform.openai.com/docs/guides/chat)
 * [OpenAI Whisper API](https://platform.openai.com/docs/guides/speech-to-text)
 * [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot)
 * [FFmpeg](https://ffmpeg.org/)
