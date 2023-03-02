@@ -37,7 +37,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     user = update.effective_user
     access = await check_user(update, update.message.text)
-    if access:
+    if access == True:
         answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
@@ -46,7 +46,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await update.message.reply_html(answer)
     else:
         logger.info("Restricted access to: " + str(user))
-        
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Send a message when the command /help is issued
@@ -126,13 +126,19 @@ async def check_user(update, message=None) -> bool:
         logger.info("Restricted access to: " + str(user))
         if message is not None:
             if check_code(message, user.id):
+                # if yes, add user to whitelist and send welcome message
                 await update.message.reply_text("I whitelisted you.")
+                # delete chat history
+                success = gpt.delete_chat(update.effective_user.id)
+                if not success:
+                    logger.error('Could not delete chat history for user: ' + str(update.effective_user.id))
+                # send welcome message
                 answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
                 if answer is None:
                     answer = "Sorry, something went wrong. Please try again later."
                     logger.error('Could not get answer to start message: ' + update.message.text)
                 await update.message.reply_text(answer)
-                return True
+                return None
         await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
         return False
     else:
