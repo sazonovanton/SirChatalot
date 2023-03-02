@@ -28,7 +28,7 @@ MaxTokens = 500
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
-* OpenAI.Model: The model to use for generating responses (see [here](https://beta.openai.com/docs/api-reference/models) for a list of models).
+* OpenAI.Model: The model to use for generating responses (ChatGPT is powered by `gpt-3.5-turbo` for now).
 * OpenAI.Temperature: The temperature to use for generating responses.
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 
