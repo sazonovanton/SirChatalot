@@ -18,6 +18,7 @@ config.read('./data/.config')
 
 import pickle
 import openai
+import os
 
 class GPT:
     def __init__(self) -> None:
@@ -52,6 +53,82 @@ class GPT:
         except Exception as e:
             logger.exception('Could not delete chat history for user: ' + str(id))
             return False
+    
+    def speech_to_text(self, audio_file) -> str:
+        '''
+        Convert speech to text
+        Input file with speech
+        '''
+        try:
+            # convert voice to text
+            audio_file = self.convert_ogg_to_wav(audio_file)
+            audio_file = open(audio_file, "rb")
+            transcript = openai.Audio.transcribe("whisper-1", audio_file)
+            audio_file.close()
+            transcript = transcript['text']
+            return transcript
+        except Exception as e:
+            logger.exception('Could not convert voice to text')
+            return None
+
+    def convert_ogg_to_wav(self, audio_file) -> str:
+        '''
+        Convert ogg file to wav
+        Input file with ogg
+        '''
+        try:
+            # convert ogg to wav
+            wav_file = audio_file.replace('.ogg', '.wav')
+            os.system('ffmpeg -i ' + audio_file + ' ' + wav_file)
+            return wav_file
+        except Exception as e:
+            logger.exception('Could not convert ogg to wav')
+            return None
+
+    def chat_voice(self, id=0, audio_file=None) -> str:
+        '''
+        Chat with GPT using voice
+        Input id of user and audio file
+        '''
+        try:
+            # convert voice to text
+            if audio_file is not None:
+                transcript = self.speech_to_text(audio_file)
+                if transcript is not None:
+                    try:
+                        os.remove(audio_file.replace('.ogg', '.wav'))
+                        logger.info('Wav audio file ' + audio_file.replace('.ogg', '.wav') + ' was deleted')
+                    except Exception as e:
+                        logger.exception('Could not delete audio file: ' + audio_file)
+            else:
+                logger.error('No audio file provided for voice chat')
+                return None
+            # get chat history
+            try:
+                messages = self.chats[id]
+            except:
+                messages = [{"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages."}]
+            # add new message
+            messages.append({"role": "user", "content": transcript})
+            # get response from GPT
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                temperature=self.temperature, 
+                max_tokens=self.max_tokens,
+                messages=messages
+            )
+            response = response["choices"][0]['message']['content']
+            # add response to chat history
+            messages.append({"role": "assistant", "content": response})
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            # this can be unsafe, but it's ok for this example
+            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            return response
+        except Exception as e:
+            logger.exception('Could not voice chat with GPT')
+            return None
 
     def chat(self, id=0, message="Hi! Who are you?") -> str:
         '''

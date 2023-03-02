@@ -53,7 +53,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     '''
     Send a message when the command /help is issued
     '''
-    help_text = 'This bot is an example of OpenAI ChatGPT API usage. Have fun! To delete your chat history, use /delete command.'
+    help_text = 'This bot is an example of OpenAI ChatGPT API usage. Have fun! To delete your chat history, use /delete command. You can also send voice messages.'
     await update.message.reply_text(help_text)
 
 async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -89,6 +89,33 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if answer is None:
         answer = "Sorry, something went wrong. Please try again later."
         logger.error('Could not get answer to message: ' + update.message.text)
+    await update.message.reply_markdown(answer)
+
+async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Answer to user voice message
+    '''
+    global application
+    # check if user is in whitelist
+    access = await check_user(update, update.message.text)
+    # if not, return None
+    if access != True:
+        return None
+    # if yes, get answer
+    voice_file = await application.bot.get_file(update.message.voice.file_id)
+    voice_file_path = './data/voice/' + str(update.message.voice.file_id) + '.ogg'
+    voice_message = await voice_file.download_to_drive(custom_path=voice_file_path)
+    answer = gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
+    # send message with a result
+    if answer is None:
+        answer = "Sorry, something went wrong. Please try again later."
+        logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
+    else:
+        try:
+            os.remove(voice_file_path)
+            logger.info('Audio file ' + voice_file_path + ' was deleted')
+        except Exception as e:
+            logger.exception('Could not delete audio file ' + voice_file_path)
     await update.message.reply_markdown(answer)
 
 def check_code(code, user_id) -> bool:
@@ -151,6 +178,7 @@ def main() -> None:
     '''
     Start the bot.
     '''
+    global application
     # Create the Application and pass it your bot's token.
     application = Application.builder().token(TOKEN).build()
 
@@ -159,8 +187,10 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("delete", delete_command))
 
-    # on non command i.e message - echo the message on Telegram
+    # on non command i.e message - answer the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))
+    application.add_handler(MessageHandler(filters.VOICE, answer_voice))
+
 
     # Run the bot until the Ctrl-C is pressed
     application.run_polling()
