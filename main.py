@@ -45,8 +45,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         else:
             await update.message.reply_html(answer)
     else:
-        await update.message.reply_text(rf"Sorry, {user.full_name}, you are not allowed to use this bot.")
-
+        logger.info("Restricted access to: " + str(user))
+        
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Send a message when the command /help is issued
@@ -98,7 +98,7 @@ def check_code(code, user_id) -> bool:
         if code in accesscodes:
             # add user to whitelist if code is correct
             with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
-                f.write(str(user_id))
+                f.write(str(user_id)+'\n')
             return True
     except:
         logger.exception('Could not add user to whitelist')
@@ -133,7 +133,7 @@ async def check_user(update, message=None) -> bool:
                     logger.error('Could not get answer to start message: ' + update.message.text)
                 await update.message.reply_text(answer)
                 return True
-        await update.message.reply_text("Sorry, you don't have access to this bot.")
+        await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
         return False
     else:
         return True
