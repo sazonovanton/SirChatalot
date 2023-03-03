@@ -141,6 +141,7 @@ class GPT:
             transcript = openai.Audio.transcribe(self.s2t_model, audio)
             audio.close()
             transcript = transcript['text']
+            transcript += ' (it was a voice message transcription)'
         except Exception as e:
             logger.exception('Could not convert voice to text')
             transcript = None
