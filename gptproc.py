@@ -137,9 +137,9 @@ class GPT:
         try:
             # convert voice to text
             audio_file = self.convert_ogg_to_wav(audio_file)
-            audio_file = open(audio_file, "rb")
-            transcript = openai.Audio.transcribe(self.s2t_model, audio_file)
-            audio_file.close()
+            audio = open(audio_file, "rb")
+            transcript = openai.Audio.transcribe(self.s2t_model, audio)
+            audio.close()
             transcript = transcript['text']
         except Exception as e:
             logger.exception('Could not convert voice to text')
