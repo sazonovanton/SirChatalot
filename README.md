@@ -9,7 +9,7 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 * Clone the repository.
 * Install the required packages by running the command `pip install -r requirements.txt`.
 * Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg -version` in the terminal. Voice message support won't work without it.
-* Create a .config file in the data directory using the config.example file as a template.
+* Create a `.config` file in the `data` directory using the `config.example` file in that directory as a template.
 * Run the bot by running the command `python3 main.py`.
 
 Whitelist.txt, banlist.txt, .config, stats.pickle and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
@@ -46,6 +46,7 @@ SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
 
+Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
 ## Running the Bot
 To run the bot, simply run the command `python3 main.py`. The bot will start and will wait for messages. 
