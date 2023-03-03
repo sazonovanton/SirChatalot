@@ -143,6 +143,7 @@ cython_debug/
 *.log*
 common.log
 whitelist.txt
+banlist.txt
 chats.pickle
 stats.pickle
 *.ogg

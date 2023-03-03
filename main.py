@@ -18,6 +18,8 @@ config.read('./data/.config')
 TOKEN = config.get("Telegram", "Token")
 accesscodes = config.get("Telegram", "AccessCodes").split(',')
 accesscodes = [x.strip() for x in accesscodes]
+print('Access codes: ' + ', '.join(accesscodes))
+print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
 
 from gptproc import GPT
 gpt = GPT()
@@ -130,12 +132,11 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if answer is None:
         answer = "Sorry, something went wrong. Please try again later."
         logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
-    else:
-        try:
-            os.remove(voice_file_path)
-            logger.info('Audio file ' + voice_file_path + ' was deleted')
-        except Exception as e:
-            logger.exception('Could not delete audio file ' + voice_file_path)
+    try:
+        os.remove(voice_file_path)
+        logger.info('Audio file ' + voice_file_path + ' was deleted (original)')
+    except Exception as e:
+        logger.exception('Could not delete original audio file ' + voice_file_path)
     await update.message.reply_markdown(answer)
 
 def check_code(code, user_id) -> bool:
@@ -155,8 +156,18 @@ def check_code(code, user_id) -> bool:
 
 async def check_user(update, message=None) -> bool:
     '''
-    Check if user is in whitelist
+    Check if user has an access
     '''
+    # read banlist
+    try:
+        with codecs.open("./data/banlist.txt", "r", "utf-8") as f:
+            # Read the contents of the file into a list
+            lines = f.readlines()
+        banlist = [line.rstrip('\n') for line in lines]
+    except:
+        logger.warning('No banlist or it is not possible to read it')
+        banlist = []
+
     # read whitelist
     try:
         with codecs.open("./data/whitelist.txt", "r", "utf-8") as f:
@@ -164,10 +175,15 @@ async def check_user(update, message=None) -> bool:
             lines = f.readlines()
         whitelist = [line.rstrip('\n') for line in lines]
     except:
-        logger.exception('No whitelist')
+        logger.warning('No whitelist or it is not possible to read it')
         whitelist = []
 
     user = update.effective_user
+    # check if user is in banlist
+    if str(user.id) in banlist:
+        logger.warning("Restricted access to banned user: " + str(user))
+        await update.message.reply_text("You are banned.")
+        return False
 
     # check if user is in whitelist
     if str(user.id) not in whitelist:
@@ -176,7 +192,7 @@ async def check_user(update, message=None) -> bool:
         if message is not None:
             if check_code(message, user.id):
                 # if yes, add user to whitelist and send welcome message
-                await update.message.reply_text("I whitelisted you.")
+                await update.message.reply_text("You are now able to use this bot. Welcome!")
                 # delete chat history
                 success = gpt.delete_chat(update.effective_user.id)
                 if not success:

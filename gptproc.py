@@ -34,6 +34,14 @@ class GPT:
             self.s2t_model_price = float(config.get("OpenAI", "WhisperModelPrice")) # per minute
             self.temperature = float(config.get("OpenAI", "Temperature"))
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
+            self.audio_format = '.' + config.get("OpenAI", "AudioFormat") # wav or mp3
+            try:
+                self.system_message = config.get("OpenAI", "SystemMessage")
+            except Exception as e:
+                self.system_message = "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages."
+                logger.exception('Could not get system message from config, using default: ' + self.system_message)
+            print('System message:', self.system_message)
+            print('-- System message is used to set personality to the bot. It can be changed in the config file.\n')
 
             # load chat history from file if exists or create new 
             try:
@@ -133,10 +141,16 @@ class GPT:
             transcript = openai.Audio.transcribe(self.s2t_model, audio_file)
             audio_file.close()
             transcript = transcript['text']
-            return transcript
         except Exception as e:
             logger.exception('Could not convert voice to text')
-            return None
+            transcript = None
+        # delete audio file
+        try:
+            os.remove(audio_file.replace('.ogg', self.audio_format))
+            logger.info('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
+        except Exception as e:
+            logger.exception('Could not delete converted audio file: ' + audio_file)
+        return transcript
 
     def convert_ogg_to_wav(self, audio_file) -> str:
         '''
@@ -145,7 +159,7 @@ class GPT:
         '''
         try:
             # convert ogg to wav
-            wav_file = audio_file.replace('.ogg', '.wav')
+            wav_file = audio_file.replace('.ogg', self.audio_format)
             os.system('ffmpeg -i ' + audio_file + ' ' + wav_file)
             return wav_file
         except Exception as e:
@@ -164,16 +178,10 @@ class GPT:
                 if transcript is not None:
                     # add statistics
                     try:
-                        audio = AudioSegment.from_wav(audio_file.replace('.ogg', '.wav'))
+                        audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
                         self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
                     except Exception as e:
-                        logger.exception('Could not add s2t statistics for user: ' + str(id))
-                    # delete audio file
-                    try:
-                        os.remove(audio_file.replace('.ogg', '.wav'))
-                        logger.info('Wav audio file ' + audio_file.replace('.ogg', '.wav') + ' was deleted')
-                    except Exception as e:
-                        logger.exception('Could not delete audio file: ' + audio_file)
+                        logger.exception('Could not add speech2text statistics for user: ' + str(id))
             else:
                 logger.error('No audio file provided for voice chat')
                 return None
@@ -194,7 +202,7 @@ class GPT:
             try:
                 messages = self.chats[id]
             except:
-                messages = [{"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages."}]
+                messages = [{"role": "system", "content": self.system_message}]
             # add new message
             messages.append({"role": "user", "content": message})
             # get response from GPT

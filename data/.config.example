@@ -10,3 +10,5 @@ WhisperModel = whisper-1
 WhisperModelPrice = 0.006
 Temperature = 0.7
 MaxTokens = 500
+AudioFormat = wav
+SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
