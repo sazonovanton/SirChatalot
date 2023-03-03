@@ -16,10 +16,16 @@ import configparser
 config = configparser.ConfigParser()
 config.read('./data/.config')
 TOKEN = config.get("Telegram", "Token")
-accesscodes = config.get("Telegram", "AccessCodes").split(',')
-accesscodes = [x.strip() for x in accesscodes]
-print('Access codes: ' + ', '.join(accesscodes))
-print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
+try:
+    accesscodes = config.get("Telegram", "AccessCodes").split(',')
+    accesscodes = [x.strip() for x in accesscodes]
+    print('Access codes: ' + ', '.join(accesscodes))
+    print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
+except Exception as e:
+    logger.exception('Could not get access codes from config file.')
+    print('No access codes found. Bot will be available for everyone.')
+    print('-- To add access codes, edit config file and add comma-separated list of codes to "AccessCodes" parameter in "Telegram" section.\n')
+    accesscodes = None
 
 from gptproc import GPT
 gpt = GPT()
@@ -169,14 +175,15 @@ async def check_user(update, message=None) -> bool:
         banlist = []
 
     # read whitelist
-    try:
-        with codecs.open("./data/whitelist.txt", "r", "utf-8") as f:
-            # Read the contents of the file into a list
-            lines = f.readlines()
-        whitelist = [line.rstrip('\n') for line in lines]
-    except:
-        logger.warning('No whitelist or it is not possible to read it')
-        whitelist = []
+    if accesscodes is not None:
+        try:
+            with codecs.open("./data/whitelist.txt", "r", "utf-8") as f:
+                # Read the contents of the file into a list
+                lines = f.readlines()
+            whitelist = [line.rstrip('\n') for line in lines]
+        except:
+            logger.warning('No whitelist or it is not possible to read it')
+            whitelist = []
 
     user = update.effective_user
     # check if user is in banlist
@@ -184,6 +191,10 @@ async def check_user(update, message=None) -> bool:
         logger.warning("Restricted access to banned user: " + str(user))
         await update.message.reply_text("You are banned.")
         return False
+
+    # check there were no accesscodes provided in config file bot will be available for everyone not in banlist
+    if accesscodes is None:
+        return True
 
     # check if user is in whitelist
     if str(user.id) not in whitelist:

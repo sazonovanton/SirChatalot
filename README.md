@@ -35,7 +35,7 @@ AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 ```
 * Telegram.Token: The token for the Telegram bot.
-* Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist.
+* Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (Chat can be powered by `gpt-3.5-turbo` for now).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
@@ -64,6 +64,7 @@ Codes are shown in terminal when the bot is started.
 ## Whitelisting users
 To add yourself to the whitelist, send the bot a message with one of the access codes (see *Configuration*). The bot will then add you to the whitelist and will send a message to you confirming that.
 Alternatively, you can add users to the whitelist manually. To do that, add the user's Telegram ID to the `./data/whitelist.txt` file. 
+If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 
 ## Banning Users
 To ban a user you should add their Telegram ID to the `./data/banlist.txt` file. Each ID should be on a separate line. 
