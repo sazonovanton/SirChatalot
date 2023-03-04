@@ -3,6 +3,7 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-GPT")
+logger.setLevel(logging.INFO)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
@@ -193,7 +194,7 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
-    def chat(self, id=0, message="Hi! Who are you?") -> str:
+    def chat(self, id=0, message="Hi! Who are you?", style=None) -> str:
         '''
         Chat with GPT
         Input id of user and message
@@ -203,7 +204,9 @@ class GPT:
             try:
                 messages = self.chats[id]
             except:
-                messages = [{"role": "system", "content": self.system_message}]
+                if style is None:
+                    style = self.system_message
+                messages = [{"role": "system", "content": style}]
             # add new message
             messages.append({"role": "user", "content": message})
             # get response from GPT

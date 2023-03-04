@@ -14,7 +14,9 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 
 Whitelist.txt, banlist.txt, .config, stats.pickle and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
-Bot is designed to talk to you in a style of a knight in the middle ages. You can change that in the `./data/.config` file (SystemMessage).
+Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (SystemMessage).
+There are also some additional styles that you can choose from: Alice, Bob and Charlie. You can change style from chat by sending a message with `/style` command, but your current session will be dropped. 
+Styles can be set up in the `main.py` file (`modes` variable). Style is kept only for a current session (until command `/delete` or `/style` will be issued). 
 
 ## Configuration
 The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file) and should contain the following fields:
@@ -55,6 +57,7 @@ The bot has the following commands:
 * `/help`: shows the help message.
 * `/delete`: deletes the conversation history.
 * `/statistics`: shows the bot usage.
+* `/style`: changes the style of the bot from chat.
 * Any other message (including voice message) will generate a response from the bot.
 
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the `/start` command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.

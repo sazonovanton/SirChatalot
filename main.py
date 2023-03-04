@@ -3,6 +3,7 @@
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-main")
+logger.setLevel(logging.INFO)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
@@ -35,9 +36,17 @@ import asyncio
 import sys
 import os
 import time
-from telegram import ForceReply, Update, Bot
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import codecs
+
+
+modes = {
+    'Alice': {'Desc': "Alice is empathetic and friendly", 'SystemMessage': "You are a empathetic and friendly girl in her twenties named Alice, who answers helpful and a bit flirty."},
+    'Bob': {'Desc': "Bob is brief and helpful", 'SystemMessage': "You are a helpful assistant named Bob, who answers short and informative."},
+    'Charlie': {'Desc': "Charlie is sarcastic and funny", 'SystemMessage': "You are a sarcastic and funny guy named Charlie, who answers witty and a bit rude."},
+}
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -52,8 +61,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
             logger.error('Could not get answer to start message: ' + update.message.text)
-        else:
-            await update.message.reply_text(answer)
+        await update.message.reply_text(answer)
     else:
         logger.info("Restricted access to: " + str(user))
 
@@ -134,15 +142,15 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     answer = gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
     # add stats
     gpt.add_stats(id=update.effective_user.id, voice_messages_sent=1)
-    # send message with a result
-    if answer is None:
-        answer = "Sorry, something went wrong. Please try again later."
-        logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
     try:
         os.remove(voice_file_path)
         logger.info('Audio file ' + voice_file_path + ' was deleted (original)')
     except Exception as e:
         logger.exception('Could not delete original audio file ' + voice_file_path)
+    # send message with a result
+    if answer is None:
+        answer = "Sorry, something went wrong. Please try again later."
+        logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
     await update.message.reply_markdown(answer)
 
 def check_code(code, user_id) -> bool:
@@ -219,7 +227,57 @@ async def check_user(update, message=None) -> bool:
         return False
     else:
         return True
-   
+
+async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Sends a message with buttons attached when the command /style is issued. The buttons are used to choose a style for a bot.
+    '''
+    user = update.effective_user
+    # check if user is in whitelist
+    access = await check_user(update)
+    if access == True:
+        k = []
+        for name in modes.keys():
+            k.append(InlineKeyboardButton(name, callback_data=name))
+        keyboard = [
+            k,
+            [InlineKeyboardButton("Sir Chatalot [default]", callback_data="Sir Chatalot")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        msg = "Please choose a style for a bot.\n"
+        msg += "You current chat session will be deleted.\n"
+        msg += "Style is kept for the chat session until `/style` or `/delete` command is issued.\n"
+        msg += "\n"
+        msg += "Styles description:\n"
+        for name in modes.keys():
+            msg += f"* {name}: {modes[name]['Desc']}\n"
+        await update.message.reply_text(msg, reply_markup=reply_markup)
+    else:
+        logger.info("Restricted access to style choosing to: " + str(user))
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Handles the callback query when a button is pressed.
+    '''
+    user = update.effective_user
+    # check if user is in whitelist
+    access = await check_user(update)
+    if access == True:
+        query = update.callback_query
+        await query.answer()
+        success = gpt.delete_chat(update.effective_user.id)
+        if success:
+            logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
+        logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
+        if query.data == "Sir Chatalot":
+            answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
+        else:
+            answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!", style=modes[query.data]['SystemMessage'])
+        if answer is None:
+            answer = "Sorry, something went wrong. Please try again later."
+            logger.error('Could not get answer for user: ' + str(update.effective_user.id))
+        await query.edit_message_text(text=answer)
+
 
 def main() -> None:
     '''
@@ -234,6 +292,9 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
+
+    application.add_handler(CommandHandler("style", style_command))
+    application.add_handler(CallbackQueryHandler(button))
 
     # on non command i.e message - answer the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))
