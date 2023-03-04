@@ -90,7 +90,7 @@ To generate a response, send the bot a message (or a voice message). The bot wil
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
 ## License
-This project is licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/) license. See the LICENSE file for more details.
+This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). See the `LICENSE` file for more details.
 
 ## Acknowledgements
 * [OpenAI ChatGPT API](https://platform.openai.com/docs/guides/chat) - The API used for generating responses.
