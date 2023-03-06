@@ -7,12 +7,19 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
 * Clone the repository.
+
+### Automatic steps (for Linux)
+* Run the command `./first_run.sh` from the root directory of the repository. This will install the required packages, create the configuration file and start the bot.
+  * Script will ask you to enter the Telegram token and the OpenAI secret key as well as other optional parameters. You can also change them later in the `./data/.config` file (see *Configuration*).
+  * [ffmpeg](https://ffmpeg.org/) will not be installed automatically. You need to install it manually. Voice message support won't work without it.
+
+### Manual steps
 * Install the required packages by running the command `pip install -r requirements.txt`.
-* Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg -version` in the terminal. Voice message support won't work without it.
+* Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.
 * Create a `.config` file in the `data` directory using the `config.example` file in that directory as a template.
 * Run the bot by running the command `python3 main.py`.
 
-Whitelist.txt, banlist.txt, .config, stats.pickle and chats.pickle are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
+`Whitelist.txt`, `banlist.txt`, `.config`, `stats.pickle` and `chats.pickle` are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
 Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (SystemMessage).
 There are also some additional styles that you can choose from: Alice, Bob and Charlie. You can change style from chat by sending a message with `/style` command, but your current session will be dropped. 
