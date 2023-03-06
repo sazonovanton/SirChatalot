@@ -8,7 +8,6 @@ handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
-handler.setLevel(logging.INFO)
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
@@ -40,12 +39,41 @@ from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboa
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import codecs
 
-
 modes = {
     'Alice': {'Desc': "Alice is empathetic and friendly", 'SystemMessage': "You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty."},
     'Bob': {'Desc': "Bob is brief and helpful", 'SystemMessage': "You are a helpful assistant named Bob, who answers short and informative."},
     'Charlie': {'Desc': "Charlie is sarcastic and funny", 'SystemMessage': "You are a sarcastic and funny guy named Charlie, who answers witty and a bit rude."},
 }
+
+def escaping(text):
+    '''
+    Inside (...) part of inline link definition, all ')' and '\' must be escaped with a preceding '\' character.
+    In all other places characters:
+    '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' 
+    must be escaped with the preceding character '\'.
+    '''
+    escaped = text.translate(str.maketrans({"-":  r"\-",
+                                          "]":  r"\]",
+                                          "^":  r"\^",
+                                          "$":  r"\$",
+                                          "*":  r"\*",
+                                          ".":  r"\.",
+                                          "!":  r"\!",
+                                          "_":  r"\_",
+                                          "[":  r"\[",
+                                            "(":  r"\(",
+                                            ")":  r"\)",
+                                            "~":  r"\~",
+                                            "`":  r"\`",
+                                            ">":  r"\>",
+                                            "#":  r"\#",
+                                            "+":  r"\+",
+                                            "=":  r"\=",
+                                            "|":  r"\|",
+                                            "{":  r"\{",
+                                            "}":  r"\}",
+                                            }))
+    return escaped
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -121,9 +149,13 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
-        answer = "Sorry, something went wrong. Please try again later."
+        answer = "Sorry, something went wrong. You can try to /delete your session if it's too long."
         logger.error('Could not get answer to message: ' + update.message.text)
-    await update.message.reply_markdown(answer)
+    try:
+        await update.message.reply_markdown(answer)
+    except:
+        print('Could not send message. Trying to escape characters for text:\n' + answer)
+        await update.message.reply_markdown_v2(escaping(answer))
 
 async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -149,9 +181,13 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.exception('Could not delete original audio file ' + voice_file_path)
     # send message with a result
     if answer is None:
-        answer = "Sorry, something went wrong. Please try again later."
+        answer = "Sorry, something went wrong. You can try to /delete your session if it's too long."
         logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
-    await update.message.reply_markdown(answer)
+    try:
+        await update.message.reply_markdown(answer)
+    except:
+        print('Could not send message. Trying to escape characters for text:\n' + answer)
+        await update.message.reply_markdown_v2(escaping(answer))
 
 def check_code(code, user_id) -> bool:
     '''
@@ -270,9 +306,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
         logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
         if query.data == "Sir Chatalot":
-            answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
+            answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
         else:
-            answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!", style=modes[query.data]['SystemMessage'])
+            answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
             logger.error('Could not get answer for user: ' + str(update.effective_user.id))

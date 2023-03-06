@@ -87,6 +87,7 @@ To generate a response, send the bot a message (or a voice message). The bot wil
 * The bot can store messages in a log file in a event of an error. The file is not encrypted and can be accessed by anyone with access to the server.
 * The bot temporarily stores voice messages in `./data/voice` directory. The files are deleted after processing (successful or not), but can remain on the server if the event of an error. The files are not encrypted and can be accessed by anyone with access to the server.
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
+* The bot will try to continue conversation in the event of reaching maximum number of tokens by creating summary of the conversation and using it as a prompt for the next response. This can lead to the bot anwering poorly.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
 ## License

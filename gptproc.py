@@ -8,7 +8,6 @@ handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
-handler.setLevel(logging.INFO)
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
@@ -194,7 +193,7 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
-    def chat(self, id=0, message="Hi! Who are you?", style=None) -> str:
+    def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True) -> str:
         '''
         Chat with GPT
         Input id of user and message
@@ -210,12 +209,39 @@ class GPT:
             # add new message
             messages.append({"role": "user", "content": message})
             # get response from GPT
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=self.max_tokens,
-                messages=messages
-            )
+            try:
+                response = openai.ChatCompletion.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=self.max_tokens,
+                    messages=messages
+                )
+            # if retelimit
+            except openai.error.RateLimitError as e:
+                logger.exception('Rate limit error')
+                return 'Wow... we are getting rate limited. Please try again later.'
+            # if chat is too long
+            except openai.error.InvalidRequestError as e:
+                logger.exception('Invalid request error')
+                if not continue_attempt:
+                    return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete.'
+                else:
+                    style = messages[0]['content'] + '\n Your previous conversation summary: '
+                    self.delete_chat(id)
+                    summary = [{"role": "system", "content": 'You are very great at summarizing text to fit at 500 charaters.'}]
+                    summary.append({"role": "user", "content": 'Make a summary of the previous conversation: ' + str(messages)})
+                    response = openai.ChatCompletion.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=self.max_tokens,
+                        messages=summary
+                    )
+                    style += response["choices"][0]['message']['content']
+                    self.chat(id=id, message=message, style=style, continue_attempt=False)
+            # if something else
+            except Exception as e:
+                logger.exception('Could not get response from GPT')
+                return None
             # add statistics
             try:
                 self.add_stats(id=id, tokens_used=int(response["usage"]['total_tokens']))
@@ -231,6 +257,8 @@ class GPT:
             # this can be expensive operation
             # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
             pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            if continue_attempt == False:
+                response += '\nIt seems like you reached length limit of chat session. I will continue, but I advice you to /delete session.'
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
