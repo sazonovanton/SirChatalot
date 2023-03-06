@@ -129,9 +129,9 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     success = gpt.delete_chat(update.effective_user.id)
     # send message about result
     if success:
-        await update.message.reply_text("Chat history deleted.")
+        await update.message.reply_text("Chat history deleted")
     else:
-        await update.message.reply_text("Could not delete chat history. Maybe there is no history with you. Please try again later.")
+        await update.message.reply_text("Sorry, it seems like there is no history with you. Please try again later.")
         logger.error('Could not delete chat history for user: ' + str(update.effective_user.id))
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -149,7 +149,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
-        answer = "Sorry, something went wrong. You can try to /delete your session if it's too long."
+        answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to message: ' + update.message.text)
     try:
         await update.message.reply_markdown(answer)
@@ -181,7 +181,7 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.exception('Could not delete original audio file ' + voice_file_path)
     # send message with a result
     if answer is None:
-        answer = "Sorry, something went wrong. You can try to /delete your session if it's too long."
+        answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
     try:
         await update.message.reply_markdown(answer)
