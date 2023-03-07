@@ -39,11 +39,35 @@ from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboa
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import codecs
 
-modes = {
-    'Alice': {'Desc': "Alice is empathetic and friendly", 'SystemMessage': "You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty."},
-    'Bob': {'Desc': "Bob is brief and helpful", 'SystemMessage': "You are a helpful assistant named Bob, who answers short and informative."},
-    'Charlie': {'Desc': "Charlie is sarcastic and funny", 'SystemMessage': "You are a sarcastic and funny guy named Charlie, who answers witty and a bit rude."},
-}
+def chat_modes_read(filepath='./data/chat_modes.ini'):
+    '''
+    Read chat modes from a ini file. Returns a dict with the chat mode names as keys and a dict with the description and system message as values.
+    INI example:
+        [Alice]
+        Description = Alice is empathetic and friendly
+        SystemMessage = You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty.
+
+        [Bob]
+        Description = Bob is brief and helpful
+        SystemMessage = You are a helpful assistant named Bob, who answers very short and informative.
+    '''
+    try:
+        # read chat modes from file
+        chat_modes = configparser.ConfigParser()
+        chat_modes.read(filepath)
+
+        # create a dict with chat modes
+        modes = {}
+        for mode in chat_modes.sections():
+            modes[mode] = {
+                'Desc': chat_modes[mode]['Description'],
+                'SystemMessage': chat_modes[mode]['SystemMessage']
+            }
+
+        return modes
+    except Exception as e:
+        logger.exception('Could not read chat modes from file: ' + filepath)
+        return None
 
 def escaping(text):
     '''
@@ -271,7 +295,14 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     # check if user is in whitelist
     access = await check_user(update)
-    if access == True:
+    if access == True: 
+        # read chat modes
+        modes = chat_modes_read()
+        if modes is None:
+            await update.message.reply_text('Sorry, something went wrong. Please try again later.', reply_markup=reply_markup)
+            return None
+
+        # generate keyboard with buttons
         k = []
         for name in modes.keys():
             k.append(InlineKeyboardButton(name, callback_data=name))
@@ -279,14 +310,19 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             k,
             [InlineKeyboardButton("Sir Chatalot [default]", callback_data="Sir Chatalot")],
         ]
+
+        # send message with a keyboard
         reply_markup = InlineKeyboardMarkup(keyboard)
         msg = "Please choose a style for a bot.\n"
         msg += "You current chat session will be deleted.\n"
         msg += "Style is kept for the chat session until `/style` or `/delete` command is issued.\n"
         msg += "\n"
         msg += "Styles description:\n"
+
+        # add styles description
         for name in modes.keys():
             msg += f"* {name}: {modes[name]['Desc']}\n"
+
         await update.message.reply_text(msg, reply_markup=reply_markup)
     else:
         logger.info("Restricted access to style choosing to: " + str(user))
@@ -299,16 +335,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # check if user is in whitelist
     access = await check_user(update)
     if access == True:
+        # read chat modes
+        modes = chat_modes_read()
+        if modes is None:
+            await update.message.reply_text('Sorry, something went wrong. Please try again later.', reply_markup=reply_markup)
+            return None
+
+        # delete chat history
         query = update.callback_query
         await query.answer()
         success = gpt.delete_chat(update.effective_user.id)
         if success:
             logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
-        logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
+        
         if query.data == "Sir Chatalot":
             answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
         else:
             answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
+        logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
+
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
             logger.error('Could not get answer for user: ' + str(update.effective_user.id))
