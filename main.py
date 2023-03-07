@@ -223,7 +223,7 @@ def check_code(code, user_id) -> bool:
             # add user to whitelist if code is correct
             with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
                 f.write(str(user_id)+'\n')
-            logger.info('Granted access to user with ID: ' + + str(user_id) + '. Code used: ' + code)
+            logger.info('Granted access to user with ID: ' + str(user_id) + '. Code used: ' + code)
             return True
     except Exception as e:
         logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
