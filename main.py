@@ -22,7 +22,7 @@ try:
     print('Access codes: ' + ', '.join(accesscodes))
     print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
 except Exception as e:
-    logger.exception('Could not get access codes from config file.')
+    logger.warning('Could not get access codes from config file.')
     print('No access codes found. Bot will be available for everyone.')
     print('-- To add access codes, edit config file and add comma-separated list of codes to "AccessCodes" parameter in "Telegram" section.\n')
     accesscodes = None
@@ -156,7 +156,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Chat history deleted")
     else:
         await update.message.reply_text("Sorry, it seems like there is no history with you. Please try again later.")
-        logger.error('Could not delete chat history for user: ' + str(update.effective_user.id))
+        logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -223,9 +223,10 @@ def check_code(code, user_id) -> bool:
             # add user to whitelist if code is correct
             with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
                 f.write(str(user_id)+'\n')
+            logger.info('Granted access to user with ID: ' + + str(user_id) + '. Code used: ' + code)
             return True
     except Exception as e:
-        logger.exception('Could not add user to whitelist with code: ' + code + ' and user_id: ' + str(user_id))
+        logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
     return False
 
 async def check_user(update, message=None) -> bool:
@@ -239,7 +240,7 @@ async def check_user(update, message=None) -> bool:
             lines = f.readlines()
         banlist = [line.rstrip('\n') for line in lines]
     except:
-        logger.warning('No banlist or it is not possible to read it')
+        logger.exception('No banlist or it is not possible to read it')
         banlist = []
 
     # read whitelist
@@ -275,7 +276,7 @@ async def check_user(update, message=None) -> bool:
                 # delete chat history
                 success = gpt.delete_chat(update.effective_user.id)
                 if not success:
-                    logger.error('Could not delete chat history for user: ' + str(update.effective_user.id))
+                    logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
                 # send welcome message
                 answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
                 if answer is None:
