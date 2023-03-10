@@ -128,6 +128,98 @@ class GPT:
         except Exception as e:
             logger.exception('Could not delete chat history for user: ' + str(id))
             return False
+
+    def save_session(self, id=0) -> bool:
+        '''
+        Save chat session 
+        Input id of user
+            file: ./data/chats/ID.pickle
+            content of file: {'Name 1': messages, 'Name 2': messages, ...}
+        '''
+        # get chat history
+        try:
+            messages = self.chats[id]
+        except:
+            return False
+        # read user sessions from pickle file if exists 
+
+        try:
+            sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
+        except:
+            sessions = {}
+            logger.info('Could not load sessions for user: ' + str(id) + ', creating new')
+
+        # get name of chat by summarizing messages
+        summary = self.chat_summary(messages, short=True)
+
+        # save chat session
+        try:
+            sessions[summary] = messages
+            pickle.dump(sessions, open("./data/chats/" + str(id) + ".pickle", "wb"))
+            logger.info('Saved session for user: ' + str(id) + ', name: ' + summary)
+            return True
+        except Exception as e:
+            logger.exception('Could not save session for user: ' + str(id))
+            return False
+        
+    def stored_sessions(self, id=0) -> list:
+        '''
+        Get list of stored sessions for user
+        '''
+        # read user sessions from pickle file if exists 
+        try:
+            sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
+        except:
+            return None
+        
+        # sessions names
+        names = []
+        for key, value in sessions.items():
+            names.append(key)
+            print('*', key)
+        return names
+
+    def load_session(self, id=0, name=None) -> list:
+        '''
+        Load chat session by name for user, overwrite chat history with session
+        '''
+        # read user sessions from pickle file if exists
+        try:
+            sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
+        except:
+            return False
+        
+        # get session by name
+        try:
+            messages = sessions[name]
+            # overwrite chat history
+            self.chats[id] = messages
+            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not load session for user: ' + str(id))
+            return False
+
+    def delete_session(self, id=0, name=None) -> bool:
+        '''
+        Delete chat session by name for user
+        '''
+        # read user sessions from pickle file if exists
+        try:
+            sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
+        except:
+            return False
+        
+        # delete session by name
+        try:
+            del sessions[name]
+            pickle.dump(sessions, open("./data/chats/" + str(id) + ".pickle", "wb"))
+            logger.info('Deleted session named: ' + name + ', for user: ' + str(id))
+            return True
+        except Exception as e:
+            logger.exception('Could not delete session for user: ' + str(id))
+            return False
+        
     
     def speech_to_text(self, audio_file) -> str:
         '''
@@ -145,6 +237,7 @@ class GPT:
         except Exception as e:
             logger.exception('Could not convert voice to text')
             transcript = None
+
         # delete audio file
         try:
             os.remove(audio_file.replace('.ogg', self.audio_format))
@@ -193,11 +286,48 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
+    def chat_summary(self, messages, short=False) -> str:
+        '''
+        Summarize chat history
+        Input messages and short flag (states that summary should be in one sentence)
+        '''
+        try:
+            if messages is None or len(messages) == 0:
+                return None
+
+            text = ''
+            for i in range(1, len(messages)):
+                text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
+            if short:
+                summary = [{"role": "system", "content": 'You are summarizing given text in an only one short sentence with a few words. Answer with summary only.'}]
+                summary.append({"role": "user", "content": 'Make a summary: ' + str(text)})
+                size = 12
+            else:
+                summary = [{"role": "system", "content": 'You are very great at summarizing text to fit at 500 charaters. Answer with summary only.'}]
+                summary.append({"role": "user", "content": 'Make a summary of the previous conversation: ' + str(text)})
+                size = self.max_tokens
+
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                temperature=self.temperature, 
+                max_tokens=size,
+                messages=summary
+            )
+
+            return response["choices"][0]['message']['content']
+        except Exception as e:
+            logger.exception('Could not summarize chat history')
+            return None
+        
+
     def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True) -> str:
         '''
         Chat with GPT
         Input id of user and message
         '''
+        # trigger_style = self.keyword_trigger(message)
+        # if trigger_style != False:
+        #     self.change_style(id=id, style=trigger_style)
         try:
             # get chat history
             try:
@@ -228,15 +358,7 @@ class GPT:
                 else:
                     style = messages[0]['content'] + '\n Your previous conversation summary: '
                     self.delete_chat(id)
-                    summary = [{"role": "system", "content": 'You are very great at summarizing text to fit at 500 charaters.'}]
-                    summary.append({"role": "user", "content": 'Make a summary of the previous conversation: ' + str(messages)})
-                    response = openai.ChatCompletion.create(
-                        model=self.model,
-                        temperature=self.temperature, 
-                        max_tokens=self.max_tokens,
-                        messages=summary
-                    )
-                    style += response["choices"][0]['message']['content']
+                    style += self.chat_summary(messages)
                     self.chat(id=id, message=message, style=style, continue_attempt=False)
             # if something else
             except Exception as e:
@@ -263,6 +385,53 @@ class GPT:
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return None
+
+    def keyword_trigger(self, message) -> bool:
+        '''
+        Search for keyword in message
+        Input message and keyword
+        '''
+        styles = {
+            'rose': 'You like roses, you talk about roses, you are a rose.',
+            'sunflower': 'You like sunflowers, you talk about sunflowers, you are a sunflower.',
+        }
+
+        try:
+            for keyword in styles:
+                if keyword in message:
+                    style = styles[keyword]
+                    return style
+                else:
+                    return False
+        except Exception as e:
+            logger.exception('Could not search for keyword: ' + keyword + ' in message: ' + message)
+            return False
+
+    def change_style(self, id=0, style=None) -> bool:
+        '''
+        Change style of chat
+        Input id of user and style
+        '''         
+        try:   
+            # get chat history
+            if style is None:
+                style = self.system_message
+            # get messages if chat exists
+            if id in self.chats:
+                messages = self.chats[id]
+            else:
+                messages = [{"role": "system", "content": style}]
+            # change style
+            messages[0]['content'] = style
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not change style for user: ' + str(id))
+            return False
+        
 
 
 if __name__ == "__main__":

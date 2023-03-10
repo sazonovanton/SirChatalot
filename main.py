@@ -344,6 +344,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # delete chat history
         query = update.callback_query
+        print(query)
         await query.answer()
         success = gpt.delete_chat(update.effective_user.id)
         if success:
@@ -360,6 +361,47 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.error('Could not get answer for user: ' + str(update.effective_user.id))
         await query.edit_message_text(text=answer)
 
+async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Saves the current chat session to a file.
+    '''
+    user = update.effective_user
+    # check if user is in whitelist
+    access = await check_user(update)
+    if access == True:
+        # save chat history
+        success = gpt.save_session(update.effective_user.id)
+        if success:
+            await update.message.reply_text("Chat session saved.")
+        else:
+            await update.message.reply_text("Sorry, something went wrong. Please try again later.")
+
+async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Loads the chat session.
+    '''
+    user = update.effective_user
+    # check if user is in whitelist
+    access = await check_user(update)
+    if access == True:
+        # give user a choice of sessions
+        sessions = gpt.stored_sessions(update.effective_user.id)
+        if sessions is None:
+            await update.message.reply_text("Sorry, no stored sessions found. Please try again later.")
+            return None
+
+        # generate keyboard with buttons
+        keyboard = []
+        for name in sessions:
+            keyboard.append(InlineKeyboardButton(name + str('...'), callback_data=name))
+        keyboard = [keyboard]
+        print(keyboard)
+
+        # send message with a keyboard
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        msg = "Choose a session from stored ones.\n"
+
+        await update.message.reply_text(msg, reply_markup=reply_markup)
 
 def main() -> None:
     '''
@@ -374,6 +416,10 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
+
+    # application.add_handler(CommandHandler("save_session", save_session_command))
+    # application.add_handler(CommandHandler("load_session", load_session_command))
+    # application.add_handler(CommandHandler("delete_session", delete_session_command))
 
     application.add_handler(CommandHandler("style", style_command))
     application.add_handler(CallbackQueryHandler(button))
