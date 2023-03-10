@@ -1,0 +1,11 @@
+version: "3"
+services:
+  sirchatalot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: SirChatalot
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped
