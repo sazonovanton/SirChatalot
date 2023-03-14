@@ -28,7 +28,6 @@ fi
 # Check if ffmpeg is installed
 if ! command -v ffmpeg >/dev/null; then
     echo "Error: ffmpeg is not installed or not in PATH. Voice messages will not work."
-    exit 1
 else
     echo "$(ffmpeg -version | head -n 1)"
 fi
@@ -67,6 +66,7 @@ if [ ! -f ./data/.config ]; then
         echo "Please enter your OpenAI secret key:"
         read secretkey
     done
+    echo "SecretKey = " $secretkey >> ./data/.config
     # ask for ChatModel, if no were entered, use default
     echo "Please enter OpenAI chat model to use [Default: gpt-3.5-turbo]:"
     read chatmodel

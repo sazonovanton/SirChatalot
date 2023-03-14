@@ -300,7 +300,7 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         # read chat modes
         modes = chat_modes_read()
         if modes is None:
-            await update.message.reply_text('Sorry, something went wrong. Please try again later.', reply_markup=reply_markup)
+            await update.message.reply_text('Sorry, something went wrong. Please try again later.')
             return None
 
         # generate keyboard with buttons
@@ -339,7 +339,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         # read chat modes
         modes = chat_modes_read()
         if modes is None:
-            await update.message.reply_text('Sorry, something went wrong. Please try again later.', reply_markup=reply_markup)
+            await update.message.reply_text('Sorry, something went wrong. Please try again later.')
             return None
 
         # delete chat history
