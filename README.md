@@ -59,9 +59,9 @@ SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
 ## Using GPT-4
-You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file.
-Example:
+You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file:
 ```
+...
 [OpenAI]
 ChatModel = gpt-4
 ; ChatModelPrice = 0.002 - delete this line
@@ -71,7 +71,7 @@ ChatModelCompletionPrice = 0.06
 ```
 ChatModelPrice calculates for the whole message, so it is not representative in this case. Use ChatModelPromptPrice and ChatModelCompletionPrice instead. They calculate for the prompt and completion separately.
 
-Models can be found here: https://platform.openai.com/docs/models/gpt-4
+Models can be found here: https://platform.openai.com/docs/models/gpt-4  
 Prices can be found here: https://openai.com/pricing
 
 Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
