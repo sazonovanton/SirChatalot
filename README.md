@@ -76,7 +76,7 @@ Prices can be found here: https://openai.com/pricing
 
 Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
 
-*Note:* GPT-4 is still in limited beta and is not available to everyone. You need to get an access to it first. You can do that by filling out the form here: https://openai.com/waitlist/gpt-4-api
+*Note:* GPT-4 is still in limited beta and is not available to everyone. You need to get an access to it first. You can do that by filling out the form here: https://openai.com/waitlist/gpt-4-api  
 Also, you can not use GPT-4 image input right now, it will be available in the future (I'll update bot when it will happen).
 
 ## Running the Bot
