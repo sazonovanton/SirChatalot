@@ -59,13 +59,15 @@ SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
 ## Using GPT-4
-You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and `OpenAI.ChatModelPrice` fields in the `./data/.config` file.
+You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file.
 Example:
 ```
 [OpenAI]
 ChatModel = gpt-4
+; ChatModelPrice = 0.002 - delete this line
 ChatModelPromptPrice = 0.03
 ChatModelCompletionPrice = 0.06
+...
 ```
 ChatModelPrice calculates for the whole message, so it is not representative in this case. Use ChatModelPromptPrice and ChatModelCompletionPrice instead. They calculate for the prompt and completion separately.
 
