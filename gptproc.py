@@ -29,9 +29,11 @@ class GPT:
         try:
             openai.api_key = config.get("OpenAI", "SecretKey")
             self.model = config.get("OpenAI", "ChatModel")
-            self.model_price = float(config.get("OpenAI", "ChatModelPrice")) # per 1000 tokens
+            self.model_price = float(config.get("OpenAI", "ChatModelPrice")) if config.has_option("OpenAI", "ChatModelPrice") else 0 # per 1000 tokens
+            self.model_completion_price = float(config.get("OpenAI", "ChatModelCompletionPrice")) if config.has_option("OpenAI", "ChatModelCompletionPrice") else 0 # per 1000 tokens
+            self.model_prompt_price = float(config.get("OpenAI", "ChatModelPromptPrice")) if config.has_option("OpenAI", "ChatModelPromptPrice") else 0 # per 1000 tokens
             self.s2t_model = config.get("OpenAI", "WhisperModel")
-            self.s2t_model_price = float(config.get("OpenAI", "WhisperModelPrice")) # per minute
+            self.s2t_model_price = float(config.get("OpenAI", "WhisperModelPrice")) if config.has_option("OpenAI", "WhisperModelPrice") else 0 # per 1000 tokens
             self.temperature = float(config.get("OpenAI", "Temperature"))
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
             self.audio_format = '.' + config.get("OpenAI", "AudioFormat") # wav or mp3
@@ -62,7 +64,7 @@ class GPT:
         except Exception as e:
             logger.exception('Could not initialize GPT class')
 
-    def add_stats(self, id=None, tokens_used=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None) -> None:
+    def add_stats(self, id=None, tokens_used=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None) -> None:
         '''
         Add statistics (tokens used, messages sent, voice messages sent) by user
         Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
@@ -71,7 +73,7 @@ class GPT:
             # add statistics by user
             if id is not None:
                 if id not in self.stats:
-                    self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0}
+                    self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0}
                 if tokens_used is not None:
                     try:
                         self.stats[id]['Tokens used'] += tokens_used
@@ -92,6 +94,16 @@ class GPT:
                         self.stats[id]['Voice messages sent'] += voice_messages_sent
                     except:
                         self.stats[id]['Voice messages sent'] = voice_messages_sent
+                if prompt_tokens_used is not None:
+                    try:
+                        self.stats[id]['Prompt tokens used'] += prompt_tokens_used
+                    except:
+                        self.stats[id]['Prompt tokens used'] = prompt_tokens_used
+                if completion_tokens_used is not None:
+                    try:
+                        self.stats[id]['Completion tokens used'] += completion_tokens_used
+                    except:
+                        self.stats[id]['Completion tokens used'] = completion_tokens_used
             # save statistics to file (unsafe way)
             pickle.dump(self.stats, open("./data/stats.pickle", "wb"))
         except Exception as e:
@@ -108,7 +120,10 @@ class GPT:
                 statisitics = ''
                 for key, value in self.stats[id].items():
                     statisitics += key + ': ' + str(value) + '\n'
-                cost = self.stats[id]['Tokens used'] / 1000 * self.model_price + self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
+                cost = self.stats[id]['Tokens used'] / 1000 * self.model_price if self.model_prompt_price == 0 and self.model_completion_price == 0 else 0
+                cost += self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
+                cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
+                cost += self.stats[id]['Completion tokens used'] / 1000 * self.model_completion_price
                 statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4)) + '\nDo not worry, it is free for you 😊'
                 return statisitics
             return None
@@ -258,7 +273,7 @@ class GPT:
             return wav_file
         except Exception as e:
             logger.exception('Could not convert ogg to wav')
-            return None
+            return Noneself.add_stats
 
     def chat_voice(self, id=0, audio_file=None) -> str:
         '''
@@ -367,6 +382,8 @@ class GPT:
             # add statistics
             try:
                 self.add_stats(id=id, tokens_used=int(response["usage"]['total_tokens']))
+                self.add_stats(id=id, completion_tokens_used=int(response["usage"]['completion_tokens']))
+                self.add_stats(id=id, prompt_tokens_used=int(response["usage"]['prompt_tokens']))
             except Exception as e:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             # process response
