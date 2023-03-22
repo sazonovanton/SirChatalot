@@ -61,6 +61,8 @@ class GPT:
             except:
                 self.stats = {}
 
+            self.max_session_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else 0
+
         except Exception as e:
             logger.exception('Could not initialize GPT class')
 
@@ -353,6 +355,17 @@ class GPT:
                 messages = [{"role": "system", "content": style}]
             # add new message
             messages.append({"role": "user", "content": message})
+            # check length of chat 
+            if self.max_chat_length > 0 and self.max_chat_length is not None:
+                if len(messages) > self.max_chat_length:
+                ## UNCOMMENT THIS TO FORCE CHAT RESET
+                # self.delete_chat(id)
+                # return 'It seems that your session is too long. We have reset it. Please try again.'
+                style = messages[0]['content'] + '\n Your previous conversation summary: '
+                self.delete_chat(id)
+                style += self.chat_summary(messages)
+                self.chat(id=id, message=message, style=style, continue_attempt=False)
+                    
             # get response from GPT
             try:
                 response = openai.ChatCompletion.create(
@@ -361,10 +374,10 @@ class GPT:
                     max_tokens=self.max_tokens,
                     messages=messages
                 )
-            # if retelimit
+            # if ratelimit is reached
             except openai.error.RateLimitError as e:
                 logger.exception('Rate limit error')
-                return 'Wow... we are getting rate limited. Please try again later.'
+                return 'Wow... Service is getting rate limited. Please try again later.'
             # if chat is too long
             except openai.error.InvalidRequestError as e:
                 logger.exception('Invalid request error')
