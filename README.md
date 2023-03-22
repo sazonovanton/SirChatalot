@@ -44,6 +44,7 @@ Temperature = 0.7
 MaxTokens = 500
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
+MaxSessionLength = 10
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
@@ -57,6 +58,7 @@ SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
+* OpenAI.MaxSessionLength: The maximum number of messages in a session (can be used to reduce tokens used).
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 

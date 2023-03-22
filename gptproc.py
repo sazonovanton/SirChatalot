@@ -61,7 +61,7 @@ class GPT:
             except:
                 self.stats = {}
 
-            self.max_session_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else 0
+            self.max_session_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else None
 
         except Exception as e:
             logger.exception('Could not initialize GPT class')
@@ -358,13 +358,13 @@ class GPT:
             # check length of chat 
             if self.max_chat_length > 0 and self.max_chat_length is not None:
                 if len(messages) > self.max_chat_length:
-                ## UNCOMMENT THIS TO FORCE CHAT RESET
-                # self.delete_chat(id)
-                # return 'It seems that your session is too long. We have reset it. Please try again.'
-                style = messages[0]['content'] + '\n Your previous conversation summary: '
-                self.delete_chat(id)
-                style += self.chat_summary(messages)
-                self.chat(id=id, message=message, style=style, continue_attempt=False)
+                    ## UNCOMMENT THIS TO FORCE CHAT RESET
+                    # self.delete_chat(id)
+                    # return 'It seems that your session is too long. We have reset it. Please try again.'
+                    style = messages[0]['content'] + '\n Your previous conversation summary: '
+                    self.delete_chat(id)
+                    style += self.chat_summary(messages)
+                    self.chat(id=id, message=message, style=style, continue_attempt=False)
                     
             # get response from GPT
             try:
