@@ -61,7 +61,7 @@ class GPT:
             except:
                 self.stats = {}
 
-            self.max_session_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else None
+            self.max_chat_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else None
 
         except Exception as e:
             logger.exception('Could not initialize GPT class')
