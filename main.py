@@ -60,7 +60,7 @@ def get_rates():
         logger.exception('Could not get rates from file.')
         return None
 
-def ratelimiter(user_id):
+def ratelimiter(user_id, check=False):
     '''
     Rate limiter for messages
     '''
@@ -118,12 +118,16 @@ def ratelimiter(user_id):
                 return False
 
         # add new value to the list
-        rate[user_id].append(time.time())
+        if not check:
+            rate[user_id].append(time.time())
 
         # save the dict to a pickle file
         with open('./data/ratelimit.pickle', 'wb') as f:
             print('Saving rate limit to a file.')
             pickle.dump(rate, f)
+
+        if check:
+            return f"Rate limit: {len(rate[user_id])}/{limit}"
 
         return True
     
@@ -222,7 +226,7 @@ async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     Send a message with statistics when the command /statistics is issued
     '''
     # check if user is in whitelist
-    access = await check_user(update, update.message.text)
+    access = await check_user(update, update.message.text, check_rate=False)
     # if not, return None
     if access != True:
         return None
@@ -238,7 +242,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     Delete chat history when the command /delete is issued
     '''
     # check if user is in whitelist
-    access = await check_user(update, update.message.text)
+    access = await check_user(update, update.message.text, check_rate=False)
     # if not, return None
     if access != True:
         return None
@@ -250,6 +254,23 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     else:
         await update.message.reply_text("Sorry, it seems like there is no history with you. Please try again later.")
         logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
+
+async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Check user rate limit when the command /limit is issued
+    '''
+    # check if user is in whitelist
+    access = await check_user(update, update.message.text, check_rate=False)
+    # if not, return None
+    if access != True:
+        return None
+    # if yes, sent user his rate limit
+    text = ratelimiter(user_id, check=True)
+    if text is None or text == False:
+        text = "Sorry, something went wrong. Please try again later."
+        logger.error('Could not get rate limit for user: ' + str(update.effective_user.id))
+    await update.message.reply_text(text)
+
 
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -322,7 +343,7 @@ def check_code(code, user_id) -> bool:
         logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
     return False
 
-async def check_user(update, message=None) -> bool:
+async def check_user(update, message=None, check_rate=True) -> bool:
     '''
     Check if user has an access
     '''
@@ -381,11 +402,12 @@ async def check_user(update, message=None) -> bool:
         return False
     else:
         # check if user rate is limited
-        ratecheck = ratelimiter(user.id)
-        if ratecheck == False:
-            logger.warning("Rate limited user: " + str(user))
-            await update.message.reply_text("You are rate limited. Please try again later.")
-            return False
+        if check_rate:
+            ratecheck = ratelimiter(user.id)
+            if ratecheck == False:
+                logger.info("Rate limited user: " + str(user))
+                await update.message.reply_text("You are rate limited. Please try again later.")
+                return False
         return True
 
 async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -515,6 +537,7 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
+    application.add_handler(CommandHandler("limit", limit_command))
 
     # application.add_handler(CommandHandler("save_session", save_session_command))
     # application.add_handler(CommandHandler("load_session", load_session_command))
