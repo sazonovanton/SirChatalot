@@ -38,6 +38,99 @@ import time
 from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import codecs
+import pickle
+
+def get_rates():
+    '''
+    Get rates from the txt file
+    Example of txt (user_id, number of requests per time stated in config file):
+    123465,100
+    456789,200
+    '''
+    try:
+        user_rates = {}
+        # if file exists, read it
+        if os.path.exists('./data/rates.txt'):
+            with codecs.open('./data/rates.txt', 'r', 'utf-8') as f:
+                for line in f:
+                    user_id, rate = line.split(',')
+                    user_rates[int(user_id)] = int(rate)
+        return user_rates
+    except Exception as e:
+        logger.exception('Could not get rates from file.')
+        return None
+
+def ratelimiter(user_id):
+    '''
+    Rate limiter for messages
+    '''
+    ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
+    # if ratelimit_time is None, 0 or '', return None
+    if ratelimit_time is None or ratelimit_time == '':
+        return None
+
+    # get the limits for users
+    user_rates = get_rates()
+    if user_rates is None or user_rates == {}:
+        return None
+
+    # if user is in the dict, get the limit
+    if user_id in user_rates:
+        limit = user_rates[user_id]
+    # if user is not in the dict, pass
+    else:
+        return None
+
+    try:
+        ratelimit_time = int(ratelimit_time)
+        # open the pickle file with the dict if exists
+        try:
+            with open('./data/ratelimit.pickle', 'rb') as f:
+                rate = pickle.load(f)
+        # if file does not exist, create an empty dict
+        except FileNotFoundError:
+            logger.warning('Rate limit file does not exist. Creating a new one.')
+            rate = {}
+        # if file is empty, create an empty dict
+        except EOFError:
+            logger.warning('Rate limit file is empty. Creating a new one.')
+            rate = {}
+
+        # if ratelimit_time is 0 or negative, return None
+        if ratelimit_time <= 0:
+            return None
+        
+        # create a function to check if user is in the dict
+        if user_id not in rate:
+            print('adding user to the dict')
+            rate[user_id] = []
+            print('*', rate[user_id])
+        # delete old values from the list 
+        if len(rate[user_id]) > 0:
+            print('deleting old values')
+            print('**', rate[user_id])
+            rate[user_id] = [x for x in rate[user_id] if x > time.time() - ratelimit_time]
+            print('**', rate[user_id])
+
+            # if the list is longer than the limit, return False
+            if len(rate[user_id]) > limit:
+                print('Rate limit exceeded.')
+                return False
+
+        # add new value to the list
+        rate[user_id].append(time.time())
+
+        # save the dict to a pickle file
+        with open('./data/ratelimit.pickle', 'wb') as f:
+            print('Saving rate limit to a file.')
+            pickle.dump(rate, f)
+
+        return True
+    
+    except Exception as e:
+        logger.exception('Could not create rate limiter. Rate is not limited.')
+        return None
+
 
 def chat_modes_read(filepath='./data/chat_modes.ini'):
     '''
@@ -287,6 +380,12 @@ async def check_user(update, message=None) -> bool:
         await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
         return False
     else:
+        # check if user rate is limited
+        ratecheck = ratelimiter(user.id)
+        if ratecheck == False:
+            logger.warning("Rate limited user: " + str(user))
+            await update.message.reply_text("You are rate limited. Please try again later.")
+            return False
         return True
 
 async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

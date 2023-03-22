@@ -141,7 +141,7 @@ class GPT:
             pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
             return True
         except Exception as e:
-            logger.exception('Could not delete chat history for user: ' + str(id))
+            # logger.exception('Could not delete chat history for user: ' + str(id))
             return False
 
     def save_session(self, id=0) -> bool:
@@ -368,8 +368,11 @@ class GPT:
             # if chat is too long
             except openai.error.InvalidRequestError as e:
                 logger.exception('Invalid request error')
+                ## UNCOMMENT THIS TO FORCE CHAT RESET
+                # self.delete_chat(id)
+                # return 'It seems that your session is too long. We have reset it. Please try again.'
                 if not continue_attempt:
-                    return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete.'
+                    return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete'
                 else:
                     style = messages[0]['content'] + '\n Your previous conversation summary: '
                     self.delete_chat(id)
@@ -397,7 +400,8 @@ class GPT:
             # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
             pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
             if continue_attempt == False:
-                response += '\nIt seems like you reached length limit of chat session. I will continue, but I advice you to /delete session.'
+                # if chat is too long, return response and advice to delete session
+                response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))

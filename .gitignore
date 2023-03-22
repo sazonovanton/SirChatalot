@@ -146,6 +146,8 @@ whitelist.txt
 banlist.txt
 chats.pickle
 stats.pickle
+ratelimit.pickle
+rates.txt
 *.ogg
 *.mp3
 *.wav

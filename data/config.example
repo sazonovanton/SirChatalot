@@ -1,6 +1,7 @@
 [Telegram]
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
+RateLimitTime = 3600
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

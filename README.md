@@ -32,6 +32,7 @@ The bot requires a configuration file to run. The configuration file should be i
 [Telegram]
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
+RateLimitTime = 3600
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -46,6 +47,7 @@ SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
+* Telegram.RateLimitTime: The time in seconds to calculate user rate-limit.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (Chat can be powered by `gpt-3.5-turbo` for now).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
@@ -101,6 +103,16 @@ If no access codes are provided, anyone who not in the banlist will be able to u
 ## Banning Users
 To ban a user you should add their Telegram ID to the `./data/banlist.txt` file. Each ID should be on a separate line. 
 Banlist has a higher priority than the whitelist. If a user is on the banlist, they will not be able to use the bot and the will see a message saying that they have been banned.
+
+## Rate limiting users
+To limit the number of messages a user can send to the bot, add their Telegram ID and limit to the `./data/ratelimit.txt` file. Each ID should be on a separate line.
+Example:
+```
+123456789,10
+987654321,500
+```
+Rate limit is set to stated number of messages per time period.  
+Time period (in seconds) can be set in the `./data/.config` file (see *Configuration*). If no time period is provided, limit is not applied.
 
 ## Deleting Conversation History
 To delete the conversation history on the server, send the bot a message with the `/delete` command. The bot will then delete the conversation history and will send a message to you confirming that the history has been deleted. After that it will be a new conversation from the bot's point of view.
