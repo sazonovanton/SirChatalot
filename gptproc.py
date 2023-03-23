@@ -49,7 +49,7 @@ class GPT:
             try:
                 # using pickle is not a safe way, but it's ok for this example
                 # pickle can be manipulated to execute arbitrary code
-                self.chats = pickle.load(open("./data/chats.pickle", "rb")) 
+                self.chats = pickle.load(open("./data/tech/chats.pickle", "rb")) 
             except:
                 self.chats = {}
 
@@ -57,7 +57,7 @@ class GPT:
             try:
                 # using pickle is not a safe way, but it's ok for this example
                 # pickle can be manipulated to execute arbitrary code
-                self.stats = pickle.load(open("./data/stats.pickle", "rb")) 
+                self.stats = pickle.load(open("./data/tech/stats.pickle", "rb")) 
             except:
                 self.stats = {}
 
@@ -107,7 +107,7 @@ class GPT:
                     except:
                         self.stats[id]['Completion tokens used'] = completion_tokens_used
             # save statistics to file (unsafe way)
-            pickle.dump(self.stats, open("./data/stats.pickle", "wb"))
+            pickle.dump(self.stats, open("./data/tech/stats.pickle", "wb"))
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
@@ -140,7 +140,7 @@ class GPT:
         '''
         try:
             del self.chats[id]
-            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
         except Exception as e:
             # logger.exception('Could not delete chat history for user: ' + str(id))
@@ -211,7 +211,7 @@ class GPT:
             messages = sessions[name]
             # overwrite chat history
             self.chats[id] = messages
-            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
         except Exception as e:
             logger.exception('Could not load session for user: ' + str(id))
@@ -412,7 +412,7 @@ class GPT:
             # save chat history to file
             # this can be expensive operation
             # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
-            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             if continue_attempt == False:
                 # if chat is too long, return response and advice to delete session
                 response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
@@ -461,7 +461,7 @@ class GPT:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/chats.pickle", "wb"))
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
         except Exception as e:
             logger.exception('Could not change style for user: ' + str(id))

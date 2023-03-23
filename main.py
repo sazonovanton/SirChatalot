@@ -85,7 +85,7 @@ def ratelimiter(user_id, check=False):
         ratelimit_time = int(ratelimit_time)
         # open the pickle file with the dict if exists
         try:
-            with open('./data/ratelimit.pickle', 'rb') as f:
+            with open('./data/tech/ratelimit.pickle', 'rb') as f:
                 rate = pickle.load(f)
         # if file does not exist, create an empty dict
         except FileNotFoundError:
@@ -122,7 +122,7 @@ def ratelimiter(user_id, check=False):
             rate[user_id].append(time.time())
 
         # save the dict to a pickle file
-        with open('./data/ratelimit.pickle', 'wb') as f:
+        with open('./data/tech/ratelimit.pickle', 'wb') as f:
             print('Saving rate limit to a file.')
             pickle.dump(rate, f)
 

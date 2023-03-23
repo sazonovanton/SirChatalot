@@ -137,8 +137,6 @@ cython_debug/
 
 # Project specific
 .config
-./data/.config
-./data/chats.pickle
 *.log
 *.log*
 common.log
@@ -151,3 +149,4 @@ rates.txt
 *.ogg
 *.mp3
 *.wav
+*.pickle

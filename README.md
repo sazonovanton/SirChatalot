@@ -19,7 +19,7 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 * Create a `.config` file in the `data` directory using the `config.example` file in that directory as a template.
 * Run the bot by running the command `python3 main.py`.
 
-`Whitelist.txt`, `banlist.txt`, `.config`, `chat_modes.ini`, `stats.pickle` and `chats.pickle` are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
+`Whitelist.txt`, `banlist.txt`, `.config`, `chat_modes.ini`, are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
 Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (SystemMessage).
 
@@ -113,8 +113,8 @@ Example:
 123456789,10
 987654321,500
 ```
-Rate limit is set to stated number of messages per time period.  
-Time period (in seconds) can be set in the `./data/.config` file (see *Configuration*). If no time period is provided, limit is not applied.
+Rate limit is a number of messages a user can send to the bot in a time period. In example user with ID 123456789 has 10 and user 987654321 has 500 messages limit.  
+Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see *Configuration*). If no time period is provided, limit is not applied.
 
 ## Deleting Conversation History
 To delete the conversation history on the server, send the bot a message with the `/delete` command. The bot will then delete the conversation history and will send a message to you confirming that the history has been deleted. After that it will be a new conversation from the bot's point of view.
@@ -122,6 +122,17 @@ Conversation history in the Telegram chat will not be affected.
 
 ## Generating Responses
 To generate a response, send the bot a message (or a voice message). The bot will then generate a response and send it back to you.
+
+## Using Docker
+You can use Docker to run the bot. You need to build the image first. To do that, run the following command in the root directory of the project after configuring the bot (see *Configuration*):
+```
+docker compose up -d
+```
+This will build the image and run the container. You can then use the bot as described above.  
+To stop the container, run the following command:
+```
+docker compose down
+```
 
 ## Warinings
 * The bot stores the whitelist in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
@@ -131,6 +142,7 @@ To generate a response, send the bot a message (or a voice message). The bot wil
 * The bot temporarily stores voice messages in `./data/voice` directory. The files are deleted after processing (successful or not), but can remain on the server if the event of an error. The files are not encrypted and can be accessed by anyone with access to the server.
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
 * The bot will try to continue conversation in the event of reaching maximum number of tokens by creating summary of the conversation and using it as a prompt for the next response. This can lead to the bot anwering poorly.
+* The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
 ## License
