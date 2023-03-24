@@ -107,15 +107,19 @@ def ratelimiter(user_id, check=False):
 
     # get the limits for users
     user_rates = get_rates()
-    if (user_rates is None or user_rates == {}) and (ratelimit_general is None):
-        return None
 
     # if user is in the dict, get the limit
-    if user_id in user_rates:
-        limit = user_rates[user_id]
-        if limit == 0:
-            return None
-    # if user is not in the dict, pass
+    if user_rates is not None and user_rates != {}:
+        if user_id in user_rates:
+            limit = user_rates[user_id]
+            if limit == 0:
+                return None
+        # if user is not in the dict, pass
+        else:
+            if ratelimit_general is None:
+                return None
+            else:
+                limit = int(ratelimit_general)
     else:
         if ratelimit_general is None:
             return None
