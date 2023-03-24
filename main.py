@@ -495,7 +495,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
         # delete chat history
         query = update.callback_query
-        print(query)
+        # print(query)
         await query.answer()
         success = gpt.delete_chat(update.effective_user.id)
         if success:
@@ -546,7 +546,6 @@ async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
         for name in sessions:
             keyboard.append(InlineKeyboardButton(name + str('...'), callback_data=name))
         keyboard = [keyboard]
-        print(keyboard)
 
         # send message with a keyboard
         reply_markup = InlineKeyboardMarkup(keyboard)
