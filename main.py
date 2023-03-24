@@ -38,13 +38,13 @@ else:
 
 if config.has_option("Telegram", "RateLimitTime"):
     print(f"Rate limit time: {config.get('Telegram', 'RateLimitTime')}")
+    if config.has_option("Telegram", "GeneralRateLimit"):
+        print(f"General rate limit: {config.get('Telegram', 'GeneralRateLimit')}") 
+    else:
+        print("No general rate limits.")
 else:
     print("No rate limits.")
 
-if config.has_option("Telegram", "GeneralRateLimit"):
-    print(f"General rate limit: {config.get('Telegram', 'GeneralRateLimit')}")
-else:
-    print("No general rate limits.")
 
 def get_rates():
     '''
@@ -70,13 +70,14 @@ def get_rates():
         logger.exception('Could not get rates from file.')
         return None
 
-user_rates = get_rates()
-if user_rates is not None and user_rates != {}:
-    print(f"Limits for some ({len(user_rates)}) users are set (0 - unlimited).")
-    for user_id, rate in user_rates.items():
-        print(f"> User ID: {user_id}, limit: {rate}")
-else:
-    print("No limits for users are set.")
+if config.has_option("Telegram", "RateLimitTime"):
+    user_rates = get_rates()
+    if user_rates is not None and user_rates != {}:
+        print(f"Limits for some ({len(user_rates)}) users are set (0 - unlimited).")
+        for user_id, rate in user_rates.items():
+            print(f"> User ID: {user_id}, limit: {rate}")
+    else:
+        print("No limits for users are set.")
 
 print('-- If you want to learn more about limits please check description (README.md)\n')
 
