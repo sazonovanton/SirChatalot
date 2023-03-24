@@ -71,7 +71,7 @@ def get_rates():
         return None
 
 user_rates = get_rates()
-if user_rates is not None or user_rates != {}:
+if user_rates is not None and user_rates != {}:
     print(f"Limits for some ({len(user_rates)}) users are set (0 - unlimited).")
     for user_id, rate in user_rates.items():
         print(f"> User ID: {user_id}, limit: {rate}")
