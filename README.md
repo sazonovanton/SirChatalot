@@ -33,6 +33,7 @@ The bot requires a configuration file to run. The configuration file should be i
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
+GeneralRateLimit = 100
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -48,7 +49,8 @@ MaxSessionLength = 10
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
-* Telegram.RateLimitTime: The time in seconds to calculate user rate-limit.
+* Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
+* Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (Chat can be powered by `gpt-3.5-turbo` for now).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
@@ -58,7 +60,7 @@ MaxSessionLength = 10
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
-* OpenAI.MaxSessionLength: The maximum number of messages in a session (can be used to reduce tokens used).
+* OpenAI.MaxSessionLength: The maximum number of messages in a session (can be used to reduce tokens used). Optional.
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
@@ -107,14 +109,16 @@ To ban a user you should add their Telegram ID to the `./data/banlist.txt` file.
 Banlist has a higher priority than the whitelist. If a user is on the banlist, they will not be able to use the bot and the will see a message saying that they have been banned.
 
 ## Rate limiting users
-To limit the number of messages a user can send to the bot, add their Telegram ID and limit to the `./data/ratelimit.txt` file. Each ID should be on a separate line.
+To limit the number of messages a user can send to the bot, add their Telegram ID and limit to the `./data/rates.txt` file. Each ID should be on a separate line.
 Example:
 ```
 123456789,10
 987654321,500
+111111,0
 ```
-Rate limit is a number of messages a user can send to the bot in a time period. In example user with ID 123456789 has 10 and user 987654321 has 500 messages limit.  
-Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see *Configuration*). If no time period is provided, limit is not applied.
+Rate limit is a number of messages a user can send to the bot in a time period. In example user with ID 123456789 has 10 and user 987654321 has 500 messages limit. User 111111 has no limit (overriding `GeneralRateLimit`).  
+Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see *Configuration*). If no time period is provided, limit is not applied.  
+General rate limit can be set in the `./data/.config` file in `GeneralRateLimit` variable in `Telegram` section (see *Configuration*). If no general rate limit is provided, limit is not applied for users who are not in the `rates.txt` file. To override general rate limit for a user, set their limit to 0 in the `rates.txt` file.  
 
 ## Deleting Conversation History
 To delete the conversation history on the server, send the bot a message with the `/delete` command. The bot will then delete the conversation history and will send a message to you confirming that the history has been deleted. After that it will be a new conversation from the bot's point of view.

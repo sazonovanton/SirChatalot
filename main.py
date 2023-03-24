@@ -16,19 +16,6 @@ import configparser
 config = configparser.ConfigParser()
 config.read('./data/.config')
 TOKEN = config.get("Telegram", "Token")
-try:
-    accesscodes = config.get("Telegram", "AccessCodes").split(',')
-    accesscodes = [x.strip() for x in accesscodes]
-    print('Access codes: ' + ', '.join(accesscodes))
-    print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
-except Exception as e:
-    logger.warning('Could not get access codes from config file.')
-    print('No access codes found. Bot will be available for everyone.')
-    print('-- To add access codes, edit config file and add comma-separated list of codes to "AccessCodes" parameter in "Telegram" section.\n')
-    accesscodes = None
-
-from gptproc import GPT
-gpt = GPT()
 
 # main libraries
 import asyncio
@@ -39,6 +26,25 @@ from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboa
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 import codecs
 import pickle
+
+if config.has_option("Telegram", "AccessCodes"):
+    accesscodes = config.get("Telegram", "AccessCodes").split(',') 
+    accesscodes = [x.strip() for x in accesscodes]
+    print('Access codes: ' + ', '.join(accesscodes))
+    print('-- Codes can be used to access the bot via sending it a message with a code. User will be added to a whitelist. Codes can be changed in the config file.\n')
+else:
+    accesscodes = None
+    print('No access codes set. Bot will be available for everyone.\n')
+
+if config.has_option("Telegram", "RateLimitTime"):
+    print(f"Rate limit time: {config.get('Telegram', 'RateLimitTime')}")
+else:
+    print("No rate limits.")
+
+if config.has_option("Telegram", "GeneralRateLimit"):
+    print(f"General rate limit: {config.get('Telegram', 'GeneralRateLimit')}")
+else:
+    print("No general rate limits.")
 
 def get_rates():
     '''
@@ -55,34 +61,68 @@ def get_rates():
                 for line in f:
                     user_id, rate = line.split(',')
                     user_rates[int(user_id)] = int(rate)
+        # if file does not exist, return None
+        else:
+            logger.warning('Rates file does not exist.')
+            return None
         return user_rates
     except Exception as e:
         logger.exception('Could not get rates from file.')
         return None
 
+user_rates = get_rates()
+if user_rates is not None or user_rates != {}:
+    print(f"Limits for some ({len(user_rates)}) users are set (0 - unlimited).")
+    for user_id, rate in user_rates.items():
+        print(f"> User ID: {user_id}, limit: {rate}")
+else:
+    print("No limits for users are set.")
+
+print('-- If you want to learn more about limits please check describtion in README.md\n')
+
+from gptproc import GPT
+gpt = GPT()
+
+
 def ratelimiter(user_id, check=False):
     '''
     Rate limiter for messages
-    '''
+    '''    
     ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
+    ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
+
+    try:
+        ratelimit_time = int(ratelimit_time)
+    except:
+        ratelimit_time = None
+    
+    try:
+        ratelimit_general = int(ratelimit_general)
+    except:
+        ratelimit_general = None
+
     # if ratelimit_time is None, 0 or '', return None
-    if ratelimit_time is None or ratelimit_time == '':
+    if ratelimit_time is None or ratelimit_time <= 0:
         return None
 
     # get the limits for users
     user_rates = get_rates()
-    if user_rates is None or user_rates == {}:
+    if (user_rates is None or user_rates == {}) and (ratelimit_general is None):
         return None
 
     # if user is in the dict, get the limit
     if user_id in user_rates:
         limit = user_rates[user_id]
+        if limit == 0:
+            return None
     # if user is not in the dict, pass
     else:
-        return None
+        if ratelimit_general is None:
+            return None
+        else:
+            limit = int(ratelimit_general)
 
     try:
-        ratelimit_time = int(ratelimit_time)
         # open the pickle file with the dict if exists
         try:
             with open('./data/tech/ratelimit.pickle', 'rb') as f:
@@ -95,26 +135,15 @@ def ratelimiter(user_id, check=False):
         except EOFError:
             logger.warning('Rate limit file is empty. Creating a new one.')
             rate = {}
-
-        # if ratelimit_time is 0 or negative, return None
-        if ratelimit_time <= 0:
-            return None
         
         # create a function to check if user is in the dict
         if user_id not in rate:
-            print('adding user to the dict')
             rate[user_id] = []
-            print('*', rate[user_id])
         # delete old values from the list 
         if len(rate[user_id]) > 0:
-            print('deleting old values')
-            print('**', rate[user_id])
             rate[user_id] = [x for x in rate[user_id] if x > time.time() - ratelimit_time]
-            print('**', rate[user_id])
-
             # if the list is longer than the limit, return False
-            if len(rate[user_id]) > limit:
-                print('Rate limit exceeded.')
+            if (len(rate[user_id]) > limit) and check != True:
                 return False
 
         # add new value to the list
@@ -123,11 +152,12 @@ def ratelimiter(user_id, check=False):
 
         # save the dict to a pickle file
         with open('./data/tech/ratelimit.pickle', 'wb') as f:
-            print('Saving rate limit to a file.')
             pickle.dump(rate, f)
 
-        if check:
-            return f"Rate limit: {len(rate[user_id])}/{limit}"
+        if check: 
+            if len(rate[user_id]) > limit:
+                return f"Rate limit of {limit} messages per {ratelimit_time} seconds exceeded. Please wait."
+            return f"You have used your limit of {len(rate[user_id])}/{limit} messages per {ratelimit_time} seconds."
 
         return True
     
@@ -265,10 +295,10 @@ async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if access != True:
         return None
     # if yes, sent user his rate limit
-    text = ratelimiter(user_id, check=True)
-    if text is None or text == False:
-        text = "Sorry, something went wrong. Please try again later."
-        logger.error('Could not get rate limit for user: ' + str(update.effective_user.id))
+    user = update.effective_user
+    text = ratelimiter(user.id, check=True)
+    if text is None:
+        text = 'Unlimited'
     await update.message.reply_text(text)
 
 

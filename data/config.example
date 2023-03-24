@@ -2,6 +2,7 @@
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
+GeneralRateLimit = 60
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -13,4 +14,4 @@ Temperature = 0.7
 MaxTokens = 1000
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
-MaxSessionLength = 10
+MaxSessionLength = 15
