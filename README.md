@@ -66,6 +66,25 @@ ChatDeletion = False
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
+## Styles
+Bot supports different styles that can be triggered with `/style` command.  
+You can add your own style in the `./data/chat_modes.ini` file or change the existing ones. Styles are stored in the INI file format.  
+Example:
+```
+[Alice]
+Description = Empathetic and friendly
+SystemMessage = You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty.
+
+[Bob]
+Description = Brief and informative
+SystemMessage = You are a helpful assistant named Bob, who is informative and explains everything succinctly with fewer words.
+
+```
+Here is a list of the fields in this example:
+* Alice or Bob: The name of the style. 
+* Description: Short description of the style. Is used in the `/style` command.
+* SystemMessage: The message that will shape your bot's personality. You will need some prompt engineering to make it work properly.
+
 ## Using GPT-4
 You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file:
 ```
