@@ -460,7 +460,7 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             k.append(InlineKeyboardButton(name, callback_data=name))
         keyboard = [
             k,
-            [InlineKeyboardButton("Sir Chatalot [default]", callback_data="Sir Chatalot")],
+            [InlineKeyboardButton("[Default]", callback_data="default")],
         ]
 
         # send message with a keyboard
@@ -501,7 +501,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if success:
             logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
         
-        if query.data == "Sir Chatalot":
+        if query.data == "default":
             answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
         else:
             answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])

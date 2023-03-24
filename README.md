@@ -82,7 +82,7 @@ SystemMessage = You are a helpful assistant named Bob, who is informative and ex
 ```
 Here is a list of the fields in this example:
 * Alice or Bob: The name of the style. 
-* Description: Short description of the style. Is used in the `/style` command.
+* Description: Short description of the style. Is used in message that is shown when `/style` command is called.
 * SystemMessage: The message that will shape your bot's personality. You will need some prompt engineering to make it work properly.
 
 ## Using GPT-4
