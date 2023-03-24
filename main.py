@@ -78,7 +78,7 @@ if user_rates is not None or user_rates != {}:
 else:
     print("No limits for users are set.")
 
-print('-- If you want to learn more about limits please check describtion in README.md\n')
+print('-- If you want to learn more about limits please check description (README.md)\n')
 
 from gptproc import GPT
 gpt = GPT()
@@ -436,7 +436,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
             ratecheck = ratelimiter(user.id)
             if ratecheck == False:
                 logger.info("Rate limited user: " + str(user))
-                await update.message.reply_text("You are rate limited. Please try again later.")
+                await update.message.reply_text("You are rate limited. You can check your limits with /limit")
                 return False
         return True
 

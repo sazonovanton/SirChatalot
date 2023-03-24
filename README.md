@@ -45,7 +45,8 @@ Temperature = 0.7
 MaxTokens = 500
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
-MaxSessionLength = 10
+MaxSessionLength = 15
+ChatDeletion = False
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
@@ -60,7 +61,8 @@ MaxSessionLength = 10
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
-* OpenAI.MaxSessionLength: The maximum number of messages in a session (can be used to reduce tokens used). Optional.
+* OpenAI.MaxSessionLength: The maximum number of user messages in a session (can be used to reduce tokens used). Optional.
+* OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
@@ -93,6 +95,7 @@ The bot has the following commands:
 * `/delete`: deletes the conversation history.
 * `/statistics`: shows the bot usage.
 * `/style`: changes the style of the bot from chat.
+* `/limit`: shows the current rate-limit for the user.
 * Any other message (including voice message) will generate a response from the bot.
 
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the `/start` command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.
@@ -119,6 +122,7 @@ Example:
 Rate limit is a number of messages a user can send to the bot in a time period. In example user with ID 123456789 has 10 and user 987654321 has 500 messages limit. User 111111 has no limit (overriding `GeneralRateLimit`).  
 Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see *Configuration*). If no time period is provided, limit is not applied.  
 General rate limit can be set in the `./data/.config` file in `GeneralRateLimit` variable in `Telegram` section (see *Configuration*). If no general rate limit is provided, limit is not applied for users who are not in the `rates.txt` file. To override general rate limit for a user, set their limit to 0 in the `rates.txt` file.  
+Users can check their limit by sending the bot a message with the `/limit` command. 
 
 ## Deleting Conversation History
 To delete the conversation history on the server, send the bot a message with the `/delete` command. The bot will then delete the conversation history and will send a message to you confirming that the history has been deleted. After that it will be a new conversation from the bot's point of view.

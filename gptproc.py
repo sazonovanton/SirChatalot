@@ -61,7 +61,14 @@ class GPT:
             except:
                 self.stats = {}
 
-            self.max_chat_length = int(config.get("OpenAI", "MaxSessionLength"))*2 if config.has_option("OpenAI", "MaxSessionLength") else None
+            self.max_chat_length = int(config.get("OpenAI", "MaxSessionLength")) if config.has_option("OpenAI", "MaxSessionLength") else None
+            self.chat_deletion = config.getboolean("OpenAI", "ChatDeletion") if config.has_option("OpenAI", "ChatDeletion") else False
+            if self.max_chat_length is not None:
+                print('Max chat length:', self.max_chat_length)
+                print('-- Max chat length is states a length of chat session. It can be changed in the config file.\n')
+            if self.chat_deletion:
+                print('Chat deletion is enabled')
+                print('-- Chat deletion is used to force delete old chat sessions. Without it long sessions should be summaried. It can be changed in the config file.\n')
 
         except Exception as e:
             logger.exception('Could not initialize GPT class')
@@ -346,6 +353,7 @@ class GPT:
         # if trigger_style != False:
         #     self.change_style(id=id, style=trigger_style)
         try:
+            self.delete_chat_after_response = False 
             # get chat history
             try:
                 messages = self.chats[id]
@@ -357,15 +365,16 @@ class GPT:
             messages.append({"role": "user", "content": message})
             # check length of chat 
             if self.max_chat_length is not None:
+                l = len([i for i in messages if i['role'] == 'user'])
                 if self.max_chat_length > 0:
-                    if len(messages) > self.max_chat_length:
-                        ## UNCOMMENT THIS TO FORCE CHAT RESET
-                        # self.delete_chat(id)
-                        # return 'It seems that your session is too long. We have reset it. Please try again.'
-                        style = messages[0]['content'] + '\n Your previous conversation summary: '
-                        self.delete_chat(id)
-                        style += self.chat_summary(messages)
-                        self.chat(id=id, message=message, style=style, continue_attempt=False)
+                    if l > self.max_chat_length-1:
+                        if self.chat_deletion == True:
+                            self.delete_chat_after_response = True 
+                        else:
+                            style = messages[0]['content'] + '\n Your previous conversation summary: '
+                            self.delete_chat(id)
+                            style += self.chat_summary(messages)
+                            self.chat(id=id, message=message, style=style, continue_attempt=False)
                     
             # get response from GPT
             try:
@@ -382,16 +391,17 @@ class GPT:
             # if chat is too long
             except openai.error.InvalidRequestError as e:
                 logger.exception('Invalid request error')
-                ## UNCOMMENT THIS TO FORCE CHAT RESET
-                # self.delete_chat(id)
-                # return 'It seems that your session is too long. We have reset it. Please try again.'
-                if not continue_attempt:
-                    return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete'
-                else:
-                    style = messages[0]['content'] + '\n Your previous conversation summary: '
+                if self.chat_deletion is not None:
                     self.delete_chat(id)
-                    style += self.chat_summary(messages)
-                    self.chat(id=id, message=message, style=style, continue_attempt=False)
+                    return 'There is an error from API. It seems that your session was too long. We had to reset it.'
+                else:
+                    if not continue_attempt:
+                        return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete'
+                    else:
+                        style = messages[0]['content'] + '\n Your previous conversation summary: '
+                        self.delete_chat(id)
+                        style += self.chat_summary(messages)
+                        self.chat(id=id, message=message, style=style, continue_attempt=False)
             # if something else
             except Exception as e:
                 logger.exception('Could not get response from GPT')
@@ -405,14 +415,22 @@ class GPT:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             # process response
             response = response["choices"][0]['message']['content']
+            if self.delete_chat_after_response == True:
+                self.delete_chat(id)
+                response += '\n\n***System***\nSorry. Your session is longer than max session length limit, so we reset it after this message.'
+                self.delete_chat_after_response = False
+                return response
             # add response to chat history
             messages.append({"role": "assistant", "content": response})
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            # this can be expensive operation
             # it would be more efficient to save the chat history periodically, such as every few minutes, but it's ok for now
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            if self.max_chat_length is not None and self.chat_deletion == True:
+                l = len([i for i in messages if i['role'] == 'user'])
+                if self.max_chat_length - l <= 3:
+                    response += '\n\n***System***\nYou are close to the session limit. Messages left: ' + str(self.max_chat_length - l) + '.'
             if continue_attempt == False:
                 # if chat is too long, return response and advice to delete session
                 response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
