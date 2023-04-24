@@ -24,8 +24,10 @@ import os
 import time
 from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
+from telegram.constants import ChatAction
 import codecs
 import pickle
+from functools import wraps
 
 if config.has_option("Telegram", "AccessCodes"):
     accesscodes = config.get("Telegram", "AccessCodes").split(',') 
@@ -231,7 +233,6 @@ def escaping(text):
                                             }))
     return escaped
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Send a message when the command /start is issued.
@@ -306,13 +307,14 @@ async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         text = 'Unlimited'
     await update.message.reply_text(text)
 
-
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Answer to user message
     '''
+    global application
     # check if user is in whitelist
     access = await check_user(update, update.message.text)
+    await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     # if not, return None
     if access != True:
         return None
@@ -337,6 +339,7 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     global application
     # check if user is in whitelist
     access = await check_user(update, update.message.text)
+    await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
     # if not, return None
     if access != True:
         return None
