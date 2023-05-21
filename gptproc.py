@@ -20,6 +20,7 @@ import pickle
 import openai
 import os
 from pydub import AudioSegment
+import hashlib
 
 class GPT:
     def __init__(self) -> None:
@@ -37,6 +38,7 @@ class GPT:
             self.temperature = float(config.get("OpenAI", "Temperature"))
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
             self.audio_format = '.' + config.get("OpenAI", "AudioFormat") # wav or mp3
+            self.end_user_id = config.getboolean("OpenAI", "EndUserID") if config.has_option("OpenAI", "EndUserID") else False
             try:
                 self.system_message = config.get("OpenAI", "SystemMessage")
             except Exception as e:
@@ -331,12 +333,21 @@ class GPT:
                 summary.append({"role": "user", "content": 'Make a summary of the previous conversation: ' + str(text)})
                 size = self.max_tokens
 
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=size,
-                messages=summary
-            )
+            if self.end_user_id:
+                response = openai.ChatCompletion.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=size,
+                    messages=summary,
+                    user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
+                )
+            else:
+                response = openai.ChatCompletion.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=size,
+                    messages=summary
+                )
 
             return response["choices"][0]['message']['content']
         except Exception as e:
@@ -378,16 +389,25 @@ class GPT:
                     
             # get response from GPT
             try:
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    temperature=self.temperature, 
-                    max_tokens=self.max_tokens,
-                    messages=messages
-                )
+                if self.end_user_id:
+                    response = openai.ChatCompletion.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=self.max_tokens,
+                        messages=messages,
+                        user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
+                    )
+                else:
+                    response = openai.ChatCompletion.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=self.max_tokens,
+                        messages=messages
+                    )
             # if ratelimit is reached
             except openai.error.RateLimitError as e:
                 logger.exception('Rate limit error')
-                return 'Wow... Service is getting rate limited. Please try again later.'
+                return 'Service is getting rate limited. Please try again later.'
             # if chat is too long
             except openai.error.InvalidRequestError as e:
                 logger.exception('Invalid request error')
