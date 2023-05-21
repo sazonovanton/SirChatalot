@@ -47,6 +47,8 @@ AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
 ChatDeletion = False
+EndUserID = True
+Moderation = False
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
@@ -63,6 +65,8 @@ ChatDeletion = False
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
 * OpenAI.MaxSessionLength: The maximum number of user messages in a session (can be used to reduce tokens used). Optional.
 * OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
+* OpenAI.EndUserID: Whether to add the user's ID to the API request. Optional.
+* OpenAI.Moderation: Whether to use the OpenAI's moderation engine. Optional.
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
@@ -130,6 +134,14 @@ If no access codes are provided, anyone who not in the banlist will be able to u
 To ban a user you should add their Telegram ID to the `./data/banlist.txt` file. Each ID should be on a separate line. 
 Banlist has a higher priority than the whitelist. If a user is on the banlist, they will not be able to use the bot and the will see a message saying that they have been banned.
 
+## Safety practices
+To prevent the bot from being used for purposes that violate the OpenAI's usage policy, you can use:
+* Moderation: Moderation will filter out messages that can violate the OpenAI's usage policy with free OpenAI's [Moderation API](https://platform.openai.com/docs/guides/moderation). In this case, message is sent to the Moderation API and if it is flagged, it is not sent to the OpenAI's API. If you want to use it, set `OpenAI.Moderation` to `true` in the `./data/.config` file (see *Configuration*). User will be notified if their message is flagged.
+* End-user IDs: End-user IDs will be added to the API request if `OpenAI.EndUserID` is set to `true` in the `./data/.config` file (see *Configuration*). Sending end-user IDs in your requests can be a useful tool to help OpenAI monitor and detect abuse. This allows OpenAI to provide your team with more actionable feedback in the event that we detect any policy violations in your application. User ID is a hashed Telegram ID of the user. 
+* Rate limiting: Rate limiting will limit the number of messages a user can send to the bot. If you want to use it, set `Telegram.GeneralRateLimit` to a number of messages a user can send to the bot in a time period in the `./data/.config` file (see *Configuration*). 
+* Banlist: Banlist will prevent users from using the bot. If you want to use it, add user's Telegram ID to the `./data/banlist.txt` file (see *Banning Users*).
+* Whitelist: Whitelist will allow only whitelisted users to use the bot. If you want to use it, add user's Telegram ID to the `./data/whitelist.txt` file (see *Whitelisting Users*).
+
 ## Rate limiting users
 To limit the number of messages a user can send to the bot, add their Telegram ID and limit to the `./data/rates.txt` file. Each ID should be on a separate line.
 Example:
@@ -170,6 +182,7 @@ docker compose down
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
 * The bot will try to continue conversation in the event of reaching maximum number of tokens by creating summary of the conversation and using it as a prompt for the next response. This can lead to the bot anwering poorly.
 * The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
+* If message is flagged by the Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 
 ## License

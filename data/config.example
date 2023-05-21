@@ -16,5 +16,6 @@ AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
 EndUserID = True
+Moderation = False
 ;ChatDeletion = False
 ;MaxSessionLength = 5

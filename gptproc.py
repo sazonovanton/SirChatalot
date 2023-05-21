@@ -72,6 +72,12 @@ class GPT:
                 print('Chat deletion is enabled')
                 print('-- Chat deletion is used to force delete old chat sessions. Without it long sessions should be summaried. It can be changed in the config file.\n')
 
+            self.moderation = config.getboolean("OpenAI", "Moderation") if config.has_option("OpenAI", "Moderation") else False
+            if self.moderation:
+                print('Moderation is enabled')
+                print('-- Moderation is used to check if content complies with OpenAI usage policies. It can be changed in the config file.')
+                print('-- Learn more: https://platform.openai.com/docs/guides/moderation/overview\n')
+
         except Exception as e:
             logger.exception('Could not initialize GPT class')
 
@@ -353,16 +359,48 @@ class GPT:
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None
-        
+
+    def moderation_pass(self, message, id=0) -> str:
+        '''
+        Moderate message with GPT
+        Input message and id of user
+        '''
+        try:
+            # check if message is not empty
+            if message is None or len(message) == 0:
+                return None
+
+            # check if ./data/moderation.txt exists and create if not
+            if not os.path.exists('./data/moderation.txt'):
+                open('./data/moderation.txt', 'a').close()
+            
+            response = openai.Moderation.create(
+                input=message
+            )
+            output = response["results"][0]
+
+            if output["flagged"] == "true" or output["flagged"] == True:
+                categories = output["categories"]
+                # get flagged categories
+                flagged_categories = [k for k, v in categories.items() if v == "true" or v == True]
+                # log used id, flagged message and flagged categories to ./data/moderation.txt
+                with open('./data/moderation.txt', 'a') as f:
+                    f.write(str(id) + '\t' + str(flagged_categories) + '\t' + message + '\n')
+                # log to logger file fact of user being flagged
+                logger.info('Message from user ' + str(id) + ' was flagged (' + str(flagged_categories) + ')')
+                return False
+            
+            return True
+        except Exception as e:
+            logger.exception('Could not moderate message')
+            return None
+
 
     def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True) -> str:
         '''
         Chat with GPT
         Input id of user and message
         '''
-        # trigger_style = self.keyword_trigger(message)
-        # if trigger_style != False:
-        #     self.change_style(id=id, style=trigger_style)
         try:
             self.delete_chat_after_response = False 
             # get chat history
@@ -372,6 +410,10 @@ class GPT:
                 if style is None:
                     style = self.system_message
                 messages = [{"role": "system", "content": style}]
+            # send messsage to moderation if moderation is enabled
+            if self.moderation:
+                if self.moderation_pass(message, id) == False:
+                    return 'Your message was flagged as violating OpenAI usage policy and was not sent. Please try again.'
             # add new message
             messages.append({"role": "user", "content": message})
             # check length of chat 
