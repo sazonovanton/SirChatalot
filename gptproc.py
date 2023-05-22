@@ -413,7 +413,7 @@ class GPT:
             # send messsage to moderation if moderation is enabled
             if self.moderation:
                 if self.moderation_pass(message, id) == False:
-                    return 'Your message was flagged as violating OpenAI usage policy and was not sent. Please try again.'
+                    return 'Your message was flagged as violating OpenAI\'s usage policy and was not sent. Please try again.'
             # add new message
             messages.append({"role": "user", "content": message})
             # check length of chat 
