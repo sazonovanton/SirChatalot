@@ -321,12 +321,12 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
-    def summary(self, text, size=500):
+    def summary(self, text, size=150):
         '''
         Make summary of text
-        Input text and size of summary
+        Input text and size of summary (in tokens)
         '''
-        summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//100} sentenses. Answer with summary only.'}]
+        summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'}]
         summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
         if self.end_user_id:
             response = openai.ChatCompletion.create(
@@ -357,7 +357,7 @@ class GPT:
             for i in range(1, len(messages)):
                 text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
             if short:
-                summary = self.summary(text, size=100)
+                summary = self.summary(text, size=30)
             else:
                 summary = self.summary(text)
             return summary
@@ -416,16 +416,17 @@ class GPT:
                 # to do that we split text into chunks with length no more than maxlength and make summary for each chunk
                 # do that until we have summary with length no more than maxlength
                 depth = 0
+                chunklength = self.max_tokens * 4
                 while len(text) > maxlength:
                     if depth == sumdepth:
                         # cut text to maxlength and return
                         text = text[:maxlength]
                         break
                     depth += 1
-                    chunks = [text[i:i+maxlength] for i in range(0, len(text), maxlength//2)]
+                    chunks = [text[i:i+chunklength] for i in range(0, len(text), chunklength)]
                     text = ''
                     for chunk in chunks:
-                        text += self.summary(chunk, maxlength//2) + '\n'
+                        text += self.summary(chunk, size=self.file_summary_tokens) + '\n'
                 text = '# Summary from recieved file: #\n' + text
             else:
                 # if text is shorter than self.max_tokens // 2, then do not make summary
