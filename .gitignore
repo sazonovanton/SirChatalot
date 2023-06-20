@@ -151,3 +151,12 @@ rates.txt
 *.wav
 *.pickle
 moderation.txt
+
+*.txt
+*.ppt 
+*.pptx
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.pdf
