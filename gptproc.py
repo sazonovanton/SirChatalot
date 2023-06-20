@@ -416,7 +416,7 @@ class GPT:
                 # to do that we split text into chunks with length no more than maxlength and make summary for each chunk
                 # do that until we have summary with length no more than maxlength
                 depth = 0
-                chunklength = self.max_tokens * 4
+                chunklength = self.max_tokens * 4 - 80
                 while len(text) > maxlength:
                     if depth == sumdepth:
                         # cut text to maxlength and return
