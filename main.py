@@ -57,17 +57,17 @@ if files_enabled:
 
 # check max file size
 max_file_size_limit = 20
-if config.has_option("Files", "MaxFileSize"):
-    max_file_size = config.get("Files", "MaxFileSize")
+if config.has_option("Files", "MaxFileSizeMB"):
+    max_file_size = config.get("Files", "MaxFileSizeMB")
     try:
         max_file_size = int(max_file_size)
         max_file_size = min(max_file_size, max_file_size_limit)
     except:
         max_file_size = max_file_size_limit
-    if max_file_size is not None:
-        print(f"Max file size: {max_file_size} MB")
-    else:
-        print("Max file size is not set.")
+        logger.warning(f"Max file size is not a number. Setting it to {max_file_size_limit}.")
+else:
+    max_file_size = max_file_size_limit
+    logger.warning(f"Max file size is not set. Setting it to {max_file_size_limit}.")
 
 def get_rates():
     '''
