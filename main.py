@@ -47,6 +47,27 @@ if config.has_option("Telegram", "RateLimitTime"):
 else:
     print("No rate limits.")
 
+# check if file functionality is enabled
+if config.has_option("Files", "Enabled"):
+    files_enabled = config.getboolean('Files', 'Enabled')   
+else:
+    files_enabled = True
+if files_enabled:
+    print('File functionality enabled.')
+
+# check max file size
+max_file_size_limit = 20
+if config.has_option("Files", "MaxFileSize"):
+    max_file_size = config.get("Files", "MaxFileSize")
+    try:
+        max_file_size = int(max_file_size)
+        max_file_size = min(max_file_size, max_file_size_limit)
+    except:
+        max_file_size = max_file_size_limit
+    if max_file_size is not None:
+        print(f"Max file size: {max_file_size} MB")
+    else:
+        print("Max file size is not set.")
 
 def get_rates():
     '''
@@ -65,7 +86,7 @@ def get_rates():
                     user_rates[int(user_id)] = int(rate)
         # if file does not exist, return None
         else:
-            logger.warning('Rates file does not exist.')
+            logger.debug('Rates file does not exist.')
             return None
         return user_rates
     except Exception as e:
@@ -85,7 +106,8 @@ print('-- If you want to learn more about limits please check description (READM
 
 from gptproc import GPT
 gpt = GPT()
-
+from filesproc import FilesProc
+fp = FilesProc()
 
 def ratelimiter(user_id, check=False):
     '''
@@ -561,6 +583,53 @@ async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
         await update.message.reply_text(msg, reply_markup=reply_markup)
 
+async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    access = await check_user(update)
+    if access != True:
+        return None
+
+    # check if file function is enabled
+    if not files_enabled:
+        await update.message.reply_text("Sorry, working with files is not supported at the moment.")
+        return None
+
+    global application
+    try:
+        file_id = update.message.document.file_id
+        new_file = await application.bot.get_file(file_id)
+        filename = new_file.file_path.split('/')[-1]
+        filesize = new_file.file_size / 1024 / 1024 # file size in MB
+        if filesize > max_file_size:
+            await update.message.reply_text(f"Sorry, file size is too big. Please try again with a smaller file. Max file size is {max_file_size} MB.")
+            return None
+        new_file_path = await new_file.download_to_drive(custom_path='./data/files/' + filename)
+        await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+
+        logger.info('Recieved: ' + str(new_file_path))
+
+        tic = time.time()
+        text = fp.extract_text(new_file_path)
+        tt = round(time.time()-tic)
+        logger.info('Process time: ' + str(tt) + ' seconds')
+
+        if text is None or '':
+            await update.message.reply_text("Sorry, something went wrong. Could not extract text from the file.")
+            return None
+        
+        # if not, return None
+        if access != True:
+            return None
+        # if yes, get answer from GPT
+        answer = gpt.filechat(id=update.effective_user.id, text=text)
+        if answer is None:
+            answer = "Sorry, something went wrong. Could not get answer from GPT."
+            logger.error('Could not get answer for user: ' + str(update.effective_user.id))
+        await update.message.reply_text(answer)
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("Sorry, something went wrong while processing the file.")
+
+
 def main() -> None:
     '''
     Start the bot.
@@ -587,6 +656,14 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))
     application.add_handler(MessageHandler(filters.VOICE, answer_voice))
 
+    # download files
+    application.add_handler(MessageHandler(filters.Document.Category('application/pdf'), downloader))
+    application.add_handler(MessageHandler(filters.Document.Category('application/msword'), downloader))
+    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.wordprocessingml.document'), downloader))
+    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.ms-powerpoint'), downloader))
+    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.presentationml.presentation'), downloader))
+    application.add_handler(MessageHandler(filters.Document.Category('text/plain'), downloader))
+    
 
     # Run the bot until the Ctrl-C is pressed
     application.run_polling()

@@ -47,6 +47,9 @@ class GPT:
             print('System message:', self.system_message)
             print('-- System message is used to set personality to the bot. It can be changed in the config file.\n')
 
+            self.file_summary_tokens = int(config.get("OpenAI", "MaxSummaryTokens")) if config.has_option("OpenAI", "MaxSummaryTokens") else (self.max_tokens // 2)
+            self.max_file_length = int(config.get("OpenAI", "MaxFileLength")) if config.has_option("OpenAI", "MaxFileLength") else 10000
+
             # load chat history from file if exists or create new 
             try:
                 # using pickle is not a safe way, but it's ok for this example
@@ -318,6 +321,30 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
+    def summary(self, text, size=500):
+        '''
+        Make summary of text
+        Input text and size of summary
+        '''
+        summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//100} sentenses. Answer with summary only.'}]
+        summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
+        if self.end_user_id:
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                temperature=self.temperature, 
+                max_tokens=size,
+                messages=summary,
+                user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
+            )
+        else:
+            response = openai.ChatCompletion.create(
+                model=self.model,
+                temperature=self.temperature, 
+                max_tokens=size,
+                messages=summary
+            )
+        return response["choices"][0]['message']['content']
+
     def chat_summary(self, messages, short=False) -> str:
         '''
         Summarize chat history
@@ -326,36 +353,14 @@ class GPT:
         try:
             if messages is None or len(messages) == 0:
                 return None
-
             text = ''
             for i in range(1, len(messages)):
                 text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
             if short:
-                summary = [{"role": "system", "content": 'You are summarizing given text in an only one short sentence with a few words. Answer with summary only.'}]
-                summary.append({"role": "user", "content": 'Make a summary: ' + str(text)})
-                size = 12
+                summary = self.summary(text, size=100)
             else:
-                summary = [{"role": "system", "content": 'You are very great at summarizing text to fit at 500 charaters. Answer with summary only.'}]
-                summary.append({"role": "user", "content": 'Make a summary of the previous conversation: ' + str(text)})
-                size = self.max_tokens
-
-            if self.end_user_id:
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    temperature=self.temperature, 
-                    max_tokens=size,
-                    messages=summary,
-                    user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
-                )
-            else:
-                response = openai.ChatCompletion.create(
-                    model=self.model,
-                    temperature=self.temperature, 
-                    max_tokens=size,
-                    messages=summary
-                )
-
-            return response["choices"][0]['message']['content']
+                summary = self.summary(text)
+            return summary
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None
@@ -395,6 +400,42 @@ class GPT:
             logger.exception('Could not moderate message')
             return None
 
+    def filechat(self, id=0, text='', sumdepth=3) -> str:
+        '''
+        Process file with GPT
+        Input id of user and text
+        '''
+        try:
+            # check length of text
+            # if text length is more than self.max_file_length then return message
+            if len(text) > self.max_file_length:
+                return 'Text is too long. Please, send a shorter text.'
+            # if text is than self.max_tokens // 2, then make summary
+            maxlength = round(self.file_summary_tokens) * 4 - 32
+            if len(text) > maxlength:
+                # to do that we split text into chunks with length no more than maxlength and make summary for each chunk
+                # do that until we have summary with length no more than maxlength
+                depth = 0
+                while len(text) > maxlength:
+                    if depth == sumdepth:
+                        # cut text to maxlength and return
+                        text = text[:maxlength]
+                        break
+                    depth += 1
+                    chunks = [text[i:i+maxlength] for i in range(0, len(text), maxlength//2)]
+                    text = ''
+                    for chunk in chunks:
+                        text += self.summary(chunk, maxlength//2) + '\n'
+                text = '# Summary from recieved file: #\n' + text
+            else:
+                # if text is shorter than self.max_tokens // 2, then do not make summary
+                text = '# Text from recieved file: #\n' + text
+            # chat with GPT
+            response = self.chat(id=id, message=text)
+            return response
+        except Exception as e:
+            logger.exception('Could not chat with GPT')
+            return None
 
     def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True) -> str:
         '''

@@ -7,11 +7,12 @@ GeneralRateLimit = 60
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ChatModel = gpt-3.5-turbo
-ChatModelPrice = 0.002
+ChatModelPromptPrice = 0.0015
+ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
 WhisperModelPrice = 0.006
 Temperature = 0.7
-MaxTokens = 1000
+MaxTokens = 2000
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
@@ -19,3 +20,10 @@ EndUserID = True
 Moderation = False
 ;ChatDeletion = False
 ;MaxSessionLength = 5
+
+[Files]
+Enabled = True
+MaxFileSizeMB = 10
+MaxSummaryTokens = 1000
+MaxFileLength = 10000
+DeleteAfterProcessing = True

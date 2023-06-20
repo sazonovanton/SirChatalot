@@ -4,6 +4,8 @@ This is a Telegram bot that uses the OpenAI [ChatGPT API](https://platform.opena
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
+This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf` and `.txt`). It extract texts from them and then generate a response. To fully use this feature, you need to install the `catdoc` (for Linux) or `comtypes` for windows. `.doc` and `.ppt` files support won't work without it.
+
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
 * Clone the repository.
@@ -16,6 +18,8 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 ### Manual steps
 * Install the required packages by running the command `pip install -r requirements.txt`.
 * Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.
+* If you use Linux - install `catdoc` for `.doc` and `.ppt` files support and test it calling `catdoc` in the terminal. `.doc` and `.ppt` files support won't work without it.  
+If you use Windows - install `comtypes` for `.doc` and `.ppt` files support with `pip install comtypes`.
 * Create a `.config` file in the `data` directory using the `config.example` file in that directory as a template.
 * Run the bot by running the command `python3 main.py`.
 
@@ -38,24 +42,32 @@ GeneralRateLimit = 100
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ChatModel = gpt-3.5-turbo
-ChatModelPrice = 0.002
+ChatModelPromptPrice = 0.0015
+ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
 WhisperModelPrice = 0.006
 Temperature = 0.7
-MaxTokens = 500
+MaxTokens = 2000
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
 ChatDeletion = False
 EndUserID = True
 Moderation = False
+
+[Files]
+Enabled = True
+MaxFileSizeMB = 10
+MaxSummaryTokens = 1000
+MaxFileLength = 10000
+DeleteAfterProcessing = True
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
-* OpenAI.ChatModel: The model to use for generating responses (Chat can be powered by `gpt-3.5-turbo` for now).
+* OpenAI.ChatModel: The model to use for generating responses (`gpt-3.5-turbo`, `gpt-3.5-turbo-16k` are available for [GPT-3.5](https://platform.openai.com/docs/models/gpt-3-5), `gpt-4`, `gpt-4-32k` are available for [GPT-4](https://platform.openai.com/docs/models/gpt-4)).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
 * OpenAI.WhisperModel: The model to use for speech recognition (Speect-to-text can be powered by `whisper-1` for now).
 * OpenAI.WhisperModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
@@ -67,6 +79,11 @@ Moderation = False
 * OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
 * OpenAI.EndUserID: Whether to add the user's ID to the API request. Optional.
 * OpenAI.Moderation: Whether to use the OpenAI's moderation engine. Optional.
+* Files.Enabled: Whether to enable files support. Optional. Default: `True`.
+* Files.MaxFileSizeMB: The maximum file size in megabytes. Optional. Default: `20`.
+* Files.MaxSummaryTokens: The maximum number of tokens to use for generating summaries. Optional. Default: `OpenAI.MaxTokens`/2.
+* Files.MaxFileLength: The maximum number of tokens to use for generating summaries. Optional. Default: `10000`.
+* Files.DeleteAfterProcessing: Whether to delete files after processing. Optional. Deafult: `True`.
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
@@ -89,13 +106,24 @@ Here is a list of the fields in this example:
 * Description: Short description of the style. Is used in message that is shown when `/style` command is called.
 * SystemMessage: The message that will shape your bot's personality. You will need some prompt engineering to make it work properly.
 
+## Files
+Bot supports working with files. You can send a file to the bot and it will send back a response based on the file's extracted text.  
+It can work quite poorly with some files, create an issue if you find a problem.  
+Files temporarily stored in the `./data/files` directory. After successful processing, they are deleted if other behavior is not specified in the `./data/.config` file.  
+Currently supported file types: `.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf`, `.txt`.  
+Maximum file size to work with is 20 MB (`python-telegram-bot` limitation), you can set your own limit in the `./data/.config` file (in MB), but it will be limited by the `python-telegram-bot` limit.  
+If file is too large, the bot will attempt to summarize it to the length of MaxTokens/2. You can set your own limit in the `./data/.config` file (in tokens - one token is ~4 characters).    
+You can also limit max file lenght (in characters) by setting the `Files.MaxFileLength` field in the `./data/.config` file (in tokens). It can be set because sumarization is made with API requests and it can be expensive.  
+Summarisation will happen by chunks of size `Files.MaxSummaryTokens` until the whole file is processed. Summary for chunks will be combined into one summary (maximum 3 itterations, then text is just cut).      
+
+You can disable files support in the `./data/.config` file by setting `Files.Enabled` to `False`.
+
 ## Using GPT-4
 You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file:
 ```
 ...
 [OpenAI]
 ChatModel = gpt-4
-; ChatModelPrice = 0.002 - delete this line
 ChatModelPromptPrice = 0.03
 ChatModelCompletionPrice = 0.06
 ...
@@ -182,6 +210,7 @@ docker compose down
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
 * The bot will try to continue conversation in the event of reaching maximum number of tokens by creating summary of the conversation and using it as a prompt for the next response. This can lead to the bot anwering poorly.
 * The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
+* The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see *Configuration*), the file will be stored in `./data/files` directory. The files are not encrypted and can be accessed by anyone with access to the server.
 * If message is flagged by the Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 

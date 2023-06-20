@@ -32,6 +32,14 @@ else
     echo "$(ffmpeg -version | head -n 1)"
 fi
 
+# Install catdoc for doc and ppt support
+if ! command -v catdoc >/dev/null; then
+    echo "Error: catdoc is not installed or not in PATH. Attempting to install..."
+    sudo apt-get install catdoc
+else
+    echo "$(catdoc -v)"
+fi
+
 # Check if ./data/.config exists
 if [ ! -f ./data/.config ]; then
     echo "Error: './data/.config' does not exist. You can always create it using './data/config.example'."
