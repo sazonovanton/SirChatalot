@@ -47,7 +47,8 @@ ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
 WhisperModelPrice = 0.006
 Temperature = 0.7
-MaxTokens = 2000
+MaxTokens = 3997
+MinLengthTokens = 100
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
@@ -73,6 +74,7 @@ DeleteAfterProcessing = True
 * OpenAI.WhisperModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
 * OpenAI.Temperature: The temperature to use for generating responses.
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
+* OpenAI.MinLengthTokens: The minimum number of tokens to use for generating responses. Optional, default 100.
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
 * OpenAI.MaxSessionLength: The maximum number of user messages in a session (can be used to reduce tokens used). Optional.

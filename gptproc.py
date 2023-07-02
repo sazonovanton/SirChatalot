@@ -50,18 +50,21 @@ class GPT:
             self.file_summary_tokens = int(config.get("OpenAI", "MaxSummaryTokens")) if config.has_option("OpenAI", "MaxSummaryTokens") else (self.max_tokens // 2)
             self.max_file_length = int(config.get("OpenAI", "MaxFileLength")) if config.has_option("OpenAI", "MaxFileLength") else 10000
 
+            self.min_length_tokens = int(config.get("OpenAI", "MinLengthTokens")) if config.has_option("OpenAI", "MinLengthTokens") else 100
             # load chat history from file if exists or create new 
             try:
-                # using pickle is not a safe way, but it's ok for this example
-                # pickle can be manipulated to execute arbitrary code
                 self.chats = pickle.load(open("./data/tech/chats.pickle", "rb")) 
             except:
                 self.chats = {}
+            
+            # load chat length in tokens by users from file if exists or create new
+            try:
+                self.chat_length_tokens = pickle.load(open("./data/tech/chat_length_tokens.pickle", "rb"))
+            except:
+                self.chat_length_tokens = {}
 
             # load statistics by users from file if exists or create new
             try:
-                # using pickle is not a safe way, but it's ok for this example
-                # pickle can be manipulated to execute arbitrary code
                 self.stats = pickle.load(open("./data/tech/stats.pickle", "rb")) 
             except:
                 self.stats = {}
@@ -159,6 +162,8 @@ class GPT:
         try:
             del self.chats[id]
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            self.chat_length_tokens[id] = 0
+            pickle.dump(self.chat_length_tokens, open("./data/tech/chat_length_tokens.pickle", "wb"))
             return True
         except Exception as e:
             # logger.exception('Could not delete chat history for user: ' + str(id))
@@ -443,6 +448,9 @@ class GPT:
         Chat with GPT
         Input id of user and message
         '''
+        # if id not in self.chat_length_tokens make it 0
+        if id not in self.chat_length_tokens:
+            self.chat_length_tokens[id] = 0
         try:
             self.delete_chat_after_response = False 
             # get chat history
@@ -473,11 +481,12 @@ class GPT:
                     
             # get response from GPT
             try:
+                request_tokens = max(self.max_tokens - self.chat_length_tokens[id], self.min_length_tokens)
                 if self.end_user_id:
                     response = openai.ChatCompletion.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=self.max_tokens,
+                        max_tokens=request_tokens,
                         messages=messages,
                         user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
                     )
@@ -485,9 +494,11 @@ class GPT:
                     response = openai.ChatCompletion.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=self.max_tokens,
+                        max_tokens=request_tokens,
                         messages=messages
                     )
+                self.chat_length_tokens[id] = int(response["usage"]['total_tokens'])
+                pickle.dump(self.chat_length_tokens, open('./data/tech/chat_length_tokens.pickle', 'wb'))
             # if ratelimit is reached
             except openai.error.RateLimitError as e:
                 logger.exception('Rate limit error')
@@ -496,8 +507,10 @@ class GPT:
             except openai.error.InvalidRequestError as e:
                 logger.exception('Invalid request error')
                 if self.chat_deletion is not None:
+                    print(messages)
+                    print(e)
                     self.delete_chat(id)
-                    return 'There is an error from API. It seems that your session was too long. We had to reset it.'
+                    return 'It seems that your session was too long. We had to reset it.'
                 else:
                     if not continue_attempt:
                         return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete'
