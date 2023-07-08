@@ -147,7 +147,7 @@ class GPT:
                 cost += self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
                 cost += self.stats[id]['Completion tokens used'] / 1000 * self.model_completion_price
-                statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4)) + '\nDo not worry, it is free for you 😊'
+                statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4)) + ' 😊'
                 return statisitics
             return None
         except Exception as e:
@@ -348,6 +348,8 @@ class GPT:
                 max_tokens=size,
                 messages=summary
             )
+        self.chat_length_tokens[id] = int(response["usage"]['total_tokens'])
+        pickle.dump(self.chat_length_tokens, open('./data/tech/chat_length_tokens.pickle', 'wb'))
         return response["choices"][0]['message']['content']
 
     def chat_summary(self, messages, short=False) -> str:
