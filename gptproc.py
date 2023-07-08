@@ -507,15 +507,19 @@ class GPT:
                 return 'Service is getting rate limited. Please try again later.'
             # if chat is too long
             except openai.error.InvalidRequestError as e:
+                # if 'openai.error.InvalidRequestError: The model: `gpt-4` does not exist'
+                if 'does not exist' in str(e):
+                    logger.error(f'Invalid model error for model {self.model}')
+                    return 'Something went wrong with an attempt to use the model. Please contact the developer.'
                 logger.exception('Invalid request error')
                 if self.chat_deletion is not None:
                     print(messages)
                     print(e)
                     self.delete_chat(id)
-                    return 'It seems that your session was too long. We had to reset it.'
+                    return 'We had to reset your chat session due to an error. Please try again.'
                 else:
                     if not continue_attempt:
-                        return 'It seems that something in this chat session is wrong. Please try to start a new one with /delete'
+                        return 'We had to reset your chat session due to an error. Please try to delete the chat manually with /delete command and try again.'
                     else:
                         style = messages[0]['content'] + '\n Your previous conversation summary: '
                         self.delete_chat(id)
