@@ -145,7 +145,6 @@ banlist.txt
 chats.pickle
 stats.pickle
 ratelimit.pickle
-chat_length_tokens.pickle
 rates.txt
 *.ogg
 *.mp3

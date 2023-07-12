@@ -18,6 +18,7 @@ config.read('./data/.config')
 
 import pickle
 import openai
+import tiktoken
 import os
 from pydub import AudioSegment
 import hashlib
@@ -56,12 +57,6 @@ class GPT:
                 self.chats = pickle.load(open("./data/tech/chats.pickle", "rb")) 
             except:
                 self.chats = {}
-            
-            # load chat length in tokens by users from file if exists or create new
-            try:
-                self.chat_length_tokens = pickle.load(open("./data/tech/chat_length_tokens.pickle", "rb"))
-            except:
-                self.chat_length_tokens = {}
 
             # load statistics by users from file if exists or create new
             try:
@@ -86,6 +81,21 @@ class GPT:
 
         except Exception as e:
             logger.exception('Could not initialize GPT class')
+
+    def count_tokens(self, messages):
+        '''
+        Count tokens in messages via tiktoken
+        '''
+        try:
+            encoding = tiktoken.encoding_for_model(self.model)
+            tokens = 0
+            for message in messages:
+                text = message['role'] + ': ' + message['content']
+                tokens += len(encoding.encode(text))
+            return tokens
+        except Exception as e:
+            logger.exception('Could not count tokens in text')
+            return None
 
     def add_stats(self, id=None, tokens_used=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None) -> None:
         '''
@@ -162,8 +172,6 @@ class GPT:
         try:
             del self.chats[id]
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
-            self.chat_length_tokens[id] = 0
-            pickle.dump(self.chat_length_tokens, open("./data/tech/chat_length_tokens.pickle", "wb"))
             return True
         except Exception as e:
             # logger.exception('Could not delete chat history for user: ' + str(id))
@@ -326,30 +334,22 @@ class GPT:
             logger.exception('Could not voice chat with GPT')
             return None
 
-    def summary(self, text, size=150):
+    def summary(self, text, size=240):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
         '''
         summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'}]
         summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
-        if self.end_user_id:
-            response = openai.ChatCompletion.create(
+        user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
+        requested_tokens = min(size, self.max_tokens)
+        response = openai.ChatCompletion.create(
                 model=self.model,
                 temperature=self.temperature, 
-                max_tokens=size,
+                max_tokens=requested_tokens,
                 messages=summary,
-                user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
-            )
-        else:
-            response = openai.ChatCompletion.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=size,
-                messages=summary
-            )
-        self.chat_length_tokens[id] = int(response["usage"]['total_tokens'])
-        pickle.dump(self.chat_length_tokens, open('./data/tech/chat_length_tokens.pickle', 'wb'))
+                user=user_id
+        )
         return response["choices"][0]['message']['content']
 
     def chat_summary(self, messages, short=False) -> str:
@@ -450,9 +450,6 @@ class GPT:
         Chat with GPT
         Input id of user and message
         '''
-        # if id not in self.chat_length_tokens make it 0
-        if id not in self.chat_length_tokens:
-            self.chat_length_tokens[id] = 0
         try:
             self.delete_chat_after_response = False 
             # get chat history
@@ -483,24 +480,15 @@ class GPT:
                     
             # get response from GPT
             try:
-                request_tokens = max(self.max_tokens - self.chat_length_tokens[id], self.min_length_tokens)
-                if self.end_user_id:
-                    response = openai.ChatCompletion.create(
+                user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
+                requested_tokens = min(self.max_tokens, self.max_tokens - self.count_tokens(messages))
+                response = openai.ChatCompletion.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=request_tokens,
+                        max_tokens=requested_tokens,
                         messages=messages,
-                        user=hashlib.sha1(str(id).encode("utf-8")).hexdigest()
-                    )
-                else:
-                    response = openai.ChatCompletion.create(
-                        model=self.model,
-                        temperature=self.temperature, 
-                        max_tokens=request_tokens,
-                        messages=messages
-                    )
-                self.chat_length_tokens[id] = int(response["usage"]['total_tokens'])
-                pickle.dump(self.chat_length_tokens, open('./data/tech/chat_length_tokens.pickle', 'wb'))
+                        user=user_id
+                )
             # if ratelimit is reached
             except openai.error.RateLimitError as e:
                 logger.exception('Rate limit error')
