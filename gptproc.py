@@ -22,6 +22,7 @@ import tiktoken
 import os
 from pydub import AudioSegment
 import hashlib
+from datetime import datetime
 
 class GPT:
     def __init__(self) -> None:
@@ -40,6 +41,7 @@ class GPT:
             self.max_tokens = int(config.get("OpenAI", "MaxTokens"))
             self.audio_format = '.' + config.get("OpenAI", "AudioFormat") # wav or mp3
             self.end_user_id = config.getboolean("OpenAI", "EndUserID") if config.has_option("OpenAI", "EndUserID") else False
+            self.log_chats = config.getboolean("OpenAI", "LogChats") if config.has_option("OpenAI", "LogChats") else False
             try:
                 self.system_message = config.get("OpenAI", "SystemMessage")
             except Exception as e:
@@ -58,7 +60,7 @@ class GPT:
             except:
                 self.chats = {}
 
-            # load statistics by users from file if exists or create new
+            # load statistics by users from file if exists or create new 
             try:
                 self.stats = pickle.load(open("./data/tech/stats.pickle", "rb")) 
             except:
@@ -142,7 +144,7 @@ class GPT:
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
-    def get_stats(self, id=None) -> str:
+    def get_stats(self, id=None):
         '''
         Get statistics (tokens used, speech2text in seconds used, messages sent, voice messages sent) by user
         Input id of user
@@ -164,12 +166,38 @@ class GPT:
             logger.exception('Could not get statistics for user: ' + str(id))
             return None
 
+    def dump_chat(self, id=0, plain=False) -> bool:
+        '''
+        Dump chat to a file
+        If plain is True, then dump chat as plain text with roles and messages
+        If plain is False, then dump chat as pickle file
+        '''
+        try:
+            # get chat history
+            try:
+                messages = self.chats[id]
+            except:
+                return False
+            # dump chat to a file with filename: ./data/chats/123456_20230721-182531.pickle
+            if plain:
+                with open(f'./data/chats/{id}_{datetime.now().strftime("%Y%m%d-%H%M%S")}.txt', 'w') as f:
+                    for message in messages:
+                        f.write(message['role'] + ': ' + message['content'] + '\n')
+            else:
+                pickle.dump(messages, open(f"./data/chats/{id}_{datetime.now().strftime('%Y%m%d-%H%M%S')}.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not dump chat for user: ' + str(id))
+            return False
+
     def delete_chat(self, id=0) -> bool:
         '''
         Delete chat history
         Input id of user
         '''
         try:
+            if self.log_chats:
+                self.dump_chat(id=id, plain=True)
             del self.chats[id]
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
@@ -210,7 +238,7 @@ class GPT:
             logger.exception('Could not save session for user: ' + str(id))
             return False
         
-    def stored_sessions(self, id=0) -> list:
+    def stored_sessions(self, id=0):
         '''
         Get list of stored sessions for user
         '''
@@ -227,7 +255,7 @@ class GPT:
             print('*', key)
         return names
 
-    def load_session(self, id=0, name=None) -> list:
+    def load_session(self, id=0, name=None):
         '''
         Load chat session by name for user, overwrite chat history with session
         '''
@@ -248,7 +276,7 @@ class GPT:
             logger.exception('Could not load session for user: ' + str(id))
             return False
 
-    def delete_session(self, id=0, name=None) -> bool:
+    def delete_session(self, id=0, name=None):
         '''
         Delete chat session by name for user
         '''
@@ -262,14 +290,14 @@ class GPT:
         try:
             del sessions[name]
             pickle.dump(sessions, open("./data/chats/" + str(id) + ".pickle", "wb"))
-            logger.info('Deleted session named: ' + name + ', for user: ' + str(id))
+            logger.info('Deleted session named: ' + str(name) + ', for user: ' + str(id))
             return True
         except Exception as e:
             logger.exception('Could not delete session for user: ' + str(id))
             return False
         
     
-    def speech_to_text(self, audio_file) -> str:
+    def speech_to_text(self, audio_file):
         '''
         Convert speech to text
         Input file with speech
@@ -288,13 +316,14 @@ class GPT:
 
         # delete audio file
         try:
+            audio_file = str(audio_file)
             os.remove(audio_file.replace('.ogg', self.audio_format))
             logger.info('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
         except Exception as e:
-            logger.exception('Could not delete converted audio file: ' + audio_file)
+            logger.exception('Could not delete converted audio file: ' + str(audio_file))
         return transcript
 
-    def convert_ogg_to_wav(self, audio_file) -> str:
+    def convert_ogg_to_wav(self, audio_file):
         '''
         Convert ogg file to wav
         Input file with ogg
@@ -306,9 +335,9 @@ class GPT:
             return wav_file
         except Exception as e:
             logger.exception('Could not convert ogg to wav')
-            return Noneself.add_stats
+            return None
 
-    def chat_voice(self, id=0, audio_file=None) -> str:
+    def chat_voice(self, id=0, audio_file=None):
         '''
         Chat with GPT using voice
         Input id of user and audio file
@@ -352,7 +381,7 @@ class GPT:
         )
         return response["choices"][0]['message']['content']
 
-    def chat_summary(self, messages, short=False) -> str:
+    def chat_summary(self, messages, short=False):
         '''
         Summarize chat history
         Input messages and short flag (states that summary should be in one sentence)
@@ -372,7 +401,7 @@ class GPT:
             logger.exception('Could not summarize chat history')
             return None
 
-    def moderation_pass(self, message, id=0) -> str:
+    def moderation_pass(self, message, id=0):
         '''
         Moderate message with GPT
         Input message and id of user
@@ -407,7 +436,7 @@ class GPT:
             logger.exception('Could not moderate message')
             return None
 
-    def filechat(self, id=0, text='', sumdepth=3) -> str:
+    def filechat(self, id=0, text='', sumdepth=3):
         '''
         Process file with GPT
         Input id of user and text
@@ -445,7 +474,7 @@ class GPT:
             logger.exception('Could not chat with GPT')
             return None
 
-    def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True) -> str:
+    def chat(self, id=0, message="Hi! Who are you?", style=None, continue_attempt=True):
         '''
         Chat with GPT
         Input id of user and message
@@ -550,7 +579,7 @@ class GPT:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return None
 
-    def keyword_trigger(self, message) -> bool:
+    def keyword_trigger(self, message):
         '''
         Search for keyword in message
         Input message and keyword
@@ -571,7 +600,7 @@ class GPT:
             logger.exception('Could not search for keyword: ' + keyword + ' in message: ' + message)
             return False
 
-    def change_style(self, id=0, style=None) -> bool:
+    def change_style(self, id=0, style=None):
         '''
         Change style of chat
         Input id of user and style
