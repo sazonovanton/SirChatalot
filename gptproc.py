@@ -105,42 +105,19 @@ class GPT:
         Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
         '''
         try:
-            # add statistics by user
             if id is not None:
                 if id not in self.stats:
                     self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0}
-                if tokens_used is not None:
-                    try:
-                        self.stats[id]['Tokens used'] += tokens_used
-                    except:
-                        self.stats[id]['Tokens used'] = tokens_used
-                if speech2text_seconds is not None:
-                    try:
-                        self.stats[id]['Speech2text seconds'] += round(speech2text_seconds)
-                    except:
-                        self.stats[id]['Speech2text seconds'] = round(speech2text_seconds)
-                if messages_sent is not None:
-                    try:
-                        self.stats[id]['Messages sent'] += messages_sent
-                    except:
-                        self.stats[id]['Messages sent'] = messages_sent
-                if voice_messages_sent is not None:
-                    try:
-                        self.stats[id]['Voice messages sent'] += voice_messages_sent
-                    except:
-                        self.stats[id]['Voice messages sent'] = voice_messages_sent
-                if prompt_tokens_used is not None:
-                    try:
-                        self.stats[id]['Prompt tokens used'] += prompt_tokens_used
-                    except:
-                        self.stats[id]['Prompt tokens used'] = prompt_tokens_used
-                if completion_tokens_used is not None:
-                    try:
-                        self.stats[id]['Completion tokens used'] += completion_tokens_used
-                    except:
-                        self.stats[id]['Completion tokens used'] = completion_tokens_used
-            # save statistics to file (unsafe way)
-            pickle.dump(self.stats, open("./data/tech/stats.pickle", "wb"))
+                self.stats[id]['Tokens used'] += tokens_used if tokens_used is not None else 0
+                self.stats[id]['Speech2text seconds'] += round(speech2text_seconds) if speech2text_seconds is not None else 0
+                self.stats[id]['Messages sent'] += messages_sent if messages_sent is not None else 0
+                self.stats[id]['Voice messages sent'] += voice_messages_sent if voice_messages_sent is not None else 0
+                self.stats[id]['Prompt tokens used'] += prompt_tokens_used if prompt_tokens_used is not None else 0
+                self.stats[id]['Completion tokens used'] += completion_tokens_used if completion_tokens_used is not None else 0
+                # save statistics to file (unsafe way)
+                pickle.dump(self.stats, open("./data/tech/stats.pickle", "wb"))
+            else:
+                pass
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
@@ -166,25 +143,32 @@ class GPT:
             logger.exception('Could not get statistics for user: ' + str(id))
             return None
 
-    def dump_chat(self, id=0, plain=False) -> bool:
+    def dump_chat(self, id=None, plain=False, chatname=None) -> bool:
         '''
         Dump chat to a file
         If plain is True, then dump chat as plain text with roles and messages
         If plain is False, then dump chat as pickle file
         '''
         try:
-            # get chat history
-            try:
-                messages = self.chats[id]
-            except:
+            if id is None:
+                logger.debug('Could not dump chat. No ID provided')
                 return False
-            # dump chat to a file with filename: ./data/chats/123456_20230721-182531.pickle
+            if id not in self.chats:
+                return False
+            if name is None:
+                name = datetime.now().strftime("%Y%m%d-%H%M%S")
+            messages = self.chats[id]
             if plain:
-                with open(f'./data/chats/{id}_{datetime.now().strftime("%Y%m%d-%H%M%S")}.txt', 'w') as f:
+                # dump chat to a file with filename: ./data/chats/123456_20230721-182531.txt
+                with open(f'./data/chats/{id}_{chatname}.txt', 'w') as f:
                     for message in messages:
                         f.write(message['role'] + ': ' + message['content'] + '\n')
             else:
-                pickle.dump(messages, open(f"./data/chats/{id}_{datetime.now().strftime('%Y%m%d-%H%M%S')}.pickle", "wb"))
+                # dump chat to user file with filename: ./data/chats/123456.pickle
+                filename = f'./data/chats/{id}.pickle'
+                chats = self.load_pickle(filename)
+                chats[chatname] = messages
+                pickle.dump(chats, open(filename, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not dump chat for user: ' + str(id))
@@ -196,13 +180,15 @@ class GPT:
         Input id of user
         '''
         try:
+            if id not in self.chats:
+                return False
             if self.log_chats:
                 self.dump_chat(id=id, plain=True)
             del self.chats[id]
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
         except Exception as e:
-            # logger.exception('Could not delete chat history for user: ' + str(id))
+            logger.exception('Could not delete chat history for user: ' + str(id))
             return False
 
     def save_session(self, id=0) -> bool:
@@ -212,62 +198,49 @@ class GPT:
             file: ./data/chats/ID.pickle
             content of file: {'Name 1': messages, 'Name 2': messages, ...}
         '''
-        # get chat history
         try:
+            if id is None:
+                logger.debug('Could not save session. No ID provided')
+                return False
             messages = self.chats[id]
-        except:
-            return False
-        # read user sessions from pickle file if exists 
-
-        try:
-            sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
-        except:
-            sessions = {}
-            logger.info('Could not load sessions for user: ' + str(id) + ', creating new')
-
-        # get name of chat by summarizing messages
-        summary = self.chat_summary(messages, short=True)
-
-        # save chat session
-        try:
-            sessions[summary] = messages
-            pickle.dump(sessions, open("./data/chats/" + str(id) + ".pickle", "wb"))
-            logger.info('Saved session for user: ' + str(id) + ', name: ' + summary)
-            return True
+            summary = self.chat_summary(messages, short=True)
+            success = self.dump_chat(id=id, chatname=summary)
+            return success
         except Exception as e:
             logger.exception('Could not save session for user: ' + str(id))
             return False
         
-    def stored_sessions(self, id=0):
+    def stored_chats(self, id=None):
         '''
         Get list of stored sessions for user
         '''
-        # read user sessions from pickle file if exists 
         try:
+            if id is None:
+                logger.debug('Could not get stored chats. No ID provided')
+                return False
+            if id not in self.chats:
+                return False
             sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
-        except:
-            return None
-        
-        # sessions names
-        names = []
-        for key, value in sessions.items():
-            names.append(key)
-            print('*', key)
-        return names
+            # sessions names (dict keys)
+            names = list(sessions.keys())
+            return names
+        except Exception as e:
+            logger.exception('Could not get stored chats for user: ' + str(id))
+            return False
 
-    def load_session(self, id=0, name=None):
+    def load_session(self, id=None, chatname=None):
         '''
         Load chat session by name for user, overwrite chat history with session
         '''
-        # read user sessions from pickle file if exists
         try:
+            if id is None:
+                logger.debug('Could not load chat. No ID provided')
+                return False
+            if chatname is None:
+                logger.debug('Could not load chat. No chatname provided')
+                return False
             sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
-        except:
-            return False
-        
-        # get session by name
-        try:
-            messages = sessions[name]
+            messages = sessions[chatname]
             # overwrite chat history
             self.chats[id] = messages
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
@@ -276,27 +249,25 @@ class GPT:
             logger.exception('Could not load session for user: ' + str(id))
             return False
 
-    def delete_session(self, id=0, name=None):
+    def delete_session(self, id=0, chatname=None):
         '''
         Delete chat session by name for user
         '''
-        # read user sessions from pickle file if exists
         try:
+            if id is None:
+                logger.debug('Could not load chat. No ID provided')
+                return False
+            if chatname is None:
+                logger.debug('Could not load chat. No chatname provided')
+                return False
             sessions = pickle.load(open("./data/chats/" + str(id) + ".pickle", "rb"))
-        except:
-            return False
-        
-        # delete session by name
-        try:
-            del sessions[name]
+            del sessions[chatname]
             pickle.dump(sessions, open("./data/chats/" + str(id) + ".pickle", "wb"))
-            logger.info('Deleted session named: ' + str(name) + ', for user: ' + str(id))
             return True
         except Exception as e:
             logger.exception('Could not delete session for user: ' + str(id))
             return False
         
-    
     def speech_to_text(self, audio_file):
         '''
         Convert speech to text
@@ -431,7 +402,7 @@ class GPT:
                 # log to logger file fact of user being flagged
                 logger.info('Message from user ' + str(id) + ' was flagged (' + str(flagged_categories) + ')')
                 return False
-            
+
             return True
         except Exception as e:
             logger.exception('Could not moderate message')
