@@ -314,6 +314,14 @@ class GPT:
             logger.exception('Could not convert voice to text')
             transcript = None
 
+        if transcript is not None:
+            # add statistics
+            try:
+                audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
+                self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
+            except Exception as e:
+                logger.exception('Could not add speech2text statistics for user: ' + str(id))
+
         # delete audio file
         try:
             audio_file = str(audio_file)
@@ -346,13 +354,6 @@ class GPT:
             # convert voice to text
             if audio_file is not None:
                 transcript = self.speech_to_text(audio_file)
-                if transcript is not None:
-                    # add statistics
-                    try:
-                        audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
-                        self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
-                    except Exception as e:
-                        logger.exception('Could not add speech2text statistics for user: ' + str(id))
             else:
                 logger.error('No audio file provided for voice chat')
                 return None

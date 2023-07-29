@@ -1,5 +1,18 @@
 # Description: Main file for SirChatalot bot
 
+# main libraries
+import asyncio
+import sys
+import os
+import time
+from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
+from telegram.constants import ChatAction
+import codecs
+import pickle
+from functools import wraps
+
+# logging
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-main")
@@ -16,18 +29,30 @@ import configparser
 config = configparser.ConfigParser()
 config.read('./data/.config')
 TOKEN = config.get("Telegram", "Token")
+ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
+ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
+banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
 
-# main libraries
-import asyncio
-import sys
-import os
-import time
-from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
-from telegram.constants import ChatAction
-import codecs
-import pickle
-from functools import wraps
+logger.info('***** Starting chatbot... *****')
+
+try:
+    ratelimit_time = int(ratelimit_time)
+except:
+    logger.warning(f"Rate limit time is not a number ({ratelimit_time}). Setting it to None.")
+    ratelimit_time = None
+
+try:
+    ratelimit_general = int(ratelimit_general)
+except:
+    logger.warning(f"General rate limit is not a number ({ratelimit_general}). Setting it to None.")
+    ratelimit_general = None
+
+# check if './data/rates.txt' exists
+if not os.path.exists('./data/rates.txt'):
+    logger.warning('File with rates does not exist.')
+    rates_exists = False
+else:
+    rates_exists = True
 
 if config.has_option("Telegram", "AccessCodes"):
     accesscodes = config.get("Telegram", "AccessCodes").split(',') 
@@ -109,44 +134,40 @@ gpt = GPT()
 from filesproc import FilesProc
 fp = FilesProc()
 
+###############################################################################################
+
 def ratelimiter(user_id, check=False):
     '''
     Rate limiter for messages
     '''    
-    ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
-    ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
-
-    try:
-        ratelimit_time = int(ratelimit_time)
-    except:
-        ratelimit_time = None
-    
-    try:
-        ratelimit_general = int(ratelimit_general)
-    except:
-        ratelimit_general = None
-
     # if ratelimit_time is None, 0 or '', return None
     if ratelimit_time is None or ratelimit_time <= 0:
+        logger.debug(f'Rate is not limited for user {user_id}, ratelimit_time is {ratelimit_time} (None or <=0).')
         return None
-
+    
     # get the limits for users
-    user_rates = get_rates()
+    if rates_exists:
+        user_rates = get_rates()
+    else:
+        user_rates = None 
 
     # if user is in the dict, get the limit
     if user_rates is not None and user_rates != {}:
         if user_id in user_rates:
             limit = user_rates[user_id]
             if limit == 0:
+                logger.debug(f'Rate is not limited for user {user_id}, limit is 0.')
                 return None
         # if user is not in the dict, pass
         else:
             if ratelimit_general is None:
+                logger.debug(f'Rate is not limited for user {user_id}, limit is not set for this user and general limit is None.')
                 return None
             else:
                 limit = int(ratelimit_general)
     else:
         if ratelimit_general is None:
+            logger.debug(f'Rate is not limited for user {user_id}, limit is not set for this user and general limit is None.')
             return None
         else:
             limit = int(ratelimit_general)
@@ -157,13 +178,12 @@ def ratelimiter(user_id, check=False):
             with open('./data/tech/ratelimit.pickle', 'rb') as f:
                 rate = pickle.load(f)
         # if file does not exist, create an empty dict
-        except FileNotFoundError:
-            logger.warning('Rate limit file does not exist. Creating a new one.')
+        except Exception as e:
+            logger.warning(f'Error while opening ratelimit.pickle. Creating and saving an empty dict. Exception: {e}')
             rate = {}
-        # if file is empty, create an empty dict
-        except EOFError:
-            logger.warning('Rate limit file is empty. Creating a new one.')
-            rate = {}
+            # save the dict to a pickle file
+            with open('./data/tech/ratelimit.pickle', 'wb') as f:
+                pickle.dump(rate, f)
         
         # create a function to check if user is in the dict
         if user_id not in rate:
@@ -174,22 +194,17 @@ def ratelimiter(user_id, check=False):
             # if the list is longer than the limit, return False
             if (len(rate[user_id]) > limit) and check != True:
                 return False
-
         # add new value to the list
         if not check:
             rate[user_id].append(time.time())
-
         # save the dict to a pickle file
         with open('./data/tech/ratelimit.pickle', 'wb') as f:
             pickle.dump(rate, f)
-
         if check: 
             if len(rate[user_id]) > limit:
                 return f"Rate limit of {limit} messages per {ratelimit_time} seconds exceeded. Please wait."
             return f"You have used your limit of {len(rate[user_id])}/{limit} messages per {ratelimit_time} seconds."
-
         return True
-    
     except Exception as e:
         logger.exception('Could not create rate limiter. Rate is not limited.')
         return None
@@ -202,16 +217,11 @@ def chat_modes_read(filepath='./data/chat_modes.ini'):
         [Alice]
         Description = Alice is empathetic and friendly
         SystemMessage = You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty.
-
-        [Bob]
-        Description = Bob is brief and helpful
-        SystemMessage = You are a helpful assistant named Bob, who answers very short and informative.
     '''
     try:
         # read chat modes from file
         chat_modes = configparser.ConfigParser()
         chat_modes.read(filepath)
-
         # create a dict with chat modes
         modes = {}
         for mode in chat_modes.sections():
@@ -219,7 +229,6 @@ def chat_modes_read(filepath='./data/chat_modes.ini'):
                 'Desc': chat_modes[mode]['Description'],
                 'SystemMessage': chat_modes[mode]['SystemMessage']
             }
-
         return modes
     except Exception as e:
         logger.exception('Could not read chat modes from file: ' + filepath)
@@ -408,14 +417,15 @@ async def check_user(update, message=None, check_rate=True) -> bool:
     Check if user has an access
     '''
     # read banlist
-    try:
-        with codecs.open("./data/banlist.txt", "r", "utf-8") as f:
-            # Read the contents of the file into a list
-            lines = f.readlines()
-        banlist = [line.rstrip('\n') for line in lines]
-    except:
-        logger.exception('No banlist or it is not possible to read it')
-        banlist = []
+    if banlist_enabled:
+        try:
+            with codecs.open("./data/banlist.txt", "r", "utf-8") as f:
+                # Read the contents of the file into a list
+                lines = f.readlines()
+            banlist = [line.rstrip('\n') for line in lines]
+        except:
+            logger.exception('No banlist or it is not possible to read it')
+            banlist = []
 
     # read whitelist
     if accesscodes is not None:
@@ -430,10 +440,11 @@ async def check_user(update, message=None, check_rate=True) -> bool:
 
     user = update.effective_user
     # check if user is in banlist
-    if str(user.id) in banlist:
-        logger.warning("Restricted access to banned user: " + str(user))
-        await update.message.reply_text("You are banned.")
-        return False
+    if banlist_enabled:
+        if str(user.id) in banlist:
+            logger.warning("Restricted access to banned user: " + str(user))
+            await update.message.reply_text("You are banned.")
+            return False
 
     # check there were no accesscodes provided in config file bot will be available for everyone not in banlist
     if accesscodes is None:
@@ -663,7 +674,6 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Document.Category('application/vnd.ms-powerpoint'), downloader))
     application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.presentationml.presentation'), downloader))
     application.add_handler(MessageHandler(filters.Document.Category('text/plain'), downloader))
-    
 
     # Run the bot until the Ctrl-C is pressed
     application.run_polling()
