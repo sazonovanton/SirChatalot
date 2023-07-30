@@ -293,13 +293,16 @@ class GPT:
             except Exception as e:
                 logger.exception('Could not add speech2text statistics for user: ' + str(id))
 
-        # delete audio file
-        try:
-            audio_file = str(audio_file)
-            os.remove(audio_file.replace('.ogg', self.audio_format))
-            logger.info('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
-        except Exception as e:
-            logger.exception('Could not delete converted audio file: ' + str(audio_file))
+        # check if audio file exists
+        if os.path.exists(audio_file.replace('.ogg', self.audio_format)):
+            # delete audio file
+            try:
+                os.remove(audio_file.replace('.ogg', self.audio_format))
+                logger.info('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
+            except Exception as e:
+                logger.exception('Could not delete converted audio file: ' + str(audio_file))
+        else:
+            logger.debug('Converted audio file does not exist: ' + str(audio_file.replace('.ogg', self.audio_format)))
         return transcript
 
     def convert_ogg_to_wav(self, audio_file):
@@ -328,7 +331,9 @@ class GPT:
             else:
                 logger.error('No audio file provided for voice chat')
                 return None
-            # chat with GPT
+            if transcript is None:
+                logger.error('Could not convert voice to text')
+                return 'Sorry, I could not convert your voice to text.'
             response = self.chat(id=id, message=transcript)
             return response
         except Exception as e:
