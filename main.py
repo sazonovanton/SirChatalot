@@ -294,7 +294,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     '''
     Send a message when the command /help is issued
     '''
-    help_text = 'This bot is an example of OpenAI ChatGPT API usage. Have fun! To delete your chat history, use /delete command. You can also send voice messages.'
+    help_text = 'This bot is just a fun experiment. To delete your chat history, use /delete command. You can also send voice messages and files.'
     await update.message.reply_text(help_text)
 
 async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

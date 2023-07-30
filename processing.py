@@ -203,6 +203,8 @@ class ChatProc:
             if id in self.stats:
                 statisitics = ''
                 for key, value in self.stats[id].items():
+                    if key in ['Tokens used']:
+                        continue # deprecated values
                     statisitics += key + ': ' + str(value) + '\n'
                 cost = self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
