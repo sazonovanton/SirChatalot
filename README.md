@@ -6,6 +6,12 @@ This bot can also be used to generate responses to voice messages. Bot will conv
 
 This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf` and `.txt`). It extract texts from them and then generate a response. To fully use this feature, you need to install the `catdoc` (for Linux) or `comtypes` for windows. `.doc` and `.ppt` files support won't work without it.
 
+## Possible breaking changes
+In the end of July 2023 there was made some changes to a bot architecture.  
+Now bot can use different chat engines, not only OpenAI (which is still default).  
+Some functionality was deprecated. There is no more keyword triggers, max chat length (in message number) is no longer limited. If you used this functionality, you can stay on the old version of the bot or add `LegacyMode = True` to the `[Telegram]` section of the config file.  
+There can be other issues, so if you find one, please report it.
+
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
 * Clone the repository.
@@ -38,6 +44,7 @@ Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 100
+LegacyMode = False
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -67,6 +74,7 @@ DeleteAfterProcessing = True
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
+* Telegram.LegacyMode: If set to `True`, bot will use old architecture. See *Possible breaking changes*. Optional, default is `False`.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (`gpt-3.5-turbo`, `gpt-3.5-turbo-16k` are available for [GPT-3.5](https://platform.openai.com/docs/models/gpt-3-5), `gpt-4`, `gpt-4-32k` are available for [GPT-4](https://platform.openai.com/docs/models/gpt-4)).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).

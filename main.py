@@ -34,6 +34,7 @@ ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_opt
 banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
 
 logger.info('***** Starting chatbot... *****')
+print('***** Starting chatbot... *****')
 
 try:
     ratelimit_time = int(ratelimit_time)
@@ -129,8 +130,15 @@ if config.has_option("Telegram", "RateLimitTime"):
 
 print('-- If you want to learn more about limits please check description (README.md)\n')
 
-from gptproc import GPT
-gpt = GPT()
+if config.has_option("Telegram", "LegacyMode"):
+    legacy_mode = config.getboolean("Telegram", "LegacyMode")
+if legacy_mode:
+    print('(!) Legacy mode is enabled. Bot will use legacy mode for processing messages.\n')
+    from gptproc import GPT
+    gpt = GPT()
+else:
+    from processing import ChatProc
+    gpt = ChatProc(text="OpenAI", speech="OpenAI")
 from filesproc import FilesProc
 fp = FilesProc()
 
