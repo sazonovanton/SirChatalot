@@ -34,6 +34,8 @@ class ChatProc:
             self.text_engine = OpenAIEngine(text=True)
             self.log_chats = self.text_engine.log_chats
             self.max_tokens = self.text_engine.max_tokens
+            self.model_prompt_price = self.text_engine.model_prompt_price
+            self.model_completion_price = self.text_engine.model_completion_price
         # elif text == "yagpt":
         #     self.text_engine = YAGPT2Engine(text=True)
         # elif text == "textgen":
@@ -47,6 +49,7 @@ class ChatProc:
         if speech == "openai":
             self.speech_engine = OpenAIEngine(speech=True)
             self.audio_format = self.speech_engine.audio_format
+            self.s2t_model_price = self.speech_engine.s2t_model_price
         # elif speech == "runpod":
         #     self.speech_engine = RunpodEngine(speech=True)
         else:

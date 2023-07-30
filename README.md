@@ -10,7 +10,7 @@ This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `
 In the end of July 2023 there was made some changes to a bot architecture.  
 Now bot can use different chat engines, not only OpenAI (which is still default).  
 Some functionality was deprecated. There is no more keyword triggers, max chat length (in message number) is no longer limited. If you used this functionality, you can stay on the old version of the bot or add `LegacyMode = True` to the `[Telegram]` section of the config file.  
-There can be other issues, so if you find one, please report it.
+I tried to make this transition as smooth as possible, but there can be some issues. If you find one, please report it.  
 
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
