@@ -130,6 +130,7 @@ if config.has_option("Telegram", "RateLimitTime"):
 
 print('-- If you want to learn more about limits please check description (README.md)\n')
 
+legacy_mode = False
 if config.has_option("Telegram", "LegacyMode"):
     legacy_mode = config.getboolean("Telegram", "LegacyMode")
 if legacy_mode:
