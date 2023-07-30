@@ -139,7 +139,7 @@ if legacy_mode:
     gpt = GPT()
 else:
     from processing import ChatProc
-    gpt = ChatProc(text="OpenAI", speech="OpenAI")
+    gpt = ChatProc(text="OpenAI", speech="OpenAI") # speech can be None if you don't want to use speech2text
 from filesproc import FilesProc
 fp = FilesProc()
 

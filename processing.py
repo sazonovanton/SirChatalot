@@ -27,9 +27,11 @@ from engines import OpenAIEngine
 
 class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
-        text, speech = text.lower(), speech.lower()
+        text = text.lower()
+        speech = speech.lower() if speech is not None else None
         self.log_chats, self.max_tokens = False, 2000
-        self.audio_format = ".wav"
+        self.model_prompt_price, self.model_completion_price = 0, 0
+        self.audio_format, self.s2t_model_price = ".wav", 0
         if text == "openai":
             self.text_engine = OpenAIEngine(text=True)
             self.log_chats = self.text_engine.log_chats
@@ -38,7 +40,7 @@ class ChatProc:
             self.model_completion_price = self.text_engine.model_completion_price
         # elif text == "yagpt":
         #     self.text_engine = YAGPT2Engine(text=True)
-        # elif text == "textgen":
+        # elif text == "textgen" or text == "text-generation-webui":
         #     self.text_engine = TextgenEngine(text=True)
         # elif text == "runpod":
         #     self.text_engine = RunpodEngine(text=True)
@@ -46,7 +48,9 @@ class ChatProc:
             logger.error("Unknown text engine: {}".format(text))
             raise Exception("Unknown text engine: {}".format(text))
         
-        if speech == "openai":
+        if speech is None:
+            self.speech_engine = None
+        elif speech == "openai":
             self.speech_engine = OpenAIEngine(speech=True)
             self.audio_format = self.speech_engine.audio_format
             self.s2t_model_price = self.speech_engine.s2t_model_price
@@ -73,6 +77,8 @@ class ChatProc:
         Convert speech to text
         Input file with speech
         '''
+        if self.speech_engine is None:
+            return None
         try:
             transcript = self.speech_engine.speech_to_text(audio_file)
             transcript += ' (it was a voice message transcription)'
@@ -101,6 +107,9 @@ class ChatProc:
         Input id of user and audio file
         '''
         try:
+            if self.speech_engine is None:
+                logger.error('No speech2text engine provided')
+                return 'Sorry, speech-to-text is not available.'
             # convert voice to text
             if audio_file is not None:
                 transcript = self.speech_to_text(audio_file)
