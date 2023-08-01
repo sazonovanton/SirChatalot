@@ -139,7 +139,9 @@ if legacy_mode:
     gpt = GPT()
 else:
     from processing import ChatProc
-    gpt = ChatProc(text="OpenAI", speech="OpenAI") # speech can be None if you don't want to use speech2text
+    text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
+    speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
+    gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
 from filesproc import FilesProc
 fp = FilesProc()
 

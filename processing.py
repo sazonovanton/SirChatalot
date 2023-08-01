@@ -21,9 +21,9 @@ import os
 from pydub import AudioSegment
 from datetime import datetime
 
-# Support: OpenAI API
-# Planned: YandexGPT API, Text Generation WebUI API, Runpod API 
-from engines import OpenAIEngine
+# Support: OpenAI API, YandexGPT API
+# Planned: Text Generation WebUI API, Runpod API 
+from engines import OpenAIEngine, YandexEngine
 
 class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
@@ -38,8 +38,8 @@ class ChatProc:
             self.max_tokens = self.text_engine.max_tokens
             self.model_prompt_price = self.text_engine.model_prompt_price
             self.model_completion_price = self.text_engine.model_completion_price
-        # elif text == "yagpt":
-        #     self.text_engine = YAGPT2Engine(text=True)
+        elif text == "yagpt" or text == "yandexgpt" or text == "yandex":
+            self.text_engine = YandexEngine(text=True)
         # elif text == "textgen" or text == "text-generation-webui":
         #     self.text_engine = TextgenEngine(text=True)
         # elif text == "runpod":
