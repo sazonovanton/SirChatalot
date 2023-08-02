@@ -242,8 +242,8 @@ class ChatProc:
                 return False
             if id not in self.chats:
                 return False
-            if name is None:
-                name = datetime.now().strftime("%Y%m%d-%H%M%S")
+            if chatname is None:
+                chatname = datetime.now().strftime("%Y%m%d-%H%M%S")
             messages = self.chats[id]
             if plain:
                 # dump chat to a file with filename: ./data/chats/123456_20230721-182531.txt
