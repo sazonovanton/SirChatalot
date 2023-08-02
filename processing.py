@@ -73,6 +73,9 @@ class ChatProc:
         # load statistics from file
         self.stats = self.load_pickle("./data/tech/stats.pickle")
 
+        if self.log_chats:
+            logger.info('* Chat history is logged *')
+
     def speech_to_text(self, audio_file):
         '''
         Convert speech to text
@@ -233,6 +236,7 @@ class ChatProc:
         If plain is False, then dump chat as pickle file
         '''
         try:
+            logger.debug('Dumping chat for user: ' + str(id))
             if id is None:
                 logger.debug('Could not dump chat. No ID provided')
                 return False
