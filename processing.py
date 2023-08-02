@@ -30,12 +30,12 @@ class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
         text = text.lower()
         speech = speech.lower() if speech is not None else None
-        self.log_chats, self.max_tokens = False, 2000
+        self.max_tokens = 2000
+        self.log_chats = config.getboolean("Logging", "LogChats") if config.has_option("Logging", "LogChats") else False
         self.model_prompt_price, self.model_completion_price = 0, 0
         self.audio_format, self.s2t_model_price = ".wav", 0
         if text == "openai":
             self.text_engine = OpenAIEngine(text=True)
-            self.log_chats = self.text_engine.log_chats
             self.max_tokens = self.text_engine.max_tokens
             self.model_prompt_price = self.text_engine.model_prompt_price
             self.model_completion_price = self.text_engine.model_completion_price
