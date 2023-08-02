@@ -1,6 +1,7 @@
 # SirChatalot
 
-This is a Telegram bot that uses the OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) to generate responses to messages. I just wanted to test the API and I thought that a Telegram bot would be a good way to do it. Some things can be unnecessary complicated. 
+This is a Telegram bot that can use various services to generate responses to messages.  
+ As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) and [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses.
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
@@ -44,7 +45,12 @@ Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 100
+TextEngine = OpenAI
 LegacyMode = False
+
+[Logging]
+LogLevel = WARNING
+LogChats = False
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -69,12 +75,27 @@ MaxFileSizeMB = 10
 MaxSummaryTokens = 1000
 MaxFileLength = 10000
 DeleteAfterProcessing = True
+
+[YandexGPT]
+KeyID=aaaaaaaaaaaaaaaaaa
+SecretKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+CatalogID=bbbbbbbbbbbbbbbbbbbb
+ChatEndpoint=https://llm.api.cloud.yandex.net/llm/v1alpha/chat
+InstructEndpoint=https://llm.api.cloud.yandex.net/llm/v1alpha/instruct
+ChatModel=general
+PartialResults=False
+Temperature=700
+MaxTokens=1500
+instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 ```
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
+* Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT`.
 * Telegram.LegacyMode: If set to `True`, bot will use old architecture. See *Possible breaking changes*. Optional, default is `False`.
+* Logging.LogLevel: The logging level. Optional, default is `WARNING`.
+* Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (`gpt-3.5-turbo`, `gpt-3.5-turbo-16k` are available for [GPT-3.5](https://platform.openai.com/docs/models/gpt-3-5), `gpt-4`, `gpt-4-32k` are available for [GPT-4](https://platform.openai.com/docs/models/gpt-4)).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
@@ -94,6 +115,16 @@ DeleteAfterProcessing = True
 * Files.MaxSummaryTokens: The maximum number of tokens to use for generating summaries. Optional. Default: `OpenAI.MaxTokens`/2.
 * Files.MaxFileLength: The maximum number of tokens to use for generating summaries. Optional. Default: `10000`.
 * Files.DeleteAfterProcessing: Whether to delete files after processing. Optional. Deafult: `True`.
+* YandexGPT.KeyID: The key ID for the Yandex Cloud.
+* YandexGPT.SecretKey: The secret key for the Yandex Cloud.
+* YandexGPT.CatalogID: The catalog ID for the Yandex Cloud.
+* YandexGPT.ChatEndpoint: The endpoint for the Yandex Cloud chat API.
+* YandexGPT.InstructEndpoint: The endpoint for the Yandex Cloud instruct API.
+* YandexGPT.ChatModel: The model to use for generating responses (`general`).
+* YandexGPT.PartialResults: Whether to use partial results. Optional. Default: `False`. Does not change anything for now in the current implementation.
+* YandexGPT.Temperature: The temperature to use for generating responses.
+* YandexGPT.MaxTokens: The maximum number of tokens to use for generating responses.
+* YandexGPT.instructionText: The message that will shape your bot's personality.
 
 Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
 
@@ -145,8 +176,28 @@ Prices can be found here: https://openai.com/pricing
 
 Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
 
-*Note:* GPT-4 is still in limited beta and is not available to everyone. You need to get an access to it first. You can do that by filling out the form here: https://openai.com/waitlist/gpt-4-api  
-Also, you can not use GPT-4 image input right now, it will be available in the future (I'll update bot when it will happen).
+## Using YandexGPT
+YandexGPT is in Preview, you should request access to it.  
+You should have a service account Yandex Cloud account to use YandexGPT (https://cloud.yandex.ru/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API.  
+To use YandexGPT, you need to change the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file:
+```
+[Telegram]
+Token = 111111111:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AccessCodes = 123456789
+GeneralRateLimit = 60
+RateLimitTime = 3600
+TextEngine = YandexGPT
+
+[YandexGPT]
+KeyID=aaaaaaaaaaaaaaaaaaa
+SecretKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+CatalogID=bbbbbbbbbbbbbbbbbbbbbbbbb
+ChatModel=general
+Temperature=700
+MaxTokens=1500
+instructionText=You are a helpful assistant named Sir Chatalot.
+```
+YandexGPT support is experimental and can be unstable, please submit an issue if you find a problem.  
 
 ## Running the Bot
 To run the bot, simply run the command `python3 main.py`. The bot will start and will wait for messages. 

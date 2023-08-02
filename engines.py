@@ -42,7 +42,6 @@ class OpenAIEngine:
             "MaxTokens": 3997,
             "AudioFormat": "wav",
             "EndUserID": False,
-            "LogChats": False,
             "Moderation": False,
             "ChatDeletion": False,
             "SystemMessage": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.",
@@ -73,7 +72,7 @@ class OpenAIEngine:
         self.moderation = self.config.getboolean("OpenAI", "Moderation")
         self.max_chat_length = int(self.config.get("OpenAI", "MaxSessionLength")) if self.config.has_option("OpenAI", "MaxSessionLength") else None
         self.chat_deletion = self.config.getboolean("OpenAI", "ChatDeletion")
-        self.log_chats = self.config.getboolean("OpenAI", "LogChats") 
+        self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
 
         if self.max_chat_length is not None:
             print('Max chat length:', self.max_chat_length)
@@ -320,7 +319,6 @@ class YandexEngine:
             "Temperature": 700,
             "MaxTokens": 1500,
             "instructionText": "You are a helpful chatbot assistant named Sir Chatalot.",
-            "LogChats": False,
             })
         self.config.read('./data/.config') 
         self.chat_vars = {} 
@@ -334,9 +332,8 @@ class YandexEngine:
         self.chat_vars['Temperature'] = self.config.getint("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
         self.chat_vars['instructionText'] = self.config.get("YandexGPT", "instructionText")
-        self.chat_vars['LogChats'] = self.config.getboolean("YandexGPT", "LogChats")
+        self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
         self.system_message = self.chat_vars['instructionText']
-        self.log_chats = self.chat_vars['LogChats']
         self.max_tokens = self.chat_vars['MaxTokens']
         self.model_prompt_price = 0
         self.model_completion_price = 0
@@ -562,7 +559,6 @@ class TextGenEngine:
             "instruction_template": '',
             "user_name": 'User',
             "prompt": "Your name is Sir Chatalot. You are helpful AI assistaint.",
-            "LogChats": False,
             "chat-instruct_command": 'Continue the chat dialogue below. Write a single reply for the character "<|character|>".\n<|prompt|>',
             'preset': '',
             'do_sample': True,
@@ -634,10 +630,8 @@ class TextGenEngine:
         self.chat_vars['ban_eos_token'] = self.config.getboolean('TextGenWebUI', 'ban_eos_token')
         self.chat_vars['skip_special_tokens'] = self.config.getboolean('TextGenWebUI', 'skip_special_tokens')
         self.chat_vars['stopping_strings'] = self.config.get('TextGenWebUI', 'stopping_strings').split(',')
-        self.chat_vars['LogChats'] = self.config.getboolean('TextGenWebUI', 'LogChats')
-        
+        self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
         self.system_message = self.chat_vars['chat-instruct_command']
-        self.log_chats = self.chat_vars['LogChats']
         self.max_tokens = self.chat_vars['max_new_tokens']
         self.model_prompt_price = 0
         self.model_completion_price = 0
