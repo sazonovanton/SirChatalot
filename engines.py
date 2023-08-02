@@ -294,8 +294,9 @@ class YandexEngine:
         Available: text generation
         '''
         import requests 
+        import json
         self.requests = requests
-
+        self.json = json
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
         self.speech_init() if self.speech_initiation else None
@@ -308,8 +309,8 @@ class YandexEngine:
         self.config = configparser.SafeConfigParser({
             "ChatEndpoint": "https://llm.api.cloud.yandex.net/llm/v1alpha/chat",
             "InstructEndpoint": "https://llm.api.cloud.yandex.net/llm/v1alpha/instruct",
-            "ChatModel": "string",
-            "PartialResults": True,
+            "ChatModel": "general",
+            "PartialResults": False,
             "Temperature": 700,
             "MaxTokens": 1500,
             "instructionText": "You are a helpful chatbot assistant named Sir Chatalot.",
@@ -327,7 +328,7 @@ class YandexEngine:
         self.chat_vars['Temperature'] = self.config.getint("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
         self.chat_vars['instructionText'] = self.config.get("YandexGPT", "instructionText")
-
+        self.chat_vars['LogChats'] = self.config.getboolean("YandexGPT", "LogChats")
         self.system_message = self.chat_vars['instructionText']
         self.log_chats = self.chat_vars['LogChats']
         self.max_tokens = self.chat_vars['MaxTokens']
@@ -380,13 +381,12 @@ class YandexEngine:
                     "temperature": self.chat_vars['Temperature'],
                     "maxTokens": tokens
                 },
-                "messages": str(self.format_messages(messages)),
+                "messages": self.format_messages(messages),
                 "instructionText": self.chat_vars['instructionText']
             }
+            logger.debug(f'Payload to Yandex API: {payload}')
             response = self.requests.post(self.chat_vars['Endpoint'], json=payload, headers=headers)
-            print(response)
-            # log to logger file fact of message being sent
-            logger.debug('Message from user ' + str(id) + ' was sent to Yandex API')
+            logger.debug(f'Response from Yandex API. Code: {response.status_code}, text: {response.text}')
             # check if response is successful
             if response.status_code != 200:
                 if response.status_code == 429 and attempt == 0:
@@ -402,11 +402,18 @@ class YandexEngine:
                 style = messages[0]['content'] + '\n Your previous conversation summary: '
                 style += self.chat_summary(messages[:-1])
                 response, messages, token_usage = self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
-                completion_tokens += int(token_usage['completion'])
-            # get response from Yandex API
-            response = response.json()
-            completion_tokens += int(response['numTokens']) if response['numTokens'] else None
+                completion_tokens += int(token_usage['completion']) if token_usage['completion'] else None
+            # get response from Yandex API (example: {'result': {'message': {'role': 'Ассистент', 'text': 'The current temperature in your area right now (as of 10/23) would be approximately **75°F**.'}, 'num_tokens': '94'}})
+            # response = response.json()
+            lines = response.text.splitlines()
+            json_objects = [self.json.loads(line) for line in lines]
+            # Parse only the last line into JSON
+            response = json_objects[-1]
+
+            response = response['result']
+            completion_tokens += int(response['num_tokens']) if response['num_tokens'] else None
             response = str(response['message']['text']) if response['message']['text'] else None
+
             # log to logger file fact of message being received
             logger.debug('Message from user ' + str(id) + ' was received from Yandex API')
             messages.append({"role": "assistant", "content": response})
@@ -427,7 +434,8 @@ class YandexEngine:
             for message in messages:
                 if message['role'] == 'system':
                     continue
-                formatted_messages.append({"role": message['role'], "text": message['content']})
+                role = "Ассистент" if message['role'] == 'assistant' else message['role']
+                formatted_messages.append({"role": role, "text": message['content']})
             return formatted_messages
         except Exception as e:
             logger.exception('Could not format messages for Yandex API')
@@ -496,13 +504,13 @@ class YandexEngine:
             logger.exception('Could not summarize chat history')
             return None
     
-    def count_tokens(self, messages):
+    def count_tokens(self, messages, model='gpt-3.5-turbo'):
         '''
         Count tokens in messages via tiktoken
         '''
         try:
             # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(self.model)
+            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
@@ -628,13 +636,13 @@ class TextGenEngine:
         self.model_prompt_price = 0
         self.model_completion_price = 0
         
-    def count_tokens(self, messages):
+    def count_tokens(self, messages, model='gpt-3.5-turbo'):
         '''
         Count tokens in messages via tiktoken
         '''
         try:
             # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(self.model)
+            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
@@ -777,16 +785,18 @@ class TextGenEngine:
 
 ####### TEST #######
 if __name__ == '__main__':
+    logger.setLevel(logging.DEBUG)
+
     # engine = OpenAIEngine(text=True)
-    # engine = YandexEngine(text=True)
-    engine = TextGenEngine(text=True)
+    engine = YandexEngine(text=True)
+    # engine = TextGenEngine(text=True)
     messages = [
         {"role": "system", "content": "Your name is Sir Chatalot, you are assisting the user with a task."},
         {"role": "user", "content": "Hello, how are you?"},
         {"role": "assistant", "content": "I am fine, how are you?"},
         {"role": "user", "content": "I am fine too. Please tell me what is the weather like today?"},
     ]
-    print('***        Test        ***')
+    print('\n***        Test        ***')
     response, messages, tokens = engine.chat(messages=messages, id=0)
     print('============================')
     print(response)
