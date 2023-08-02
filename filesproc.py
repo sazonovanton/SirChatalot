@@ -2,20 +2,22 @@
 '''
 Class for converting PDF, DOC, DOCX, PPT, PPTX, TXT files to just a plain text.
 '''
+import configparser
+config = configparser.ConfigParser()
+config.read('./data/.config')
+LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
+
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-FilesProc")
-logger.setLevel(logging.INFO)
+LogLevel = getattr(logging, LogLevel.upper())
+logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
-
-import configparser
-config = configparser.ConfigParser()
-config.read('./data/.config')
 
 import PyPDF2
 from docx import Document

@@ -1,9 +1,15 @@
 # Description: Chats processing class
 
+import configparser
+config = configparser.ConfigParser()
+config.read('./data/.config')
+LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
+
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-Engines")
-logger.setLevel(logging.INFO)
+LogLevel = getattr(logging, LogLevel.upper())
+logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
@@ -404,11 +410,11 @@ class YandexEngine:
                 response, messages, token_usage = self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
                 completion_tokens += int(token_usage['completion']) if token_usage['completion'] else None
             # get response from Yandex API (example: {'result': {'message': {'role': 'Ассистент', 'text': 'The current temperature in your area right now (as of 10/23) would be approximately **75°F**.'}, 'num_tokens': '94'}})
-            # response = response.json()
-            lines = response.text.splitlines()
-            json_objects = [self.json.loads(line) for line in lines]
-            # Parse only the last line into JSON
-            response = json_objects[-1]
+            response = response.json()
+            # lines = response.text.splitlines()
+            # json_objects = [self.json.loads(line) for line in lines]
+            # # Parse only the last line into JSON
+            # response = json_objects[-1]
 
             response = response['result']
             completion_tokens += int(response['num_tokens']) if response['num_tokens'] else None

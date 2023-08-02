@@ -12,11 +12,22 @@ import codecs
 import pickle
 from functools import wraps
 
+# import configuration
+import configparser
+config = configparser.ConfigParser()
+config.read('./data/.config')
+LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
+TOKEN = config.get("Telegram", "Token")
+ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
+ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
+banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
+
 # logging
 import logging
 from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-main")
-logger.setLevel(logging.INFO)
+LogLevel = getattr(logging, LogLevel.upper())
+logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/common.log',
                                        when="D",
                                        interval=1,
@@ -24,14 +35,6 @@ handler = TimedRotatingFileHandler('./logs/common.log',
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
-# import configuration
-import configparser
-config = configparser.ConfigParser()
-config.read('./data/.config')
-TOKEN = config.get("Telegram", "Token")
-ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
-ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
-banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
 
 logger.info('***** Starting chatbot... *****')
 print('***** Starting chatbot... *****')
