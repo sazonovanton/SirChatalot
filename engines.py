@@ -316,7 +316,7 @@ class YandexEngine:
             "InstructEndpoint": "https://llm.api.cloud.yandex.net/llm/v1alpha/instruct",
             "ChatModel": "general",
             "PartialResults": False,
-            "Temperature": 700,
+            "Temperature": 0.7,
             "MaxTokens": 1500,
             "instructionText": "You are a helpful chatbot assistant named Sir Chatalot.",
             })
@@ -329,7 +329,7 @@ class YandexEngine:
         self.chat_vars['InstructEndpoint'] = self.config.get("YandexGPT", "InstructEndpoint")
         self.chat_vars['Model'] = self.config.get("YandexGPT", "ChatModel")
         self.chat_vars['PartialResults'] = self.config.getboolean("YandexGPT", "PartialResults")
-        self.chat_vars['Temperature'] = self.config.getint("YandexGPT", "Temperature")
+        self.chat_vars['Temperature'] = self.config.getfloat("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
         self.chat_vars['instructionText'] = self.config.get("YandexGPT", "instructionText")
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
