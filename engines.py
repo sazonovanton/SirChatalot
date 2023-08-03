@@ -332,6 +332,7 @@ class YandexEngine:
         self.chat_vars['Temperature'] = self.config.getfloat("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
         self.chat_vars['instructionText'] = self.config.get("YandexGPT", "instructionText")
+        self.chat_deletion = self.config.getboolean("YandexGPT", "ChatDeletion") if self.config.has_option("YandexGPT", "ChatDeletion") else True
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
         self.system_message = self.chat_vars['instructionText']
         self.max_tokens = self.chat_vars['MaxTokens']
@@ -392,9 +393,16 @@ class YandexEngine:
             logger.debug(f'Response from Yandex API. Code: {response.status_code}, text: {response.text}')
             # check if response is successful
             if response.status_code != 200:
-                if response.status_code == 429 and attempt == 0:
-                    # TODO: figure out correct error if messages length is too long
-                    attempt += 1
+                if response.status_code == 400 and attempt == 0:
+                    if response.json()['error']['message'].startswith('Error in session'):
+                        if self.chat_deletion:
+                            logger.warning(f'Session is too long for user {id}, deleting and starting new session')
+                            messages = [{"role": "system", "content": self.system_message}]
+                            user_message = 'Sorry, apparently your session is too long so I have to delete it. Please start again.'
+                            return user_message, messages, None
+                        else:
+                            logger.warning(f'Session is too long for user {id}, summarrizing and sending last message')
+                            attempt += 1
                 else:
                     logger.error(f'Could not send message to Yandex API, response status code: {response.status_code}, response: {response.json()}')
                     user_message = 'Sorry, something went wrong. Please try to /delete and /start again.'
