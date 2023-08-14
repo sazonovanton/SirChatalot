@@ -176,8 +176,8 @@ Prices can be found here: https://openai.com/pricing
 
 Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
 
-## Using OpenAI compatable APIs
-You can use APIs compatable with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
+## Using OpenAI compatible APIs
+You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
 ```
 [OpenAI]
 ...
