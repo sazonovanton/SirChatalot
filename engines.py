@@ -50,6 +50,13 @@ class OpenAIEngine:
             })
         self.config.read('./data/.config')   
         self.openai.api_key = self.config.get("OpenAI", "SecretKey")  
+        # check if other parameters are set
+        if self.config.has_option("OpenAI", "APIType"):
+            self.openai.api_type = self.config.get("OpenAI", "APIType")
+        if self.config.has_option("OpenAI", "APIBase"):
+            self.openai.api_base = self.config.get("OpenAI", "APIBase")
+        if self.config.has_option("OpenAI", "APIVersion"):
+            self.openai.api_version = self.config.get("OpenAI", "APIVersion")
 
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None

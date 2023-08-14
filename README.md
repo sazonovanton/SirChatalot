@@ -1,7 +1,7 @@
 # SirChatalot
 
 This is a Telegram bot that can use various services to generate responses to messages.  
- As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) and [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses.
+ As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API) and [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses.
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
@@ -175,6 +175,18 @@ Models can be found here: https://platform.openai.com/docs/models/gpt-4
 Prices can be found here: https://openai.com/pricing
 
 Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
+
+## Using OpenAI compatable APIs
+You can use APIs compatable with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
+```
+[OpenAI]
+...
+APIBase = http://127.0.0.1:5000
+...
+```
+Also it is possible to set `APIType` and `APIVersion` fields in the `./data/.config` file.  
+All this values are optional. Do not set them if you don't know what they are.  
+Library [openai-python](https://github.com/openai/openai-python) is used for API requests.  
 
 ## Using YandexGPT
 YandexGPT is in Preview, you should request access to it.  
