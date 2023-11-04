@@ -5,18 +5,6 @@ config = configparser.ConfigParser()
 config.read('./data/.config')
 LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
 
-import logging
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger("SirChatalot-Engines")
-LogLevel = getattr(logging, LogLevel.upper())
-logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/common.log',
-                                       when="D",
-                                       interval=1,
-                                       backupCount=7)
-handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
-logger.addHandler(handler)
-
 import os
 import hashlib
 import tiktoken
@@ -125,7 +113,25 @@ class OpenAIEngine:
         audio.close()
         transcript = transcript['text']
         return transcript
-    
+
+    def trim_messages(self, messages, trim_count=1):
+        '''
+        Trim messages (delete first trim_count messages)
+        Do not trim system message (role == 'system', id == 0)
+        '''
+        try:
+            if messages is None or len(messages) <= 1:
+                logger.warning('Could not trim messages')
+                return None
+            system_message = messages[0]
+            messages = messages[1:]
+            messages = messages[trim_count:]
+            messages.insert(0, system_message)            
+            return messages
+        except Exception as e:
+            logger.exception('Could not trim messages')
+            return None
+        
     def chat(self, id=0, messages=None, attempt=0):
         '''
         Chat with GPT
@@ -156,8 +162,23 @@ class OpenAIEngine:
                 return 'Your message was flagged as violating OpenAI\'s usage policy and was not sent. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}    
         # get response from GPT
         try:
+            messages_tokens = self.count_tokens(messages)
+            if messages_tokens is None:
+                messages_tokens = 0
+
+            # Trim if too long
+            if messages_tokens > self.max_tokens:
+                while self.count_tokens(messages) > self.max_tokens:
+                    messages = self.trim_messages(messages)
+                    if messages is None:
+                        return 'There was an error. Please contact the developer.', messages, {"prompt": prompt_tokens, "completion": completion_tokens}
+                # recalculate tokens
+                messages_tokens = self.count_tokens(messages)
+                if messages_tokens is None:
+                    messages_tokens = 0
+
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
-            requested_tokens = min(self.max_tokens, self.max_tokens - self.count_tokens(messages))
+            requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
             response = self.openai.ChatCompletion.create(
                     model=self.model,
