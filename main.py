@@ -133,24 +133,16 @@ if config.has_option("Telegram", "RateLimitTime"):
 
 print('-- If you want to learn more about limits please check description (README.md)\n')
 
-legacy_mode = False
-if config.has_option("Telegram", "LegacyMode"):
-    legacy_mode = config.getboolean("Telegram", "LegacyMode")
-if legacy_mode:
-    print('(!) Legacy mode is enabled. Bot will use legacy mode for processing messages.\n')
-    from gptproc import GPT
-    gpt = GPT()
-else:
-    from processing import ChatProc
-    text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
-    speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
-    gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
+from processing import ChatProc
+text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
+speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
+gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
 from filesproc import FilesProc
 fp = FilesProc()
 
 ###############################################################################################
 
-def ratelimiter(user_id, check=False):
+async def ratelimiter(user_id, check=False):
     '''
     Rate limiter for messages
     '''    
@@ -223,8 +215,7 @@ def ratelimiter(user_id, check=False):
         logger.exception('Could not create rate limiter. Rate is not limited.')
         return None
 
-
-def chat_modes_read(filepath='./data/chat_modes.ini'):
+async def chat_modes_read(filepath='./data/chat_modes.ini'):
     '''
     Read chat modes from a ini file. Returns a dict with the chat mode names as keys and a dict with the description and system message as values.
     INI example:
@@ -248,7 +239,7 @@ def chat_modes_read(filepath='./data/chat_modes.ini'):
         logger.exception('Could not read chat modes from file: ' + filepath)
         return None
 
-def escaping(text):
+async def escaping(text):
     '''
     Inside (...) part of inline link definition, all ')' and '\' must be escaped with a preceding '\' character.
     In all other places characters:
@@ -287,7 +278,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     access = await check_user(update, update.message.text)
     # if yes, send welcome message
     if access == True:
-        answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
+        answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
             logger.error('Could not get answer to start message: ' + update.message.text)
@@ -312,7 +303,7 @@ async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if access != True:
         return None
     # if yes, send statistics
-    stats_text = gpt.get_stats(id=update.effective_user.id)
+    stats_text = await gpt.get_stats(id=update.effective_user.id)
     if stats_text is None or stats_text == '':
         stats_text = "Sorry, there is no statistics yet or something went wrong. Please try again later."
         logger.error('Could not get statistics for user: ' + str(update.effective_user.id))
@@ -328,7 +319,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if access != True:
         return None
     # if yes, delete chat history
-    success = gpt.delete_chat(update.effective_user.id)
+    success = await gpt.delete_chat(update.effective_user.id)
     # send message about result
     if success:
         await update.message.reply_text("Chat history deleted")
@@ -347,7 +338,7 @@ async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return None
     # if yes, sent user his rate limit
     user = update.effective_user
-    text = ratelimiter(user.id, check=True)
+    text = await ratelimiter(user.id, check=True)
     if text is None:
         text = 'Unlimited'
     await update.message.reply_text(text)
@@ -364,9 +355,9 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if access != True:
         return None
     # if yes, get answer
-    answer = gpt.chat(id=update.effective_user.id, message=update.message.text)
+    answer = await gpt.chat(id=update.effective_user.id, message=update.message.text)
     # add stats
-    gpt.add_stats(id=update.effective_user.id, messages_sent=1)
+    await gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
@@ -375,7 +366,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await update.message.reply_markdown(answer)
     except:
         print('Could not send message. Trying to escape characters for text:\n' + answer)
-        await update.message.reply_markdown_v2(escaping(answer))
+        await update.message.reply_markdown_v2(await escaping(answer))
 
 async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -392,9 +383,9 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     voice_file = await application.bot.get_file(update.message.voice.file_id)
     voice_file_path = './data/voice/' + str(update.message.voice.file_id) + '.ogg'
     voice_message = await voice_file.download_to_drive(custom_path=voice_file_path)
-    answer = gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
+    answer = await gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
     # add stats
-    gpt.add_stats(id=update.effective_user.id, voice_messages_sent=1)
+    await gpt.add_stats(id=update.effective_user.id, voice_messages_sent=1)
     try:
         os.remove(voice_file_path)
         logger.info('Audio file ' + voice_file_path + ' was deleted (original)')
@@ -408,7 +399,7 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_markdown(answer)
     except:
         print('Could not send message. Trying to escape characters for text:\n' + answer)
-        await update.message.reply_markdown_v2(escaping(answer))
+        await update.message.reply_markdown_v2(await escaping(answer))
 
 def check_code(code, user_id) -> bool:
     '''
@@ -473,11 +464,11 @@ async def check_user(update, message=None, check_rate=True) -> bool:
                 # if yes, add user to whitelist and send welcome message
                 await update.message.reply_text("You are now able to use this bot. Welcome!")
                 # delete chat history
-                success = gpt.delete_chat(update.effective_user.id)
+                success = await gpt.delete_chat(update.effective_user.id)
                 if not success:
                     logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
                 # send welcome message
-                answer = gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
+                answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
                 if answer is None:
                     answer = "Sorry, something went wrong. Please try again later."
                     logger.error('Could not get answer to start message: ' + update.message.text)
@@ -488,7 +479,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
     else:
         # check if user rate is limited
         if check_rate:
-            ratecheck = ratelimiter(user.id)
+            ratecheck = await ratelimiter(user.id)
             if ratecheck == False:
                 logger.info("Rate limited user: " + str(user))
                 await update.message.reply_text("You are rate limited. You can check your limits with /limit")
@@ -504,7 +495,7 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     access = await check_user(update)
     if access == True: 
         # read chat modes
-        modes = chat_modes_read()
+        modes = await chat_modes_read()
         if modes is None:
             await update.message.reply_text('Sorry, something went wrong. Please try again later.')
             return None
@@ -543,7 +534,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     access = await check_user(update)
     if access == True:
         # read chat modes
-        modes = chat_modes_read()
+        modes = await chat_modes_read()
         if modes is None:
             await update.message.reply_text('Sorry, something went wrong. Please try again later.')
             return None
@@ -552,14 +543,14 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
         # print(query)
         await query.answer()
-        success = gpt.delete_chat(update.effective_user.id)
+        success = await gpt.delete_chat(update.effective_user.id)
         if success:
             logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
         
         if query.data == "default":
-            answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
+            answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
         else:
-            answer = gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
+            answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
         logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
 
         if answer is None:
@@ -576,7 +567,7 @@ async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
     access = await check_user(update)
     if access == True:
         # save chat history
-        success = gpt.save_session(update.effective_user.id)
+        success = await gpt.save_session(update.effective_user.id)
         if success:
             await update.message.reply_text("Chat session saved.")
         else:
@@ -591,7 +582,7 @@ async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
     access = await check_user(update)
     if access == True:
         # give user a choice of sessions
-        sessions = gpt.stored_sessions(update.effective_user.id)
+        sessions = await gpt.stored_sessions(update.effective_user.id)
         if sessions is None:
             await update.message.reply_text("Sorry, no stored sessions found. Please try again later.")
             return None
@@ -633,7 +624,7 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info('Recieved: ' + str(new_file_path))
 
         tic = time.time()
-        text = fp.extract_text(new_file_path)
+        text = await fp.extract_text(new_file_path)
         tt = round(time.time()-tic)
         logger.info('Process time: ' + str(tt) + ' seconds')
 
@@ -645,7 +636,7 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if access != True:
             return None
         # if yes, get answer from GPT
-        answer = gpt.filechat(id=update.effective_user.id, text=text)
+        answer = await gpt.filechat(id=update.effective_user.id, text=text)
         if answer is None:
             answer = "Sorry, something went wrong. Could not get answer from GPT."
             logger.error('Could not get answer for user: ' + str(update.effective_user.id))
@@ -653,7 +644,6 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error(e)
         await update.message.reply_text("Sorry, something went wrong while processing the file.")
-
 
 def main() -> None:
     '''

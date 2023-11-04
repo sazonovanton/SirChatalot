@@ -42,7 +42,7 @@ class FilesProc:
         self.delete_after_processing = config.getboolean('Files', 'DeleteAfterProcessing') if config.has_option('Files', 'DeleteAfterProcessing') else True
         self.platform = platform
 
-    def delete_file(self, filepath) -> bool:
+    async def delete_file(self, filepath) -> bool:
         # delete file that was processed
         try:
             os.remove(filepath)
@@ -54,7 +54,7 @@ class FilesProc:
             logger.error(f'Error (delete file): {e}.')
             return False
         
-    def extract_text(self, filepath) -> str:
+    async def extract_text(self, filepath) -> str:
         '''
         Extract text from file
         Selects a method based on the file extension
@@ -63,15 +63,15 @@ class FilesProc:
         filepath = os.path.abspath(filepath)
         try:
             if filepath.endswith('.pdf'):
-                text = self.extract_text_from_pdf(filepath)
+                text = await self.extract_text_from_pdf(filepath)
             elif filepath.endswith('.docx'):
-                text = self.extract_text_from_docx(filepath)
+                text = await self.extract_text_from_docx(filepath)
             elif filepath.endswith('.doc'):
-                text = self.extract_text_from_doc(filepath)
+                text = await self.extract_text_from_doc(filepath)
             elif filepath.endswith('.pptx'):
-                text = self.extract_text_from_pptx(filepath)
+                text = await self.extract_text_from_pptx(filepath)
             elif filepath.endswith('.ppt'):
-                text = self.extract_text_from_ppt(filepath)
+                text = await self.extract_text_from_ppt(filepath)
             elif filepath.endswith('.txt'):
                 with open(filepath, 'r') as f:
                     text = f.read()
@@ -79,13 +79,13 @@ class FilesProc:
                 return ''
             # delete file after processing
             if self.delete_after_processing:
-                self.delete_file(filepath)
+                await self.delete_file(filepath)
             return text
         except Exception as e:
             logger.error(f'Error (extract text): {e}.')
             return ''
         
-    def extract_text_from_pdf(self, filepath) -> str:
+    async def extract_text_from_pdf(self, filepath) -> str:
         '''
         Extract text from PDF file
         '''
@@ -96,7 +96,7 @@ class FilesProc:
         pdf_file_obj.close()
         return text
     
-    def extract_text_from_docx(self, filepath) -> str:
+    async def extract_text_from_docx(self, filepath) -> str:
         '''
         Extract text from DOCX file
         '''
@@ -117,7 +117,7 @@ class FilesProc:
 
         return '\n'.join(full_text)
     
-    def extract_text_from_doc(self, filepath) -> str:
+    async def extract_text_from_doc(self, filepath) -> str:
         '''
         Extract text from DOC file
         '''
@@ -133,7 +133,7 @@ class FilesProc:
             doc_text = subprocess.check_output(command, universal_newlines=True)
         return doc_text
     
-    def extract_text_from_pptx(self, filepath) -> str:
+    async def extract_text_from_pptx(self, filepath) -> str:
         '''
         Extract text from PPTX file
         '''
@@ -159,7 +159,7 @@ class FilesProc:
                             
         return '\n'.join(full_text)
     
-    def extract_text_from_ppt(self, filepath) -> str:
+    async def extract_text_from_ppt(self, filepath) -> str:
         '''
         Extract text from PPT file
         '''
@@ -181,7 +181,7 @@ class FilesProc:
             ppt_text = subprocess.check_output(command, universal_newlines=True)
         return ppt_text
     
-    def get_files(self) -> list:
+    async def get_files(self) -> list:
         '''
         Get list of files in the directory
         '''
@@ -191,7 +191,7 @@ class FilesProc:
                 files.append(file)
         return files
     
-    def delete_all(self) -> bool:
+    async def delete_all(self) -> bool:
         '''
         Delete all files in the directory
         '''
@@ -203,12 +203,18 @@ class FilesProc:
         except Exception as e:
             logger.error(f'Error (delete all): {e}.')
             return False
+
+    async def main(self) -> None:
+        '''
+        Main function for testing
+        '''
+        files = await self.get_files()
+        for file in files:
+            text = await self.extract_text(os.path.join(self.path, file))
+            print(text)
+            print('---------------------')
         
 
 if __name__ == '__main__':
-    fp = FilesProc()
-    files = fp.get_files()
-    print('\n### Start ###\n')
-    for file in files:
-        print(fp.extract_text(os.path.join(fp.path, file)))
-        print('-------------------')
+    filesproc = FilesProc()
+    asyncio.run(filesproc.main())

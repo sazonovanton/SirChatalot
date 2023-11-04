@@ -8,6 +8,7 @@ LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "Lo
 import os
 import hashlib
 import tiktoken
+import asyncio
 
 ######## OpenAI Engine ########
 
@@ -88,7 +89,7 @@ class OpenAIEngine:
         self.s2t_model_price = float(self.config.get("OpenAI", "WhisperModelPrice")) 
         self.audio_format = '.' + self.config.get("OpenAI", "AudioFormat") 
 
-    def convert_ogg(self, audio_file):
+    async def convert_ogg(self, audio_file):
         '''
         Convert ogg file to wav
         Input file with ogg
@@ -101,20 +102,20 @@ class OpenAIEngine:
             logger.exception(f'Could not convert ogg to {self.audio_format}')
             return None
         
-    def speech_to_text(self, audio_file):
+    async def speech_to_text(self, audio_file):
         '''
         Convert speech to text using OpenAI API
         '''
         if self.speech_initiation == False:
             return None
-        audio_file = self.convert_ogg(audio_file)
+        audio_file = await self.convert_ogg(audio_file)
         audio = open(audio_file, "rb")
         transcript = self.openai.Audio.transcribe(self.s2t_model, audio)
         audio.close()
         transcript = transcript['text']
         return transcript
 
-    def trim_messages(self, messages, trim_count=1):
+    async def trim_messages(self, messages, trim_count=1):
         '''
         Trim messages (delete first trim_count messages)
         Do not trim system message (role == 'system', id == 0)
@@ -132,7 +133,7 @@ class OpenAIEngine:
             logger.exception('Could not trim messages')
             return None
         
-    def chat(self, id=0, messages=None, attempt=0):
+    async def chat(self, id=0, messages=None, attempt=0):
         '''
         Chat with GPT
         Input id of user and message
@@ -158,29 +159,29 @@ class OpenAIEngine:
         message = messages[-1]['content']
         prompt_tokens, completion_tokens = 0, 0
         if self.moderation:
-            if self.moderation_pass(message, id) == False:
+            if await self.moderation_pass(message, id) == False:
                 return 'Your message was flagged as violating OpenAI\'s usage policy and was not sent. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}    
         # get response from GPT
         try:
-            messages_tokens = self.count_tokens(messages)
+            messages_tokens = await self.count_tokens(messages)
             if messages_tokens is None:
                 messages_tokens = 0
 
             # Trim if too long
             if messages_tokens > self.max_tokens:
-                while self.count_tokens(messages) > self.max_tokens:
-                    messages = self.trim_messages(messages)
+                while await self.count_tokens(messages) > self.max_tokens:
+                    messages = await self.trim_messages(messages)
                     if messages is None:
                         return 'There was an error. Please contact the developer.', messages, {"prompt": prompt_tokens, "completion": completion_tokens}
                 # recalculate tokens
-                messages_tokens = self.count_tokens(messages)
+                messages_tokens = await self.count_tokens(messages)
                 if messages_tokens is None:
                     messages_tokens = 0
 
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
-            response = self.openai.ChatCompletion.create(
+            response = await self.openai.ChatCompletion.acreate(
                     model=self.model,
                     temperature=self.temperature, 
                     max_tokens=requested_tokens,
@@ -207,8 +208,8 @@ class OpenAIEngine:
             else:
                 logger.info(f'Chat session for user {id} was summarized due to an error')
                 style = messages[0]['content'] + '\n Your previous conversation summary: '
-                style += self.chat_summary(messages[:-1])
-                response, messages, token_usage = self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
+                style += await self.chat_summary(messages[:-1])
+                response, messages, token_usage = await self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
                 prompt_tokens += int(token_usage['prompt'])
                 completion_tokens += int(token_usage['completion'])
         # if something else
@@ -230,7 +231,7 @@ class OpenAIEngine:
             response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
         return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
 
-    def summary(self, text, size=240):
+    async def summary(self, text, size=240):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
@@ -249,7 +250,7 @@ class OpenAIEngine:
         # Return the response
         return response["choices"][0]['message']['content']
 
-    def chat_summary(self, messages, short=False):
+    async def chat_summary(self, messages, short=False):
         '''
         Summarize chat history
         Input messages and short flag (states that summary should be in one sentence)
@@ -263,16 +264,16 @@ class OpenAIEngine:
                 text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
             if short:
                 # Generate short summary
-                summary = self.summary(text, size=30)
+                summary = await self.summary(text, size=30)
             else:
                 # Generate long summary
-                summary = self.summary(text)
+                summary = await self.summary(text)
             return summary
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None
 
-    def moderation_pass(self, message, id=0):
+    async def moderation_pass(self, message, id=0):
         try:
             # check if message is not empty
             if message is None or len(message) == 0:
@@ -299,7 +300,7 @@ class OpenAIEngine:
             logger.exception('Could not moderate message')
             return None
 
-    def count_tokens(self, messages):
+    async def count_tokens(self, messages):
         '''
         Count tokens in messages via tiktoken
         '''
@@ -374,7 +375,7 @@ class YandexEngine:
         # TODO: implement speech to text with Yandex API
         pass
 
-    def chat(self, messages, id=0, attempt=0):
+    async def chat(self, messages, id=0, attempt=0):
         '''
         Chat with Yandex GPT
         Input id of user and message
@@ -394,7 +395,7 @@ class YandexEngine:
         try:
             completion_tokens = 0
             # count tokens in messages
-            tokens = self.count_tokens(messages)
+            tokens = await self.count_tokens(messages)
             if tokens is not None:
                 tokens = self.chat_vars['MaxTokens'] - tokens
                 tokens = max(tokens, 30)
@@ -413,7 +414,7 @@ class YandexEngine:
                     "temperature": self.chat_vars['Temperature'],
                     "maxTokens": tokens
                 },
-                "messages": self.format_messages(messages),
+                "messages": await self.format_messages(messages),
                 "instructionText": self.chat_vars['instructionText']
             }
             logger.debug(f'Payload to Yandex API: {payload}')
@@ -439,8 +440,8 @@ class YandexEngine:
                 logger.warning(f'Session is too long for user {id}, summarrizing and sending last message')
                 # summary messages
                 style = messages[0]['content'] + '\n Your previous conversation summary: '
-                style += self.chat_summary(messages[:-1])
-                response, messages, token_usage = self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
+                style += await self.chat_summary(messages[:-1])
+                response, messages, token_usage = await self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
                 completion_tokens += int(token_usage['completion']) if token_usage['completion'] else None
             # get response from Yandex API (example: {'result': {'message': {'role': 'Ассистент', 'text': 'The current temperature in your area right now (as of 10/23) would be approximately **75°F**.'}, 'num_tokens': '94'}})
             response = response.json()
@@ -461,7 +462,7 @@ class YandexEngine:
             logger.exception('Could not send message to Yandex API')
             return None, messages, None
 
-    def format_messages(self, messages):
+    async def format_messages(self, messages):
         '''
         Format messages for Yandex API
         From: [{"role": "string", "content": "string"}, ...]
@@ -480,7 +481,7 @@ class YandexEngine:
             logger.exception('Could not format messages for Yandex API')
             raise Exception('Could not format messages for YandexGPT API')
         
-    def summary(self, text, size=240):
+    async def summary(self, text, size=240):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
@@ -520,7 +521,7 @@ class YandexEngine:
         logger.debug('Summary request was received from Yandex API')
         return response, {"prompt": prompt_tokens, "completion": completion_tokens}
     
-    def chat_summary(self, messages, short=False):
+    async def chat_summary(self, messages, short=False):
         '''
         Summarize chat history
         Input messages and short flag (states that summary should be in one sentence)
@@ -534,16 +535,16 @@ class YandexEngine:
                 text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
             if short:
                 # Generate short summary
-                summary = self.summary(text, size=30)
+                summary = await self.summary(text, size=30)
             else:
                 # Generate long summary
-                summary = self.summary(text)
+                summary = await self.summary(text)
             return summary
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None
     
-    def count_tokens(self, messages, model='gpt-3.5-turbo'):
+    async def count_tokens(self, messages, model='gpt-3.5-turbo'):
         '''
         Count tokens in messages via tiktoken
         '''

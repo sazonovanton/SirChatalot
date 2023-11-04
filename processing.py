@@ -21,6 +21,7 @@ import pickle
 import os
 from pydub import AudioSegment
 from datetime import datetime
+import asyncio
 
 # Support: OpenAI API, YandexGPT API
 # Planned: Text Generation WebUI API, Runpod API 
@@ -76,7 +77,7 @@ class ChatProc:
         if self.log_chats:
             logger.info('* Chat history is logged *')
 
-    def speech_to_text(self, audio_file):
+    async def speech_to_text(self, audio_file):
         '''
         Convert speech to text
         Input file with speech
@@ -84,7 +85,7 @@ class ChatProc:
         if self.speech_engine is None:
             return None
         try:
-            transcript = self.speech_engine.speech_to_text(audio_file)
+            transcript = await self.speech_engine.speech_to_text(audio_file)
             transcript += ' (it was a voice message transcription)'
         except Exception as e:
             logger.exception('Could not convert voice to text')
@@ -105,7 +106,7 @@ class ChatProc:
             logger.exception('Could not delete converted audio file: ' + str(audio_file))
         return transcript
     
-    def chat_voice(self, id=0, audio_file=None):
+    async def chat_voice(self, id=0, audio_file=None):
         '''
         Chat with GPT using voice
         Input id of user and audio file
@@ -116,20 +117,20 @@ class ChatProc:
                 return 'Sorry, speech-to-text is not available.'
             # convert voice to text
             if audio_file is not None:
-                transcript = self.speech_to_text(audio_file)
+                transcript = await self.speech_to_text(audio_file)
             else:
                 logger.error('No audio file provided for voice chat')
                 return None
             if transcript is None:
                 logger.error('Could not convert voice to text')
                 return 'Sorry, I could not convert your voice to text.'
-            response = self.chat(id=id, message=transcript)
+            response = await self.chat(id=id, message=transcript)
             return response
         except Exception as e:
             logger.exception('Could not voice chat with GPT')
             return None
     
-    def chat(self, id=0, message="Hi! Who are you?", style=None):
+    async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
         Chat with GPT
         Input id of user and message
@@ -154,11 +155,11 @@ class ChatProc:
             #       {"role": "assistant", "content": "I am fine, how are you?"},...]
             # * tokens_used - number of tokens used in response
             #       {"prompt": int, "completion": int}
-            response, messages, tokens_used = self.text_engine.chat(id=id, messages=messages)
+            response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
             try:
-                self.add_stats(id=id, completion_tokens_used=int(tokens_used['completion']))
-                self.add_stats(id=id, prompt_tokens_used=int(tokens_used['prompt']))
+                await self.add_stats(id=id, completion_tokens_used=int(tokens_used['completion']))
+                await self.add_stats(id=id, prompt_tokens_used=int(tokens_used['prompt']))
             except Exception as e:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             # save chat history
@@ -182,7 +183,7 @@ class ChatProc:
             pickle.dump(payload, open(filepath, "wb"))
             return payload
         
-    def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None) -> None:
+    async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None) -> None:
         '''
         Add statistics (tokens used, messages sent, voice messages sent) by user
         Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
@@ -203,7 +204,7 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
-    def get_stats(self, id=None):
+    async def get_stats(self, id=None):
         '''
         Get statistics (tokens used, speech2text in seconds used, messages sent, voice messages sent) by user
         Input id of user
@@ -229,7 +230,7 @@ class ChatProc:
             logger.exception('Could not get statistics for user: ' + str(id))
             return None
         
-    def dump_chat(self, id=None, plain=False, chatname=None) -> bool:
+    async def dump_chat(self, id=None, plain=False, chatname=None) -> bool:
         '''
         Dump chat to a file
         If plain is True, then dump chat as plain text with roles and messages
@@ -261,7 +262,7 @@ class ChatProc:
             logger.exception('Could not dump chat for user: ' + str(id))
             return False
         
-    def delete_chat(self, id=0) -> bool:
+    async def delete_chat(self, id=0) -> bool:
         '''
         Delete chat history
         Input id of user
@@ -270,7 +271,7 @@ class ChatProc:
             if id not in self.chats:
                 return False
             if self.log_chats:
-                self.dump_chat(id=id, plain=True)
+                await self.dump_chat(id=id, plain=True)
             del self.chats[id]
             pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
             return True
@@ -278,7 +279,7 @@ class ChatProc:
             logger.exception('Could not delete chat history for user: ' + str(id))
             return False
 
-    def stored_sessions(self, id=None):
+    async def stored_sessions(self, id=None):
         '''
         Get list of stored sessions for user
         '''
@@ -296,7 +297,7 @@ class ChatProc:
             logger.exception('Could not get stored chats for user: ' + str(id))
             return False
         
-    def load_session(self, id=None, chatname=None):
+    async def load_session(self, id=None, chatname=None):
         '''
         Load chat session by name for user, overwrite chat history with session
         '''
@@ -317,7 +318,7 @@ class ChatProc:
             logger.exception('Could not load session for user: ' + str(id))
             return False
 
-    def delete_session(self, id=0, chatname=None):
+    async def delete_session(self, id=0, chatname=None):
         '''
         Delete chat session by name for user
         '''
@@ -336,7 +337,7 @@ class ChatProc:
             logger.exception('Could not delete session for user: ' + str(id))
             return False
         
-    def change_style(self, id=0, style=None):
+    async def change_style(self, id=0, style=None):
         '''
         Change style of chat
         Input id of user and style
@@ -361,7 +362,7 @@ class ChatProc:
             logger.exception('Could not change style for user: ' + str(id))
             return False
 
-    def filechat(self, id=0, text='', sumdepth=3):
+    async def filechat(self, id=0, text='', sumdepth=3):
         '''
         Process file 
         Input id of user and text
@@ -387,7 +388,7 @@ class ChatProc:
                     chunks = [text[i:i+chunklength] for i in range(0, len(text), chunklength)]
                     text = ''
                     for chunk in chunks:
-                        text += self.text_engine.summary(chunk, size=self.file_summary_tokens) + '\n'
+                        text += await self.text_engine.summary(chunk, size=self.file_summary_tokens) + '\n'
                 text = '# Summary from recieved file: #\n' + text
             else:
                 # if text is shorter than self.max_tokens // 2, then do not make summary

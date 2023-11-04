@@ -10,7 +10,7 @@ This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `
 ## Possible breaking changes
 In the end of July 2023 there was made some changes to a bot architecture.  
 Now bot can use different chat engines, not only OpenAI (which is still default).  
-Some functionality was deprecated. There is no more keyword triggers, max chat length (in message number) is no longer limited. If you used this functionality, you can stay on the old version of the bot or add `LegacyMode = True` to the `[Telegram]` section of the config file.  
+Some functionality was deprecated. Legacy mode is no longer supported.
 I tried to make this transition as smooth as possible, but there can be some issues. If you find one, please report it.  
 
 ## Getting Started
@@ -46,7 +46,6 @@ AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 100
 TextEngine = OpenAI
-LegacyMode = False
 
 [Logging]
 LogLevel = WARNING
@@ -93,7 +92,6 @@ instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
 * Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT`.
-* Telegram.LegacyMode: If set to `True`, bot will use old architecture. See *Possible breaking changes*. Optional, default is `False`.
 * Logging.LogLevel: The logging level. Optional, default is `WARNING`.
 * Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
 * OpenAI.SecretKey: The secret key for the OpenAI API.
