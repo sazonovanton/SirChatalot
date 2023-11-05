@@ -181,13 +181,21 @@ class OpenAIEngine:
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
-            response = await self.openai.ChatCompletion.acreate(
-                    model=self.model,
-                    temperature=self.temperature, 
-                    max_tokens=requested_tokens,
-                    messages=messages,
-                    user=user_id
-            )
+            if user_id is None:
+                response = await self.openai.ChatCompletion.acreate(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=requested_tokens,
+                        messages=messages
+                )
+            else:
+                response = await self.openai.ChatCompletion.acreate(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=requested_tokens,
+                        messages=messages,
+                        user=user_id
+                )
             prompt_tokens = int(response["usage"]['prompt_tokens'])
             completion_tokens = int(response["usage"]['completion_tokens'])
         # if ratelimit is reached
