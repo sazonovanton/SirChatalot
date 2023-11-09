@@ -5,3 +5,4 @@ pydub>=0.25.1
 PyPDF2
 python-docx
 python-pptx
+comtypes

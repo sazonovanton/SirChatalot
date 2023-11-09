@@ -5,6 +5,19 @@ config = configparser.ConfigParser()
 config.read('./data/.config')
 LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
 
+# logging
+import logging
+from logging.handlers import TimedRotatingFileHandler
+logger = logging.getLogger("SirChatalot-Engines")
+LogLevel = getattr(logging, LogLevel.upper())
+logger.setLevel(LogLevel)
+handler = TimedRotatingFileHandler('./logs/common.log',
+                                       when="D",
+                                       interval=1,
+                                       backupCount=7)
+handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
+logger.addHandler(handler)
+
 import os
 import hashlib
 import tiktoken
@@ -50,6 +63,8 @@ class OpenAIEngine:
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
         self.speech_init() if self.speech_initiation else None
+
+        logger.info('OpenAI Engine was initialized')
 
     def text_init(self):
         '''
@@ -698,7 +713,7 @@ class TextGenEngine:
             logger.exception('Could not count tokens in text')
             return None
         
-    def format_messages(self, messages):
+    async def format_messages(self, messages):
         '''
         Format messages for Text Generation WebUI API
         From: [
@@ -737,7 +752,7 @@ class TextGenEngine:
             logger.exception('Could not format messages for Text Generation WebUI API')
             raise Exception('Could not format messages for Text Generation WebUI API')
 
-    def chat(self, messages, id=0, attempt=0):
+    async def chat(self, messages, id=0, attempt=0):
         '''
         Chat with Text Generation WebUI API
         Input id of user and message
@@ -766,7 +781,7 @@ class TextGenEngine:
             # else:
             #     tokens = self.chat_vars['max_new_tokens'] // 2
             # format messages
-            user_input, history = self.format_messages(messages)
+            user_input, history = await self.format_messages(messages)
             user_name = None
             # format request
             request = {
@@ -842,7 +857,7 @@ if __name__ == '__main__':
         {"role": "user", "content": "I am fine too. Please tell me what is the weather like today?"},
     ]
     print('\n***        Test        ***')
-    response, messages, tokens = engine.chat(messages=messages, id=0)
+    response, messages, tokens = asyncio.run(engine.chat(messages=messages, id=0))
     print('============================')
     print(response)
     print('------------------')
