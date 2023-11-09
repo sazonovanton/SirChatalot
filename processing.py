@@ -50,6 +50,13 @@ class ChatProc:
             logger.error("Unknown text engine: {}".format(text))
             raise Exception("Unknown text engine: {}".format(text))
         
+        self.vision = self.text_engine.vision
+        if self.vision:
+            self.image_size = self.text_engine.image_size
+            if self.image_size is None:
+                self.image_size = 512
+            self.pending_images = {}
+        
         if speech is None:
             self.speech_engine = None
         elif speech == "openai":
@@ -129,32 +136,135 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not voice chat with GPT')
             return None
-    
+        
+    async def add_image(self, id, image_b64):
+        '''
+        Add image to the chat
+        Input id of user and image in base64
+        '''
+        try:
+            if self.vision is False:
+                logger.error('Vision is not available')
+                return False
+            
+            # Check if there is a chat
+            new_chat = False
+            if id not in self.chats:
+                # If there is no chat, then create it
+                success = await self.init_style(id=id)
+                if not success:
+                    logger.error('Could not init style for user: ' + str(id))
+                    return False
+                new_chat = True
+
+            messages = self.chats[id]
+            messages.append({
+                "role": "user", 
+                "content": [
+                    {
+                        "type": "image",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_b64}"
+                        },
+                    }
+                ] 
+            })
+            # Add flag that there is an image without caption
+            self.pending_images[id] = True
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not add image to chat for user: ' + str(id))
+            return False
+        
+    async def add_caption(self, id, caption):
+        '''
+        Add caption to the image
+        Input id of user and caption
+        '''
+        try:
+            if self.vision is False:
+                logger.error('Vision is not available')
+                return False
+            
+            # Check if there is a chat
+            if id not in self.chats:
+                logger.error('Could not add caption to image. No chat for user: ' + str(id))
+                return False
+            
+            messages = self.chats[id]
+            # check if there is an image without caption
+            if id not in self.pending_images:
+                return False
+            # remove flag that there is an image without caption
+            del self.pending_images[id]
+            # add caption to the last image
+            messages[-1]['content'].append({
+                "type": "text",
+                "text": caption,
+            })
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not add caption to image for user: ' + str(id))
+            return False
+        
+    async def init_style(self, id=0, style=None):
+        '''
+        Init style of chat
+        Input id of user and style
+        Create chat history if it does not exist
+        '''         
+        try:   
+            # get chat history
+            if style is None:
+                style = self.system_message
+            # if vision is enabled, then add information about it
+            if self.vision:
+                style += '\n# You have vision capabilities enabled, it means that you can images in chat'
+            # get messages if chat exists
+            if id in self.chats:
+                messages = self.chats[id]
+            else:
+                messages = [{"role": "system", "content": style}]
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not init style for user: ' + str(id))
+            return False
+
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
         Chat with GPT
         Input id of user and message
         '''
         try:
-            try:
-                if id not in self.chats:
-                    if style is None:
-                        style = self.system_message
-                    messages = [{"role": "system", "content": style}]
-                else:
-                    messages = self.chats[id]
-            except Exception as e:
-                logger.exception('Could not get chat history for user: ' + str(id))
-                messages = [{"role": "system", "content": self.system_message}]
-            messages.append({"role": "user", "content": message})
-            # * response - response (just text of last reply)
-            #       "I am fine, how are you?"
-            # * messages - messages (all messages - list of dictionaries with last message at the end)
-            #       [{"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot."},
-            #       {"role": "user", "content": "Hello, how are you?"},
-            #       {"role": "assistant", "content": "I am fine, how are you?"},...]
-            # * tokens_used - number of tokens used in response
-            #       {"prompt": int, "completion": int}
+            # Init style if it is not set
+            if id not in self.chats:
+                success = await self.init_style(id=id, style=style)
+                if not success:
+                    logger.error('Could not init style for user: ' + str(id))
+                    return 'Sorry, I could not init style for you.'
+            # get messages
+            messages = self.chats[id]
+            # If there is an image without caption, then add caption
+            if self.vision and id in self.pending_images:
+                self.chats[id] = messages
+                await self.add_caption(id, message)
+                messages = self.chats[id]
+            else:
+                # Add message to the chat
+                messages.append({"role": "user", "content": message})
+            # Wait for response
             response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
             try:
@@ -399,5 +509,4 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not process file for user: ' + str(id))
             return None
-
 

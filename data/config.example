@@ -21,6 +21,10 @@ EndUserID = True
 Moderation = False
 ;ChatDeletion = False
 ;MaxSessionLength = 5
+Vision = False
+ImageSize = 512
+DeleteImageAfterAnswer = False
+ImageDescriptionOnDelete = False
 
 [Files]
 Enabled = True

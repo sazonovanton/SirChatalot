@@ -1,8 +1,9 @@
 python-telegram-bot>=20.1
-openai>=0.27.0
+openai>=1.0.0
 tiktoken
 pydub>=0.25.1
 PyPDF2
 python-docx
 python-pptx
 comtypes
+Pillow

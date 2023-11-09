@@ -160,3 +160,9 @@ moderation.txt
 *.xls
 *.xlsx
 *.pdf
+
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp

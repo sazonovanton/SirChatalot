@@ -12,6 +12,11 @@ import codecs
 import pickle
 from functools import wraps
 
+# For image processing
+from PIL import Image
+import base64
+import io
+
 # import configuration
 import configparser
 config = configparser.ConfigParser()
@@ -137,6 +142,7 @@ from processing import ChatProc
 text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
 speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
 gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
+VISION = gpt.vision
 from filesproc import FilesProc
 fp = FilesProc()
 
@@ -324,7 +330,7 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if success:
         await update.message.reply_text("Chat history deleted")
     else:
-        await update.message.reply_text("Sorry, it seems like there is no history with you. Please try again later.")
+        await update.message.reply_text("Sorry, it seems like there is no history with you.")
         logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
 
 async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -356,6 +362,9 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return None
     # if yes, get answer
     answer = await gpt.chat(id=update.effective_user.id, message=update.message.text)
+    # DEBUG
+    logger.debug(f'>> Username: {update.effective_user.username}. Message: {update.message.text}')
+    logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     # add stats
     await gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
@@ -645,6 +654,97 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(e)
         await update.message.reply_text("Sorry, something went wrong while processing the file.")
 
+async def resize_image(image_bytes):
+    '''
+    Resize image from bytes by long side
+    '''
+    try:
+        image = Image.open(io.BytesIO(image_bytes))
+        width, height = image.size
+
+        # Check if image conversion is needed
+        if width > gpt.image_size or height > gpt.image_size:
+            if width == height:
+                new_width = gpt.image_size
+                new_height = gpt.image_size
+            if width > height:
+                new_width = gpt.image_size
+                new_height = int(height / width * new_width)
+            else:
+                new_height = gpt.image_size
+                new_width = int(width / height * new_height)
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Save image to base64 as jpg
+        buffered = io.BytesIO()
+        image.save(buffered, format="JPEG")
+        image_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+
+        logger.debug(f'>> Image resized from {width}x{height} to {new_width}x{new_height}')
+        return image_base64
+    except Exception as e:
+        logger.error(e)
+        return None
+
+async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    '''
+    Process images - multimodal chat
+    '''
+    if not VISION:
+        # await update.message.reply_text("Sorry, working with images is not supported.")
+        return None
+    access = await check_user(update)
+    if access != True:
+        return None
+    # Recieve image
+    global application
+    try:
+        # image
+        file_id = update.message.photo[-1].file_id
+        new_file = await application.bot.get_file(file_id)
+        image_bytes = await new_file.download_as_bytearray()
+
+        # text (if sent along with image)
+        text = update.message.caption
+
+        # DEBUG
+        logger.debug(f'>> Recieved image. Text with image: {text}')
+
+        # Resize image
+        image_base64 = await resize_image(image_bytes)
+
+        # Send image to GPT Engine
+        gpt_answer_image = await gpt.add_image(id=update.effective_user.id, image_b64=image_base64)
+        if gpt_answer_image is False:
+            await update.message.reply_text("Sorry, something went wrong with image processing.")
+            return None
+        
+        if text is not None and text != '':
+            # If text was sent along with image, send it to GPT Engine
+            gpt_answer = await gpt.chat(id=update.effective_user.id, message=text)
+        else:
+            # If text was not sent along with image, ask user to send it
+            if gpt_answer_image:
+                await update.message.reply_text('Image recieved. I\'ll wait for your text before answering to it.')
+                return None
+            else:
+                await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+                return None
+
+        # If we recieve answer from GPT Engine, send it to user
+        if gpt_answer is not None:
+            await update.message.reply_text(gpt_answer)
+        else:
+            await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+        
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("Sorry, something went wrong while processing the image.")
+    
+    
+
+###############################################################################################
+
 def main() -> None:
     '''
     Start the bot.
@@ -670,6 +770,9 @@ def main() -> None:
     # on non command i.e message - answer the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))
     application.add_handler(MessageHandler(filters.VOICE, answer_voice))
+
+    # recieve and process images
+    application.add_handler(MessageHandler(filters.PHOTO, process_image))
 
     # download files
     application.add_handler(MessageHandler(filters.Document.Category('application/pdf'), downloader))

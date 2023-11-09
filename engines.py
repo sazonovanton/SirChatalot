@@ -31,6 +31,7 @@ class OpenAIEngine:
         Initialize OpenAI API 
         Available: text generation, speech2text
         '''
+        from openai import AsyncOpenAI
         import openai 
         self.openai = openai
         import configparser
@@ -49,16 +50,18 @@ class OpenAIEngine:
             "SystemMessage": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.",
             "MaxFileLength": 10000,
             "MinLengthTokens": 100,
+            "Vision": False,
+            "ImageSize": 512,
             })
         self.config.read('./data/.config')   
-        self.openai.api_key = self.config.get("OpenAI", "SecretKey")  
+        self.client = AsyncOpenAI(api_key=self.config.get("OpenAI", "SecretKey"))
         # check if other parameters are set
         if self.config.has_option("OpenAI", "APIType"):
-            self.openai.api_type = self.config.get("OpenAI", "APIType")
+            self.client.api_type = self.config.get("OpenAI", "APIType")
         if self.config.has_option("OpenAI", "APIBase"):
-            self.openai.api_base = self.config.get("OpenAI", "APIBase")
+            self.client.base_url = self.config.get("OpenAI", "APIBase")
         if self.config.has_option("OpenAI", "APIVersion"):
-            self.openai.api_version = self.config.get("OpenAI", "APIVersion")
+            self.client.api_version = self.config.get("OpenAI", "APIVersion")
 
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
@@ -84,6 +87,12 @@ class OpenAIEngine:
         self.max_chat_length = int(self.config.get("OpenAI", "MaxSessionLength")) if self.config.has_option("OpenAI", "MaxSessionLength") else None
         self.chat_deletion = self.config.getboolean("OpenAI", "ChatDeletion")
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
+        
+        self.vision = self.config.getboolean("OpenAI", "Vision")
+        self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
+        if self.vision:
+            self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
+            self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
 
         if self.max_chat_length is not None:
             print('Max chat length:', self.max_chat_length)
@@ -95,6 +104,10 @@ class OpenAIEngine:
             print('Moderation is enabled')
             print('-- Moderation is used to check if content complies with OpenAI usage policies. It can be changed in the self.config file.')
             print('-- Learn more: https://platform.openai.com/docs/guides/moderation/overview\n')
+        if self.vision:
+            print('Vision is enabled')
+            print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
+            print('-- Learn more: https://platform.openai.com/docs/guides/vision/overview\n')
 
     def speech_init(self):
         '''
@@ -125,7 +138,7 @@ class OpenAIEngine:
             return None
         audio_file = await self.convert_ogg(audio_file)
         audio = open(audio_file, "rb")
-        transcript = self.openai.Audio.transcribe(self.s2t_model, audio)
+        transcript = await self.client.audio.transcriptions.create(self.s2t_model, audio)
         audio.close()
         transcript = transcript['text']
         return transcript
@@ -170,11 +183,10 @@ class OpenAIEngine:
             return None, None, None
         if messages is None:
             return None, None, None
-        # send last message to moderation
-        message = messages[-1]['content']
         prompt_tokens, completion_tokens = 0, 0
+        # send last message to moderation
         if self.moderation:
-            if await self.moderation_pass(message, id) == False:
+            if await self.moderation_pass(messages[-1], id) == False:
                 return 'Your message was flagged as violating OpenAI\'s usage policy and was not sent. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}    
         # get response from GPT
         try:
@@ -197,28 +209,35 @@ class OpenAIEngine:
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
             if user_id is None:
-                response = await self.openai.ChatCompletion.acreate(
+                response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
                         messages=messages
                 )
             else:
-                response = await self.openai.ChatCompletion.acreate(
+                response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
                         messages=messages,
                         user=user_id
                 )
-            prompt_tokens = int(response["usage"]['prompt_tokens'])
-            completion_tokens = int(response["usage"]['completion_tokens'])
+            prompt_tokens = int(response.usage.prompt_tokens)
+            completion_tokens = int(response.usage.completion_tokens)
+
+            # Delete images from chat history
+            if self.vision and self.delete_image_after_chat:
+                messages, token_usage = await self.delete_images(messages)
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
+
         # if ratelimit is reached
-        except self.openai.error.RateLimitError as e:
+        except self.openai.RateLimitError as e:
             logger.exception('Rate limit error')
             return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if chat is too long
-        except self.openai.error.InvalidRequestError as e:
+        except self.openai.BadRequestError as e:
             # if 'openai.error.InvalidRequestError: The model: `gpt-4` does not exist'
             if 'does not exist' in str(e):
                 logger.error(f'Invalid model error for model {self.model}')
@@ -231,7 +250,11 @@ class OpenAIEngine:
             else:
                 logger.info(f'Chat session for user {id} was summarized due to an error')
                 style = messages[0]['content'] + '\n Your previous conversation summary: '
-                style += await self.chat_summary(messages[:-1])
+
+                style, token_usage = await self.chat_summary(messages[:-1])
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
+
                 response, messages, token_usage = await self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
                 prompt_tokens += int(token_usage['prompt'])
                 completion_tokens += int(token_usage['completion'])
@@ -240,7 +263,7 @@ class OpenAIEngine:
             logger.exception('Could not get response from GPT')
             return None, messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # process response
-        response = response["choices"][0]['message']['content']
+        response = response.choices[0].message.content
         # add response to chat history
         messages.append({"role": "assistant", "content": response})
         # save chat history to file
@@ -264,14 +287,17 @@ class OpenAIEngine:
         summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
         # Get the response from the API
         requested_tokens = min(size, self.max_tokens)
-        response = self.openai.ChatCompletion.create(
+        response = await self.client.chat.completions.create(
                 model=self.model,
                 temperature=self.temperature, 
                 max_tokens=requested_tokens,
                 messages=summary
         )
+        prompt_tokens = int(response.usage.prompt_tokens)
+        completion_tokens = int(response.usage.completion_tokens)
+
         # Return the response
-        return response["choices"][0]['message']['content']
+        return response.choices[0].message.content, {"prompt": prompt_tokens, "completion": completion_tokens}
 
     async def chat_summary(self, messages, short=False):
         '''
@@ -287,31 +313,32 @@ class OpenAIEngine:
                 text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
             if short:
                 # Generate short summary
-                summary = await self.summary(text, size=30)
+                summary, token_usage = await self.summary(text, size=30)
             else:
                 # Generate long summary
-                summary = await self.summary(text)
-            return summary
+                summary, token_usage = await self.summary(text)
+            return summary, token_usage
         except Exception as e:
             logger.exception('Could not summarize chat history')
-            return None
+            return None, {"prompt": 0, "completion": 0}
 
     async def moderation_pass(self, message, id=0):
         try:
             # check if message is not empty
             if message is None or len(message) == 0:
                 return None
-            # check if ./data/moderation.txt exists and create if not
-            if not os.path.exists('./data/moderation.txt'):
-                open('./data/moderation.txt', 'a').close()
-            response = self.openai.Moderation.create(
-                input=message
-            )
-            output = response["results"][0]
-            if output["flagged"] == "true" or output["flagged"] == True:
-                categories = output["categories"]
+            # check if there is image in message and leave only text
+            if self.vision:
+                message, trimmed = await self.leave_only_text(message)
+            response = await self.client.moderations.create(input=[message['content']])
+            output = response.results[0]
+            if output.flagged:
+                categories = output.categories
                 # get flagged categories
-                flagged_categories = [k for k, v in categories.items() if v == "true" or v == True]
+                flagged_categories = []
+                for category in categories._asdict():
+                    if categories._asdict()[category] == True:
+                        flagged_categories.append(category)
                 # log used id, flagged message and flagged categories to ./data/moderation.txt
                 with open('./data/moderation.txt', 'a') as f:
                     f.write(str(id) + '\t' + str(flagged_categories) + '\t' + message + '\n')
@@ -333,6 +360,9 @@ class OpenAIEngine:
             # Count the number of tokens
             tokens = 0
             for message in messages:
+                # Check if there is images in message and leave only text
+                if self.vision:
+                    message, trimmed = await self.leave_only_text(message)
                 text = message['role'] + ': ' + message['content']
                 tokens += len(encoding.encode(text))
             return tokens
@@ -340,6 +370,109 @@ class OpenAIEngine:
             logger.exception('Could not count tokens in text')
             return None
         
+    async def leave_only_text(self, message):
+        '''
+        Leave only text in message with images
+        '''
+        if message is None:
+            return None, False
+        try:
+            message_copy = message.copy()
+            # Check if there is images in message
+            trimmed = False
+            if 'content' in message_copy and type(message_copy['content']) == list:
+                # Leave only text in message
+                for i in range(len(message_copy['content'])):
+                    if message_copy['content'][i]['type'] == 'text':
+                        message_copy['content'] = message_copy['content'][i]['text']
+                        trimmed = True
+                        break
+            return message_copy, trimmed
+        except Exception as e:
+            logger.exception('Could not leave only text in message')
+            return message, False
+        
+    async def describe_image(self, message, user_id=None):
+        '''
+        Describe image that was sent by user
+        '''
+        if self.vision == False:
+            # no need to describe
+            return None
+        try:
+            message_copy = message.copy()   
+            # Check if there is images in message
+            if 'content' in message_copy and type(message_copy['content']) == list:
+                # Describe image
+                success = False
+                for i in range(len(message_copy['content'])):
+                    if message_copy['content'][i]['type'] == 'image':
+                        image_url = message_copy['content'][i]['image_url']
+                        success = True
+                        break
+                if success == False:
+                    return None, {"prompt": 0, "completion": 0}
+                new_message = {
+                    "role": 'user',
+                    "content": [{
+                            "type": "text",
+                            "text": "Describe given image, answer with description only."
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": image_url
+                        }
+                    ]
+                }
+
+                response = await self.client.chat.completions.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=400,
+                        messages=[new_message],
+                        user=str(user_id)
+                )
+
+                prompt_tokens = int(response.usage.prompt_tokens)
+                completion_tokens = int(response.usage.completion_tokens)
+                summary = response.choices[0].message.content
+                # log to logger file fact of message being received
+                logger.debug(f'Image was summarized by OpenAI API to: {summary}')
+            return summary, {"prompt": prompt_tokens, "completion": completion_tokens}
+        except Exception as e:
+            logger.exception('Could not describe image')
+            return None, {"prompt": 0, "completion": 0}
+
+    async def delete_images(self, messages):
+        '''
+        Filter out images from chat history, replace them with text
+        '''
+        if self.vision == False:
+            # no need to filter
+            return None
+        try:
+            tokens_prompt, tokens_completion = 0, 0
+            # Check if there is images in messages
+            for i in range(len(messages)):
+                # Leave only text in message
+                text, trimmed = await self.leave_only_text(messages[i])
+                if trimmed == False:
+                    # no images in message
+                    continue
+                text = text['content'] 
+                if self.image_description:
+                    image_description, token_usage = await self.describe_image(messages[i])
+                    tokens_prompt += int(token_usage['prompt'])
+                    tokens_completion += int(token_usage['completion'])
+                    text += f'\n<There was an image here, but it was deleted. Image description: {image_description} Resend the image if you needed.>'
+                else:
+                    text += '\n<There was an image here, but it was deleted from the dialog history to keep low usage of API. Resend the image if you needed.>'
+                messages[i] = {"role": messages[i]['role'], "content": text}
+                logger.debug(f'Image was deleted from chat history')
+            return messages, {"prompt": tokens_prompt, "completion": tokens_completion}
+        except Exception as e:
+            logger.exception('Could not filter images')
+            return None, {"prompt": 0, "completion": 0}
 
 
 ######## YandexGPT Engine ########
@@ -390,6 +523,9 @@ class YandexEngine:
         self.max_tokens = self.chat_vars['MaxTokens']
         self.model_prompt_price = 0
         self.model_completion_price = 0
+
+        self.vision = False # Not supported yet
+        self.image_size = None
 
     def speech_init(self):
         '''
@@ -647,7 +783,7 @@ class TextGenEngine:
             'truncation_length': 2048,
             'ban_eos_token': False,
             'skip_special_tokens': True,
-            'stopping_strings': []
+            'stopping_strings': [],
             })
         self.config.read('./data/.config') 
         self.chat_vars = {} 
@@ -690,11 +826,15 @@ class TextGenEngine:
         self.chat_vars['ban_eos_token'] = self.config.getboolean('TextGenWebUI', 'ban_eos_token')
         self.chat_vars['skip_special_tokens'] = self.config.getboolean('TextGenWebUI', 'skip_special_tokens')
         self.chat_vars['stopping_strings'] = self.config.get('TextGenWebUI', 'stopping_strings').split(',')
+        self.chat_vars['stopping_strings'] = [i.strip() for i in self.chat_vars['stopping_strings']]
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
         self.system_message = self.chat_vars['chat-instruct_command']
         self.max_tokens = self.chat_vars['max_new_tokens']
         self.model_prompt_price = 0
         self.model_completion_price = 0
+
+        self.vision = False # Not supported yet
+        self.image_size = None
         
     def count_tokens(self, messages, model='gpt-3.5-turbo'):
         '''
@@ -829,7 +969,6 @@ class TextGenEngine:
             response = self.requests.post(self.chat_vars['URI'], json=request)
             if response.status_code == 200:
                 result = response.json()['results'][0]['history']
-                # print(self.json.dumps(result, indent=4))
                 response = result['visible'][-1][1]
                 messages = messages.append({'role': 'assistant', 'content': response})
             else:

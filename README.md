@@ -1,7 +1,7 @@
 # SirChatalot
 
 This is a Telegram bot that can use various services to generate responses to messages.  
- As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API) and [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses.
+As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses, and OpenAI's GPT-4 models with vision support for image-based tasks.  
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
@@ -10,8 +10,8 @@ This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `
 ## Possible breaking changes
 In the end of July 2023 there was made some changes to a bot architecture.  
 Now bot can use different chat engines, not only OpenAI (which is still default).  
-Some functionality was deprecated. Legacy mode is no longer supported.
-I tried to make this transition as smooth as possible, but there can be some issues. If you find one, please report it.  
+Some functionality was deprecated. Legacy mode is no longer supported.  
+In addition, the bot was upgraded to use new version of the OpenAI Python API library, which introduced significant changes. For details on what has changed and how to migrate, refer to the [migration guide](https://github.com/openai/openai-python/discussions/742).
 
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
@@ -39,7 +39,7 @@ Styles can be set up in the `./data/chat_modes.ini` file. You can add your own s
 
 ## Configuration
 The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file) and should contain the following fields:
-```
+```ini
 [Telegram]
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = whitelistcode,secondwhitelistcode
@@ -67,6 +67,10 @@ MaxSessionLength = 15
 ChatDeletion = False
 EndUserID = True
 Moderation = False
+Vision = False
+ImageSize = 512
+DeleteImageAfterAnswer = False
+ImageDescriptionOnDelete = False
 
 [Files]
 Enabled = True
@@ -108,6 +112,10 @@ instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in
 * OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
 * OpenAI.EndUserID: Whether to add the user's ID to the API request. Optional.
 * OpenAI.Moderation: Whether to use the OpenAI's moderation engine. Optional.
+* OpenAI.Vision: Whether to use vision capabilities of GPT-4 models. Default: `False`.
+* OpenAI.ImageSize: Maximum size of images. If image is bigger than that it will be resized. Default: `512`
+* OpenAI.DeleteImageAfterAnswer: Whether to delete image after it was seen by model. Enable it to keep cost of API usage low. Default: `False`.
+* OpenAI.ImageDescriptionOnDelete: Whether to replace image with it description after it was deleted (see `OpenAI.DeleteImageAfterAnswer`). Default: `False`.
 * Files.Enabled: Whether to enable files support. Optional. Default: `True`.
 * Files.MaxFileSizeMB: The maximum file size in megabytes. Optional. Default: `20`.
 * Files.MaxSummaryTokens: The maximum number of tokens to use for generating summaries. Optional. Default: `OpenAI.MaxTokens`/2.
@@ -159,12 +167,12 @@ You can disable files support in the `./data/.config` file by setting `Files.Ena
 
 ## Using GPT-4
 You can use GPT-4 if you got an access to it. To do that, you need to change the `OpenAI.ChatModel` and change `OpenAI.ChatModelPrice` field to `ChatModelPromptPrice` and `ChatModelCompletionPrice` (Prompt and completion prices are different for GPT-4) in the `./data/.config` file:
-```
+```ini
 ...
 [OpenAI]
-ChatModel = gpt-4
-ChatModelPromptPrice = 0.03
-ChatModelCompletionPrice = 0.06
+ChatModel = gpt-4-1106-preview
+ChatModelPromptPrice = 0.01
+ChatModelCompletionPrice = 0.03
 ...
 ```
 ChatModelPrice calculates for the whole message, so it is not representative in this case. Use ChatModelPromptPrice and ChatModelCompletionPrice instead. They calculate for the prompt and completion separately.
@@ -172,7 +180,31 @@ ChatModelPrice calculates for the whole message, so it is not representative in 
 Models can be found here: https://platform.openai.com/docs/models/gpt-4  
 Prices can be found here: https://openai.com/pricing
 
-Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.
+Using GPT-4 will require more money, but it will also give you more power. GPT-4 is a much more powerful model than GPT-3.5-turbo. It capable of generating longer responses and can be used for more complex tasks.  
+`gpt-4-1106-preview` is a model from GPT-4 Turbo family, which can be more powerful than GPT-4 and offered at a lower price.  
+
+## Vision
+GPT-4 can now [understand images](https://platform.openai.com/docs/guides/vision) with a new model `gpt-4-vision-preview`. You can use it with SirChatalot.  
+To use this functionality you should make some changes in configuration file. Example:  
+```ini
+...
+[OpenAI]
+ChatModel = gpt-4-vision-preview
+ChatModelPromptPrice = 0.01
+ChatModelCompletionPrice = 0.03
+...
+Vision = True
+ImageSize = 512
+DeleteImageAfterAnswer = False
+ImageDescriptionOnDelete = False
+...
+```  
+Check if you have an access to GPT-4V.  
+Models can be found here: https://platform.openai.com/docs/models/gpt-4  
+Prices can be found here: https://openai.com/pricing  
+
+Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.    
+`gpt-4-vision-preview` is a model from GPT-4 Turbo family, which can be more capable than GPT-4 and offered at a lower price.  
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
@@ -190,7 +222,7 @@ Library [openai-python](https://github.com/openai/openai-python) is used for API
 YandexGPT is in Preview, you should request access to it.  
 You should have a service account Yandex Cloud account to use YandexGPT (https://cloud.yandex.ru/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API.  
 To use YandexGPT, you need to change the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file:
-```
+```ini
 [Telegram]
 Token = 111111111:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = 123456789
@@ -244,7 +276,7 @@ To prevent the bot from being used for purposes that violate the OpenAI's usage 
 ## Rate limiting users
 To limit the number of messages a user can send to the bot, add their Telegram ID and limit to the `./data/rates.txt` file. Each ID should be on a separate line.
 Example:
-```
+```ini
 123456789,10
 987654321,500
 111111,0
@@ -263,14 +295,21 @@ To generate a response, send the bot a message (or a voice message). The bot wil
 
 ## Using Docker
 You can use Docker to run the bot. You need to build the image first. To do that, run the following command in the root directory of the project after configuring the bot (see *Configuration*):
-```
+```bash
 docker compose up -d
 ```
 This will build the image and run the container. You can then use the bot as described above.  
 To stop the container, run the following command:
-```
+```bash
 docker compose down
 ```
+
+## Read messages
+You can read user messages for moderation purposes with `read_messages.py`.  
+Call it from project root dir like this:
+```bash
+python3 read_messages.py
+```  
 
 ## Warinings
 * The bot stores the whitelist in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
@@ -284,6 +323,8 @@ docker compose down
 * The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see *Configuration*), the file will be stored in `./data/files` directory. The files are not encrypted and can be accessed by anyone with access to the server.
 * If message is flagged by the Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
+* Functionalty for calculating cost of usage is not working for images for now, so you should pay attenion to that.    
+
 
 ## License
 This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). See the `LICENSE` file for more details.
