@@ -207,8 +207,10 @@ Beware that right now functionalty for calculating cost of usage is not working 
 `gpt-4-vision-preview` is a model from GPT-4 Turbo family, which can be more capable than GPT-4 and offered at a lower price.  
 
 ## Using OpenAI compatible APIs
+__Warning__: Untested.  
+
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
-```
+```ini
 [OpenAI]
 ...
 APIBase = http://127.0.0.1:5000
@@ -217,6 +219,7 @@ APIBase = http://127.0.0.1:5000
 Also it is possible to set `APIType` and `APIVersion` fields in the `./data/.config` file.  
 All this values are optional. Do not set them if you don't know what they are.  
 Library [openai-python](https://github.com/openai/openai-python) is used for API requests.  
+
 
 ## Using YandexGPT
 YandexGPT is in Preview, you should request access to it.  
