@@ -661,6 +661,7 @@ async def resize_image(image_bytes):
     try:
         image = Image.open(io.BytesIO(image_bytes))
         width, height = image.size
+        new_width, new_height = width, height
 
         # Check if image conversion is needed
         if width > gpt.image_size or height > gpt.image_size:
@@ -683,6 +684,14 @@ async def resize_image(image_bytes):
         logger.debug(f'>> Image resized from {width}x{height} to {new_width}x{new_height}')
         return image_base64
     except Exception as e:
+        # if debug is enabled, save image to file
+        try:
+            if logger.level == logging.DEBUG:
+                image = Image.open(io.BytesIO(image_bytes))
+                image.save(f'./logs/{time.time()}.jpg')
+                logger.debug(f'>> Image saved to file.')
+        except Exception as e:
+            logger.debug('>> Could not save image to file.')
         logger.error(e)
         return None
 
