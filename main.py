@@ -36,7 +36,8 @@ logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
                                        when="D",
                                        interval=1,
-                                       backupCount=7)
+                                       backupCount=7,
+                                       encoding='utf-8')
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
@@ -146,7 +147,117 @@ VISION = gpt.vision
 from chatutils.filesproc import FilesProc
 fp = FilesProc()
 
-###############################################################################################
+################################## Authorization ###############################################
+
+def check_code(code, user_id) -> bool:
+    '''
+    Check if code is in accesscodes
+    '''
+    # check if code is in accesscodes
+    try:
+        if code in accesscodes:
+            # add user to whitelist if code is correct
+            with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
+                f.write(str(user_id)+'\n')
+            logger.info('Granted access to user with ID: ' + str(user_id) + '. Code used: ' + code)
+            return True
+    except Exception as e:
+        logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
+    return False
+
+async def check_user(update, message=None, check_rate=True) -> bool:
+    '''
+    Check if user has an access
+    '''
+    # read banlist
+    if banlist_enabled:
+        try:
+            with codecs.open("./data/banlist.txt", "r", "utf-8") as f:
+                # Read the contents of the file into a list
+                lines = f.readlines()
+            banlist = [line.rstrip('\n') for line in lines]
+        except:
+            logger.exception('No banlist or it is not possible to read it')
+            banlist = []
+
+    # read whitelist
+    if accesscodes is not None:
+        try:
+            with codecs.open("./data/whitelist.txt", "r", "utf-8") as f:
+                # Read the contents of the file into a list
+                lines = f.readlines()
+            whitelist = [line.rstrip('\n') for line in lines]
+        except:
+            logger.warning('No whitelist or it is not possible to read it')
+            whitelist = []
+
+    user = update.effective_user
+    # check if user is in banlist
+    if banlist_enabled:
+        if str(user.id) in banlist:
+            logger.warning("Restricted access to banned user: " + str(user))
+            await update.message.reply_text("You are banned.")
+            return False
+
+    # check there were no accesscodes provided in config file bot will be available for everyone not in banlist
+    if accesscodes is None:
+        return True
+
+    # check if user is in whitelist
+    if str(user.id) not in whitelist:
+        # if not, check if user sent access code
+        if message is not None:
+            if check_code(message, user.id):
+                # if yes, add user to whitelist and send welcome message
+                await update.message.reply_text("You are now able to use this bot. Welcome!")
+                # delete chat history
+                success = await gpt.delete_chat(update.effective_user.id)
+                if not success:
+                    logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
+                # send welcome message
+                answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
+                if answer is None:
+                    answer = "Sorry, something went wrong. Please try again later."
+                    logger.error('Could not get answer to start message: ' + update.message.text)
+                await update.message.reply_text(answer)
+                return None
+        await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
+        return False
+    else:
+        # check if user rate is limited
+        if check_rate:
+            ratecheck = await ratelimiter(user.id)
+            if ratecheck == False:
+                logger.info("Rate limited user: " + str(user))
+                await update.message.reply_text("You are rate limited. You can check your limits with /limit")
+                return False
+        return True
+    return True
+
+# Decorator for authorization check
+def is_authorized(func):
+    '''
+    Check if user is authorized to use the bot (in whitelist)
+    Whitelist is stored in './data/whitelist.txt' file
+    '''
+    check_rate = True
+    func_called = func.__name__
+    if func_called in ['statistics_command', 'delete_command', 'limit_command']:
+        logger.info(f'Rate limit is not checked for function {func_called}')
+        check_rate = False
+    @wraps(func)
+    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
+        # check if user is in whitelist
+        access = await check_user(update, update.message.text, check_rate=check_rate)
+        logger.debug(f'Checking access for function {func_called}, rate check is {check_rate}, access is {access}')
+        # if not, return
+        if access != True:
+            return
+        # if yes, run the function
+        return await func(update, context, *args, **kwargs)
+    return wrapped
+
+################################## Commands ###################################################
 
 async def ratelimiter(user_id, check=False):
     '''
@@ -252,28 +363,13 @@ async def escaping(text):
     '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' 
     must be escaped with the preceding character '\'.
     '''
-    escaped = text.translate(str.maketrans({"-":  r"\-",
-                                          "]":  r"\]",
-                                          "^":  r"\^",
-                                          "$":  r"\$",
-                                          "*":  r"\*",
-                                          ".":  r"\.",
-                                          "!":  r"\!",
-                                          "_":  r"\_",
-                                          "[":  r"\[",
-                                            "(":  r"\(",
-                                            ")":  r"\)",
-                                            "~":  r"\~",
-                                            "`":  r"\`",
-                                            ">":  r"\>",
-                                            "#":  r"\#",
-                                            "+":  r"\+",
-                                            "=":  r"\=",
-                                            "|":  r"\|",
-                                            "{":  r"\{",
-                                            "}":  r"\}",
+    escaped = text.translate(str.maketrans({"-":  r"\-", "]":  r"\]", "^":  r"\^", "$":  r"\$", "*":  r"\*", ".":  r"\.", "!":  r"\!",
+                                          "_":  r"\_", "[":  r"\[", "(":  r"\(", ")":  r"\)", "~":  r"\~", "`":  r"\`", ">":  r"\>",
+                                            "#":  r"\#", "+":  r"\+", "=":  r"\=", "|":  r"\|", "{":  r"\{", "}":  r"\}",
                                             }))
     return escaped
+
+################################## Commands ###################################################
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
@@ -299,32 +395,22 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text = 'This bot is just a fun experiment. To delete your chat history, use /delete command. You can also send voice messages and files.'
     await update.message.reply_text(help_text)
 
+@is_authorized
 async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Send a message with statistics when the command /statistics is issued
     '''
-    # check if user is in whitelist
-    access = await check_user(update, update.message.text, check_rate=False)
-    # if not, return None
-    if access != True:
-        return None
-    # if yes, send statistics
     stats_text = await gpt.get_stats(id=update.effective_user.id)
     if stats_text is None or stats_text == '':
         stats_text = "Sorry, there is no statistics yet or something went wrong. Please try again later."
         logger.error('Could not get statistics for user: ' + str(update.effective_user.id))
     await update.message.reply_text(stats_text)
 
+@is_authorized
 async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Delete chat history when the command /delete is issued
     '''
-    # check if user is in whitelist
-    access = await check_user(update, update.message.text, check_rate=False)
-    # if not, return None
-    if access != True:
-        return None
-    # if yes, delete chat history
     success = await gpt.delete_chat(update.effective_user.id)
     # send message about result
     if success:
@@ -333,34 +419,28 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text("Sorry, it seems like there is no history with you.")
         logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
 
+@is_authorized
 async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Check user rate limit when the command /limit is issued
     '''
-    # check if user is in whitelist
-    access = await check_user(update, update.message.text, check_rate=False)
-    # if not, return None
-    if access != True:
-        return None
-    # if yes, sent user his rate limit
     user = update.effective_user
     text = await ratelimiter(user.id, check=True)
     if text is None:
         text = 'Unlimited'
     await update.message.reply_text(text)
 
+################################## Messages ###################################################
+
+@is_authorized
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Answer to user message
     '''
     global application
-    # check if user is in whitelist
-    access = await check_user(update, update.message.text)
+    # send typing action
     await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-    # if not, return None
-    if access != True:
-        return None
-    # if yes, get answer
+
     answer = await gpt.chat(id=update.effective_user.id, message=update.message.text)
     # DEBUG
     logger.debug(f'>> Username: {update.effective_user.username}. Message: {update.message.text}')
@@ -377,18 +457,15 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         print('Could not send message. Trying to escape characters for text:\n' + answer)
         await update.message.reply_markdown_v2(await escaping(answer))
 
+@is_authorized
 async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Answer to user voice message
     '''
     global application
-    # check if user is in whitelist
-    access = await check_user(update, update.message.text)
+    # send typing action
     await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-    # if not, return None
-    if access != True:
-        return None
-    # if yes, get answer
+
     voice_file = await application.bot.get_file(update.message.voice.file_id)
     voice_file_path = './data/voice/' + str(update.message.voice.file_id) + '.ogg'
     voice_message = await voice_file.download_to_drive(custom_path=voice_file_path)
@@ -410,209 +487,111 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         print('Could not send message. Trying to escape characters for text:\n' + answer)
         await update.message.reply_markdown_v2(await escaping(answer))
 
-def check_code(code, user_id) -> bool:
-    '''
-    Check if code is in accesscodes
-    '''
-    # check if code is in accesscodes
-    try:
-        if code in accesscodes:
-            # add user to whitelist if code is correct
-            with codecs.open("./data/whitelist.txt", "a", "utf-8") as f:
-                f.write(str(user_id)+'\n')
-            logger.info('Granted access to user with ID: ' + str(user_id) + '. Code used: ' + code)
-            return True
-    except Exception as e:
-        logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
-    return False
-
-async def check_user(update, message=None, check_rate=True) -> bool:
-    '''
-    Check if user has an access
-    '''
-    # read banlist
-    if banlist_enabled:
-        try:
-            with codecs.open("./data/banlist.txt", "r", "utf-8") as f:
-                # Read the contents of the file into a list
-                lines = f.readlines()
-            banlist = [line.rstrip('\n') for line in lines]
-        except:
-            logger.exception('No banlist or it is not possible to read it')
-            banlist = []
-
-    # read whitelist
-    if accesscodes is not None:
-        try:
-            with codecs.open("./data/whitelist.txt", "r", "utf-8") as f:
-                # Read the contents of the file into a list
-                lines = f.readlines()
-            whitelist = [line.rstrip('\n') for line in lines]
-        except:
-            logger.warning('No whitelist or it is not possible to read it')
-            whitelist = []
-
-    user = update.effective_user
-    # check if user is in banlist
-    if banlist_enabled:
-        if str(user.id) in banlist:
-            logger.warning("Restricted access to banned user: " + str(user))
-            await update.message.reply_text("You are banned.")
-            return False
-
-    # check there were no accesscodes provided in config file bot will be available for everyone not in banlist
-    if accesscodes is None:
-        return True
-
-    # check if user is in whitelist
-    if str(user.id) not in whitelist:
-        # if not, check if user sent access code
-        logger.warning("Restricted access to: " + str(user))
-        if message is not None:
-            if check_code(message, user.id):
-                # if yes, add user to whitelist and send welcome message
-                await update.message.reply_text("You are now able to use this bot. Welcome!")
-                # delete chat history
-                success = await gpt.delete_chat(update.effective_user.id)
-                if not success:
-                    logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
-                # send welcome message
-                answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
-                if answer is None:
-                    answer = "Sorry, something went wrong. Please try again later."
-                    logger.error('Could not get answer to start message: ' + update.message.text)
-                await update.message.reply_text(answer)
-                return None
-        await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
-        return False
-    else:
-        # check if user rate is limited
-        if check_rate:
-            ratecheck = await ratelimiter(user.id)
-            if ratecheck == False:
-                logger.info("Rate limited user: " + str(user))
-                await update.message.reply_text("You are rate limited. You can check your limits with /limit")
-                return False
-        return True
-
+@is_authorized
 async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Sends a message with buttons attached when the command /style is issued. The buttons are used to choose a style for a bot.
     '''
     user = update.effective_user
-    # check if user is in whitelist
-    access = await check_user(update)
-    if access == True: 
-        # read chat modes
-        modes = await chat_modes_read()
-        if modes is None:
-            await update.message.reply_text('Sorry, something went wrong. Please try again later.')
-            return None
+    # read chat modes
+    modes = await chat_modes_read()
+    if modes is None:
+        await update.message.reply_text('Sorry, something went wrong. Please try again later.')
+        return None
 
-        # generate keyboard with buttons
-        k = []
-        for name in modes.keys():
-            k.append(InlineKeyboardButton(name, callback_data=name))
-        keyboard = [
-            k,
-            [InlineKeyboardButton("[Default]", callback_data="default")],
-        ]
+    # generate keyboard with buttons
+    k = []
+    for name in modes.keys():
+        k.append(InlineKeyboardButton(name, callback_data=name))
+    keyboard = [
+        k,
+        [InlineKeyboardButton("[Default]", callback_data="default")],
+    ]
 
-        # send message with a keyboard
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        msg = "Please choose a style for a bot.\n"
-        msg += "You current chat session will be deleted.\n"
-        msg += "Style is kept for the chat session until `/style` or `/delete` command is issued.\n"
-        msg += "\n"
-        msg += "Styles description:\n"
+    # send message with a keyboard
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = "Please choose a style for a bot.\n"
+    msg += "You current chat session will be deleted.\n"
+    msg += "Style is kept for the chat session until `/style` or `/delete` command is issued.\n"
+    msg += "\n"
+    msg += "Styles description:\n"
 
-        # add styles description
-        for name in modes.keys():
-            msg += f"* {name}: {modes[name]['Desc']}\n"
+    # add styles description
+    for name in modes.keys():
+        msg += f"* {name}: {modes[name]['Desc']}\n"
 
-        await update.message.reply_text(msg, reply_markup=reply_markup)
-    else:
-        logger.info("Restricted access to style choosing to: " + str(user))
+    await update.message.reply_text(msg, reply_markup=reply_markup)
 
+@is_authorized
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Handles the callback query when a button is pressed.
     '''
     user = update.effective_user
-    # check if user is in whitelist
-    access = await check_user(update)
-    if access == True:
-        # read chat modes
-        modes = await chat_modes_read()
-        if modes is None:
-            await update.message.reply_text('Sorry, something went wrong. Please try again later.')
-            return None
+    # read chat modes
+    modes = await chat_modes_read()
+    if modes is None:
+        await update.message.reply_text('Sorry, something went wrong. Please try again later.')
+        return None
 
-        # delete chat history
-        query = update.callback_query
-        # print(query)
-        await query.answer()
-        success = await gpt.delete_chat(update.effective_user.id)
-        if success:
-            logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
-        
-        if query.data == "default":
-            answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
-        else:
-            answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
-        logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
+    # delete chat history
+    query = update.callback_query
+    # print(query)
+    await query.answer()
+    success = await gpt.delete_chat(update.effective_user.id)
+    if success:
+        logger.info('Deleted chat history for user for changing style: ' + str(update.effective_user.id))
+    
+    if query.data == "default":
+        answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.")
+    else:
+        answer = await gpt.chat(id=user.id, message=rf"Hi, I'm {user.full_name}! Please introduce yourself.", style=modes[query.data]['SystemMessage'])
+    logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
 
-        if answer is None:
-            answer = "Sorry, something went wrong. Please try again later."
-            logger.error('Could not get answer for user: ' + str(update.effective_user.id))
-        await query.edit_message_text(text=answer)
+    if answer is None:
+        answer = "Sorry, something went wrong. Please try again later."
+        logger.error('Could not get answer for user: ' + str(update.effective_user.id))
+    await query.edit_message_text(text=answer)
 
+@is_authorized
 async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Saves the current chat session to a file.
     '''
     user = update.effective_user
-    # check if user is in whitelist
-    access = await check_user(update)
-    if access == True:
-        # save chat history
-        success = await gpt.save_session(update.effective_user.id)
-        if success:
-            await update.message.reply_text("Chat session saved.")
-        else:
-            await update.message.reply_text("Sorry, something went wrong. Please try again later.")
+    # save chat history
+    success = await gpt.save_session(update.effective_user.id)
+    if success:
+        await update.message.reply_text("Chat session saved.")
+    else:
+        await update.message.reply_text("Sorry, something went wrong. Please try again later.")
 
+@is_authorized
 async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Loads the chat session.
     '''
     user = update.effective_user
-    # check if user is in whitelist
-    access = await check_user(update)
-    if access == True:
-        # give user a choice of sessions
-        sessions = await gpt.stored_sessions(update.effective_user.id)
-        if sessions is None:
-            await update.message.reply_text("Sorry, no stored sessions found. Please try again later.")
-            return None
-
-        # generate keyboard with buttons
-        keyboard = []
-        for name in sessions:
-            keyboard.append(InlineKeyboardButton(name + str('...'), callback_data=name))
-        keyboard = [keyboard]
-
-        # send message with a keyboard
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        msg = "Choose a session from stored ones.\n"
-
-        await update.message.reply_text(msg, reply_markup=reply_markup)
-
-async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    access = await check_user(update)
-    if access != True:
+    # give user a choice of sessions
+    sessions = await gpt.stored_sessions(update.effective_user.id)
+    if sessions is None:
+        await update.message.reply_text("Sorry, no stored sessions found. Please try again later.")
         return None
 
+    # generate keyboard with buttons
+    keyboard = []
+    for name in sessions:
+        keyboard.append(InlineKeyboardButton(name + str('...'), callback_data=name))
+    keyboard = [keyboard]
+
+    # send message with a keyboard
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    msg = "Choose a session from stored ones.\n"
+
+    await update.message.reply_text(msg, reply_markup=reply_markup)
+
+@is_authorized
+async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # check if file function is enabled
     if not files_enabled:
         await update.message.reply_text("Sorry, working with files is not supported at the moment.")
@@ -654,6 +633,7 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(e)
         await update.message.reply_text("Sorry, something went wrong while processing the file.")
 
+################################## Images #####################################################
 async def resize_image(image_bytes):
     '''
     Resize image from bytes by long side
@@ -695,15 +675,13 @@ async def resize_image(image_bytes):
         logger.error(e)
         return None
 
+@is_authorized
 async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     '''
     Process images - multimodal chat
     '''
     if not VISION:
         # await update.message.reply_text("Sorry, working with images is not supported.")
-        return None
-    access = await check_user(update)
-    if access != True:
         return None
     # Recieve image
     global application
