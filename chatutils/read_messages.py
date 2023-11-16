@@ -1,6 +1,6 @@
 import pickle
 
-chats = pickle.load(open('./data/tech/chats.pickle', 'rb'))
+chats = pickle.load(open('../data/tech/chats.pickle', 'rb'))
 
 print('\n')
 
@@ -35,7 +35,7 @@ for userid in chats.keys():
         print(text)
     print('****************', '\n')
 
-stats = pickle.load(open('./data/tech/stats.pickle', 'rb'))
+stats = pickle.load(open('../data/tech/stats.pickle', 'rb'))
 
 total = 0
 rating = []

@@ -24,7 +24,7 @@ from datetime import datetime
 import asyncio
 
 # Support: OpenAI API, YandexGPT API
-from engines import OpenAIEngine, YandexEngine
+from chatutils.engines import OpenAIEngine, YandexEngine
 
 class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
@@ -72,9 +72,11 @@ class ChatProc:
         self.max_file_length = int(config.get("Files", "MaxFileLength")) if config.has_option("OpenAI", "MaxFileLength") else 10000
 
         # load chat history from file
-        self.chats = self.load_pickle("./data/tech/chats.pickle")
+        self.chats_location = "./data/tech/chats.pickle"
+        self.chats = self.load_pickle(self.chats_location)
         # load statistics from file
-        self.stats = self.load_pickle("./data/tech/stats.pickle")
+        self.stats_location = "./data/tech/stats.pickle"
+        self.stats = self.load_pickle(self.stats_location)
 
         if self.log_chats:
             logger.info('* Chat history is logged *')
@@ -169,7 +171,7 @@ class ChatProc:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not add image to chat for user: ' + str(id))
@@ -204,7 +206,7 @@ class ChatProc:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not add caption to image for user: ' + str(id))
@@ -231,7 +233,7 @@ class ChatProc:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not init style for user: ' + str(id))
@@ -270,7 +272,7 @@ class ChatProc:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
@@ -305,7 +307,7 @@ class ChatProc:
             self.stats[id]['Prompt tokens used'] += prompt_tokens_used if prompt_tokens_used is not None else 0
             self.stats[id]['Completion tokens used'] += completion_tokens_used if completion_tokens_used is not None else 0
             # save statistics to file (unsafe way)
-            pickle.dump(self.stats, open("./data/tech/stats.pickle", "wb"))
+            pickle.dump(self.stats, open(self.stats_location, "wb"))
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
@@ -352,12 +354,12 @@ class ChatProc:
                 chatname = datetime.now().strftime("%Y%m%d-%H%M%S")
             messages = self.chats[id]
             if plain:
-                # dump chat to a file with filename: ./data/chats/123456_20230721-182531.txt
+                # dump chat to a file
                 with open(f'./data/chats/{id}_{chatname}.txt', 'w') as f:
                     for message in messages:
                         f.write(message['role'] + ': ' + message['content'] + '\n')
             else:
-                # dump chat to user file with filename: ./data/chats/123456.pickle
+                # dump chat to user file
                 filename = f'./data/chats/{id}.pickle'
                 chats = self.load_pickle(filename)
                 chats[chatname] = messages
@@ -378,7 +380,7 @@ class ChatProc:
             if self.log_chats:
                 await self.dump_chat(id=id, plain=True)
             del self.chats[id]
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not delete chat history for user: ' + str(id))
@@ -417,7 +419,7 @@ class ChatProc:
             messages = sessions[chatname]
             # overwrite chat history
             self.chats[id] = messages
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not load session for user: ' + str(id))
@@ -461,7 +463,7 @@ class ChatProc:
             # save chat history
             self.chats[id] = messages
             # save chat history to file
-            pickle.dump(self.chats, open("./data/tech/chats.pickle", "wb"))
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
             logger.exception('Could not change style for user: ' + str(id))

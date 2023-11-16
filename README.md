@@ -17,11 +17,6 @@ In addition, the bot was upgraded to use new version of the OpenAI Python API li
 * Create a bot using the [BotFather](https://t.me/botfather).
 * Clone the repository.
 
-### Automatic steps (for Linux)
-* Run the command `./first_run.sh` from the root directory of the repository. This will install the required packages, create the configuration file and start the bot.
-  * Script will ask you to enter the Telegram token and the OpenAI secret key as well as other optional parameters. You can also change them later in the `./data/.config` file (see *Configuration*).
-  * [ffmpeg](https://ffmpeg.org/) will not be installed automatically. You need to install it manually. Voice message support won't work without it.
-
 ### Manual steps
 * Install the required packages by running the command `pip install -r requirements.txt`.
 * Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.

@@ -12,9 +12,9 @@ Metrics include:
 import pickle
 import time
 
-chats = pickle.load(open('./data/tech/chats.pickle', 'rb'))
-stats = pickle.load(open('./data/tech/stats.pickle', 'rb'))
-rates = pickle.load(open('./data/tech/ratelimit.pickle', 'rb'))
+chats = pickle.load(open('../data/tech/chats.pickle', 'rb'))
+stats = pickle.load(open('../data/tech/stats.pickle', 'rb'))
+rates = pickle.load(open('../data/tech/ratelimit.pickle', 'rb'))
 
 # Calculate total cost of chatbot
 total_cost = 0
@@ -61,7 +61,7 @@ cost_per_user = round(total_cost / total_users, 3)
 
 # toal lines in whitelist.txt
 total_whitelist = 0
-with open('./data/whitelist.txt', 'r') as f:
+with open('../data/whitelist.txt', 'r') as f:
     for line in f:
         total_whitelist += 1
 
@@ -75,7 +75,7 @@ total_log = {
     'exception': 0,
     'total': 0
 }
-with open('./logs/sirchatalot.log', 'r') as f:
+with open('../logs/sirchatalot.log', 'r') as f:
     for line in f:
         if ' - DEBUG - ' in line:
             total_log['DEBUG'] += 1
