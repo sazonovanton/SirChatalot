@@ -10,7 +10,7 @@ from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-Processing")
 LogLevel = getattr(logging, LogLevel.upper())
 logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/common.log',
+handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)
@@ -24,7 +24,6 @@ from datetime import datetime
 import asyncio
 
 # Support: OpenAI API, YandexGPT API
-# Planned: Text Generation WebUI API, Runpod API 
 from engines import OpenAIEngine, YandexEngine
 
 class ChatProc:
@@ -42,10 +41,6 @@ class ChatProc:
             self.model_completion_price = self.text_engine.model_completion_price
         elif text == "yagpt" or text == "yandexgpt" or text == "yandex":
             self.text_engine = YandexEngine(text=True)
-        # elif text == "textgen" or text == "text-generation-webui":
-        #     self.text_engine = TextgenEngine(text=True)
-        # elif text == "runpod":
-        #     self.text_engine = RunpodEngine(text=True)
         else:
             logger.error("Unknown text engine: {}".format(text))
             raise Exception("Unknown text engine: {}".format(text))

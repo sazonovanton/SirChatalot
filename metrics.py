@@ -65,7 +65,7 @@ with open('./data/whitelist.txt', 'r') as f:
     for line in f:
         total_whitelist += 1
 
-# total lines in log (./logs/common.log)
+# total lines in log (./logs/sirchatalot.log)
 total_log = {
     'DEBUG': 0,
     'INFO': 0,
@@ -75,7 +75,7 @@ total_log = {
     'exception': 0,
     'total': 0
 }
-with open('./logs/common.log', 'r') as f:
+with open('./logs/sirchatalot.log', 'r') as f:
     for line in f:
         if ' - DEBUG - ' in line:
             total_log['DEBUG'] += 1

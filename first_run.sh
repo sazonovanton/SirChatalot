@@ -146,7 +146,7 @@ fi
 echo ""
 
 echo "Starting bot..."
-echo "Logs are stored in './logs/common.log'..."
+echo "Logs are stored in './logs/sirchatalot.log'..."
 
 # new line
 echo ""

@@ -33,7 +33,7 @@ from logging.handlers import TimedRotatingFileHandler
 logger = logging.getLogger("SirChatalot-main")
 LogLevel = getattr(logging, LogLevel.upper())
 logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/common.log',
+handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
                                        when="D",
                                        interval=1,
                                        backupCount=7)

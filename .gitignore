@@ -139,7 +139,8 @@ cython_debug/
 .config
 *.log
 *.log*
-common.log
+sirchatalot.log
+sirchatalot.log.*
 whitelist.txt
 banlist.txt
 chats.pickle
