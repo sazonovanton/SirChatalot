@@ -10,8 +10,8 @@ This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `
 ## Possible breaking changes
 In the end of July 2023 there was made some changes to a bot architecture.  
 Now bot can use different chat engines, not only OpenAI (which is still default).  
-Some functionality was deprecated. Legacy mode is no longer supported.  
-In addition, the bot was upgraded to use new version of the OpenAI Python API library, which introduced significant changes. For details on what has changed and how to migrate, refer to the [migration guide](https://github.com/openai/openai-python/discussions/742).
+Legacy mode is no longer supported.  
+In addition, the bot was upgraded to use new version of the OpenAI Python API library, which introduced [significant changes](https://github.com/openai/openai-python/discussions/742).
 
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
