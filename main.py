@@ -248,7 +248,8 @@ def is_authorized(func):
     @wraps(func)
     async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
         # check if user is in whitelist
-        access = await check_user(update, update.message.text, check_rate=check_rate)
+        text = update.message.text if update.message is not None else None
+        access = await check_user(update, text, check_rate=check_rate)
         logger.debug(f'Checking access for function {func_called}, rate check is {check_rate}, access is {access}')
         # if not, return
         if access != True:
