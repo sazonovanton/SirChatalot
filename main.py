@@ -621,9 +621,6 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("Sorry, something went wrong. Could not extract text from the file.")
             return None
         
-        # if not, return None
-        if access != True:
-            return None
         # if yes, get answer from GPT
         answer = await gpt.filechat(id=update.effective_user.id, text=text)
         if answer is None:
