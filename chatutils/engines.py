@@ -54,15 +54,19 @@ class OpenAIEngine:
             "ImageSize": 512,
             })
         self.config.read('./data/.config')   
-        self.client = AsyncOpenAI(api_key=self.config.get("OpenAI", "SecretKey"))
-        # check if other parameters are set
-        if self.config.has_option("OpenAI", "APIType"):
-            self.client.api_type = self.config.get("OpenAI", "APIType")
+        # check if alternative API base is used
+        self.base_url = None
         if self.config.has_option("OpenAI", "APIBase"):
-            self.client.base_url = self.config.get("OpenAI", "APIBase")
-        if self.config.has_option("OpenAI", "APIVersion"):
-            self.client.api_version = self.config.get("OpenAI", "APIVersion")
-
+            if str(self.config.get("OpenAI", "APIBase")).lower() not in ['default', '', 'none', 'false']:
+                self.base_url = self.config.get("OpenAI", "APIBase")
+            else:
+                self.base_url = None
+        # Set up the API 
+        # TODO: working with other parameters
+        self.client = AsyncOpenAI(
+            api_key=self.config.get("OpenAI", "SecretKey"),
+            base_url=self.base_url
+        )
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
         self.speech_init() if self.speech_initiation else None

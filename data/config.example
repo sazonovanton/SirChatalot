@@ -1,6 +1,6 @@
 [Telegram]
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-AccessCodes = whitelistcode,secondwhitelistcode
+AccessCodes = firstwhitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 60
 
@@ -16,11 +16,8 @@ MaxTokens = 3997
 MinLengthTokens = 100
 AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
-MaxSessionLength = 15
 EndUserID = True
 Moderation = False
-;ChatDeletion = False
-;MaxSessionLength = 5
 Vision = False
 ImageSize = 512
 DeleteImageAfterAnswer = False
@@ -32,3 +29,6 @@ MaxFileSizeMB = 10
 MaxSummaryTokens = 1000
 MaxFileLength = 10000
 DeleteAfterProcessing = True
+
+[Logging]
+LogLevel = INFO
