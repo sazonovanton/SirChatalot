@@ -375,25 +375,26 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
     Send a message to user, if too long - send it in parts
     '''
     try:
-        # check if text is too long
-        if len(text) <= max_length:
-            if markdown == 1:
-                await update.message.reply_markdown(text)
-            if markdown == 2:
-                await update.message.reply_markdown_v2(text)
-            else:
-                await update.message.reply_text(text)
-        else:
-            # split text into parts
-            parts = [text[i:i+max_length] for i in range(0, len(text), max_length)]
-            # send each part
-            for part in parts:
-                if markdown == 1:
+        # split text into parts
+        parts = [text[i:i+max_length] for i in range(0, len(text), max_length)]
+        logger.debug(f'>> Text length: {len(text)}. Split into {len(parts)} parts.')
+        # send each part
+        for part in parts:
+            if markdown == 0:
+                await update.message.reply_text(part)
+            elif markdown == 1:
+                try:
                     await update.message.reply_markdown(part)
-                if markdown == 2:
+                except:
+                    await update.message.reply_markdown_v2(escaping(part))
+            elif markdown == 2:
+                try:
                     await update.message.reply_markdown_v2(part)
-                else:
-                    await update.message.reply_text(part)
+                except:
+                    await update.message.reply_markdown_v2(escaping(part))
+            else:
+                # if markdown is not 0, 1 or 2, send message without markdown
+                await update.message.reply_text(part)
     except Exception as e:
         logger.exception('Could not send message to user: ' + str(update.effective_user.id))
 
@@ -479,11 +480,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to message: ' + update.message.text)
-    try:
-        await send_message(update, answer, markdown=1)
-    except:
-        print('Could not send message. Trying to escape characters for text:\n' + answer)
-        await send_message(update, await escaping(answer), markdown=2)
+    await send_message(update, answer, markdown=1)
 
 @is_authorized
 async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -509,11 +506,7 @@ async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
-    try:
-        await send_message(update, answer, markdown=1)
-    except:
-        print('Could not send message. Trying to escape characters for text:\n' + answer)
-        await send_message(update, await escaping(answer), markdown=2)
+    await send_message(update, answer, markdown=1)
 
 @is_authorized
 async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -745,10 +738,7 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # If we recieve answer from GPT Engine, send it to user
         if gpt_answer is not None:
-            try:
-                await send_message(update, gpt_answer, markdown=1)
-            except:
-                await send_message(update, await escaping(gpt_answer), markdown=2)
+            await send_message(update, gpt_answer, markdown=1)
         else:
             await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
         
