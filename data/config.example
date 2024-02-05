@@ -20,6 +20,10 @@ EndUserID = True
 Moderation = False
 Vision = False
 ImageSize = 512
+ImageGeneration = False
+ImageGenModel = dall-e-3
+ImageGenerationSize = 1024x1024
+ImageGenerationStyle = vivid
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 

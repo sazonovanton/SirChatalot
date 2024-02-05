@@ -746,6 +746,34 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(e)
         await update.message.reply_text("Sorry, something went wrong while processing the image.")
     
+
+@is_authorized
+async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    '''
+    Send a message with generated image when the command /imagine is issued
+    Example: /imagine A cat on a table
+    '''
+    global application
+    try:
+        # send typing action
+        await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        # get the prompt
+        prompt = update.message.text.replace('/imagine', '').strip()
+        # get the image
+        image, text = await gpt.imagine(id=update.effective_user.id, prompt=prompt)
+        if image is None and text is None:
+            await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+            return None
+        if text is not None and image is None:
+            # we recieved only text
+            await update.message.reply_text(text)
+            return None
+        # send the image (base64 to bytes)
+        image_bytes = base64.b64decode(image)
+        await update.message.reply_photo(photo=image_bytes, caption=text)
+    except Exception as e:
+        logger.error(e)
+        await update.message.reply_text("Sorry, something went wrong while creating an image.")
     
 
 ###############################################################################################
@@ -764,6 +792,9 @@ def main() -> None:
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
     application.add_handler(CommandHandler("limit", limit_command))
+
+    # image generation
+    application.add_handler(CommandHandler("imagine", imagine_command))
 
     # application.add_handler(CommandHandler("save_session", save_session_command))
     # application.add_handler(CommandHandler("load_session", load_session_command))

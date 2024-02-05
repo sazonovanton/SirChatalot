@@ -51,6 +51,13 @@ class ChatProc:
             if self.image_size is None:
                 self.image_size = 512
             self.pending_images = {}
+
+        self.image_generation = self.text_engine.image_generation
+        if self.image_generation:
+            self.image_generation_size = self.text_engine.image_generation_size
+            self.image_generation_style = self.text_engine.image_generation_style
+            self.image_generation_quality = self.text_engine.image_generation_quality
+            self.image_generation_price = self.text_engine.image_generation_price
         
         if speech is None:
             self.speech_engine = None
@@ -277,7 +284,41 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
-    
+        
+    async def imagine(self, id=0, prompt=None, size=None, style=None, quality=None):
+        '''
+        Generate image from text
+        Input id of user and prompt
+        '''
+        try:
+            if self.image_generation is False:
+                logger.error('Image generation is not available')
+                return 'Sorry, image generation is not available.'
+            if prompt is None:
+                logger.error('No prompt provided for image generation')
+                return 'Sorry, I could not generate an image without a prompt.'
+            if size is None:
+                size = self.image_generation_size
+            if style is None:
+                style = self.image_generation_style
+            if quality is None:
+                quality = self.image_generation_quality
+            # generate image
+            image, text = await self.text_engine.imagine(prompt=prompt, size=size, style=style, quality=quality, revision=False)
+            if image is None and text is None:
+                logger.error('Could not generate image from prompt: ' + prompt)
+                return 'Sorry, I could not generate an image from your prompt.'
+            # add statistics
+            try:
+                await self.add_stats(id=id, images_generated=1)
+            except Exception as e:
+                logger.exception('Could not add image generation statistics for user: ' + str(id))
+            # return image
+            return image, text
+        except Exception as e:
+            logger.exception('Could not generate image from prompt: ' + prompt + ' for user: ' + str(id))
+            return None, 'Sorry, I could not generate an image from your prompt.'
+            
     def load_pickle(self, filepath):
         '''
         Load pickle file if exists or create new 
@@ -290,7 +331,7 @@ class ChatProc:
             pickle.dump(payload, open(filepath, "wb"))
             return payload
         
-    async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None) -> None:
+    async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None, images_generated=None):
         '''
         Add statistics (tokens used, messages sent, voice messages sent) by user
         Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
@@ -300,14 +341,26 @@ class ChatProc:
                 logger.debug('Could not add stats. No ID provided')
                 return None
             if id not in self.stats:
-                self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0}
+                self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0, 'Images generated': 0}
             self.stats[id]['Speech2text seconds'] += round(speech2text_seconds) if speech2text_seconds is not None else 0
             self.stats[id]['Messages sent'] += messages_sent if messages_sent is not None else 0
             self.stats[id]['Voice messages sent'] += voice_messages_sent if voice_messages_sent is not None else 0
             self.stats[id]['Prompt tokens used'] += prompt_tokens_used if prompt_tokens_used is not None else 0
             self.stats[id]['Completion tokens used'] += completion_tokens_used if completion_tokens_used is not None else 0
+            self.stats[id]['Images generated'] += images_generated if images_generated is not None else 0
             # save statistics to file (unsafe way)
             pickle.dump(self.stats, open(self.stats_location, "wb"))
+        except KeyError as e:
+            logger.exception('Could not add statistics for user: ' + str(id))
+            # add key to stats and try again
+            current_stats = self.stats[id]
+            key_missing = str(e).split('\'')[1]
+            current_stats[key_missing] = 0
+            self.stats[id] = current_stats
+            try:
+                pickle.dump(self.stats, open(self.stats_location, "wb"))
+            except Exception as e:
+                logger.exception('Could not add statistics for user after adding keys: ' + str(id))
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
@@ -330,6 +383,7 @@ class ChatProc:
                 cost = self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
                 cost += self.stats[id]['Completion tokens used'] / 1000 * self.model_completion_price
+                cost += self.stats[id]['Images generated'] * self.image_generation_price
                 statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4))
                 return statisitics
             return None

@@ -52,6 +52,12 @@ class OpenAIEngine:
             "MinLengthTokens": 100,
             "Vision": False,
             "ImageSize": 512,
+            "ImageGeneration": False,
+            "ImageGenModel": "dall-e-3",
+            "ImageGenerationSize": "1024x1024",
+            "ImageGenerationStyle": "vivid",
+            "ImageGenerationQuality": "standard",
+            "ImageGenerationPrice": 0,
             })
         self.config.read('./data/.config')   
         # check if alternative API base is used
@@ -94,6 +100,13 @@ class OpenAIEngine:
         
         self.vision = self.config.getboolean("OpenAI", "Vision")
         self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
+        self.image_generation = self.config.getboolean("OpenAI", "ImageGeneration") 
+        if self.image_generation:
+            self.image_generation_size = self.config.get("OpenAI", "ImageGenerationSize")
+            self.image_model = self.config.get("OpenAI", "ImageGenModel")
+            self.image_generation_style = self.config.get("OpenAI", "ImageGenerationStyle") 
+            self.image_generation_quality = self.config.get("OpenAI", "ImageGenerationQuality")
+            self.image_generation_price = float(self.config.get("OpenAI", "ImageGenerationPrice"))
         if self.vision:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
@@ -112,6 +125,10 @@ class OpenAIEngine:
             print('Vision is enabled')
             print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
             print('-- Learn more: https://platform.openai.com/docs/guides/vision/overview\n')
+        if self.image_generation:
+            print('Image generation via DALL-E is enabled')
+            print('-- Image generation is used to create images from text. It can be changed in the self.config file.')
+            print('-- Learn more: https://platform.openai.com/docs/guides/images/usage\n')
 
     def speech_init(self):
         '''
@@ -280,6 +297,52 @@ class OpenAIEngine:
             # if chat is too long, return response and advice to delete session
             response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
         return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
+    
+    async def imagine(self, prompt, id=0, size="1024x1024", style="vivid", n=1, revision=False, quality="standard"):
+        '''
+        Create image from text prompt
+        Input:
+            * prompt - text prompt
+            * id - id of user
+            * size - size of image (1024x1024, 1792x1024, or 1024x1792 for dall-e-3)
+            * style - style of image (natural or vivid)
+            * n - number of images to generate (only 1 for dall-e-3)
+            * revision - if True, returns revised prompt
+            * quality - quality of image (standard or hd - only for dall-e-3)
+        See https://platform.openai.com/docs/api-reference/images/create for more details
+        '''
+        if self.image_generation == False:
+            return None
+        try:
+            revised_prompt, b64_image = None, None
+            user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
+            response = await self.client.images.generate(
+                        model=self.image_model,
+                        prompt=prompt,
+                        size=size,
+                        quality=quality,
+                        n=n,
+                        response_format="b64_json",
+                        style=style,
+                        user=str(user_id)
+                    )
+            if response.data[0].b64_json:
+                b64_image = response.data[0].b64_json
+            if revision:
+                if 'revised_prompt' in response.data[0]:
+                    revised_prompt = response.data[0].revised_prompt
+            return b64_image, revised_prompt
+        except self.openai.BadRequestError as e:
+            logger.exception('OpenAI BadRequestError')
+            if 'content_policy_violation' in str(e):
+                return None, 'Your request was rejected because it may contain text that is not allowed by safety system. Please try something else.'
+            return None, 'Your request was rejected. Please review it and try again.'
+        except self.openai.RateLimitError as e:
+            logger.exception('OpenAI RateLimitError')
+            return None, 'Service is getting rate limited. Please try again later.'
+        except Exception as e:
+            logger.exception('Could not imagine image from text')
+            return None, None
 
     async def summary(self, text, size=240):
         '''

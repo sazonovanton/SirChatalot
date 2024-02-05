@@ -1,7 +1,7 @@
 # SirChatalot
 
 This is a Telegram bot that can use various services to generate responses to messages.  
-As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses, and OpenAI's GPT-4 models with vision support for image-based tasks.  
+As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses, OpenAI's GPT-4 models with vision support for image-based tasks and DALL-E for image generation. 
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
@@ -64,6 +64,10 @@ EndUserID = True
 Moderation = False
 Vision = False
 ImageSize = 512
+ImageGeneration = False
+ImageGenModel = dall-e-3
+ImageGenerationSize = 1024x1024
+ImageGenerationStyle = vivid
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 
@@ -86,6 +90,7 @@ Temperature=700
 MaxTokens=1500
 instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 ```
+Telegram:
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
@@ -93,6 +98,8 @@ instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in
 * Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT`.
 * Logging.LogLevel: The logging level. Optional, default is `WARNING`.
 * Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
+
+OpenAI:
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (`gpt-3.5-turbo`, `gpt-3.5-turbo-16k` are available for [GPT-3.5](https://platform.openai.com/docs/models/gpt-3-5), `gpt-4`, `gpt-4-32k` are available for [GPT-4](https://platform.openai.com/docs/models/gpt-4)).
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
@@ -111,11 +118,20 @@ instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in
 * OpenAI.ImageSize: Maximum size of images. If image is bigger than that it will be resized. Default: `512`
 * OpenAI.DeleteImageAfterAnswer: Whether to delete image after it was seen by model. Enable it to keep cost of API usage low. Default: `False`.
 * OpenAI.ImageDescriptionOnDelete: Whether to replace image with it description after it was deleted (see `OpenAI.DeleteImageAfterAnswer`). Default: `False`.
+* OpenAI.ImageGeneration: Whether to use image generation capabilities of GPT-4 models. Default: `False`.
+* OpenAI.ImageGenModel: The model to use for image generation. Default: `dall-e-3`.
+* OpenAI.ImageGenerationSize: The size of the image to generate. Default: `1024x1024`.
+* OpenAI.ImageGenerationStyle: The style of the image to generate. Default: `vivid`.
+* OpenAI.ImageGenerationPrice: The price of the model to use for image generation (per image, in USD).  
+
+Files:
 * Files.Enabled: Whether to enable files support. Optional. Default: `True`.
 * Files.MaxFileSizeMB: The maximum file size in megabytes. Optional. Default: `20`.
 * Files.MaxSummaryTokens: The maximum number of tokens to use for generating summaries. Optional. Default: `OpenAI.MaxTokens`/2.
 * Files.MaxFileLength: The maximum number of tokens to use for generating summaries. Optional. Default: `10000`.
 * Files.DeleteAfterProcessing: Whether to delete files after processing. Optional. Deafult: `True`.
+
+YandexGPT:
 * YandexGPT.KeyID: The key ID for the Yandex Cloud.
 * YandexGPT.SecretKey: The secret key for the Yandex Cloud.
 * YandexGPT.CatalogID: The catalog ID for the Yandex Cloud.
@@ -201,8 +217,18 @@ Prices can be found here: https://openai.com/pricing
 Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.    
 `gpt-4-vision-preview` is a model from GPT-4 Turbo family, which can be more capable than GPT-4 and offered at a lower price.  
 
-## Using OpenAI compatible APIs
+## Image generation
+You can generate images with DALL-E while using OpenAI API. To do that, you need to change the `OpenAI.ImageGeneration` field to `True` in the `./data/.config` file:
+```ini
+...
+ImageGeneration = False
+ImageGenModel = dall-e-3
+ImageGenerationSize = 1024x1024
+ImageGenerationStyle = vivid
+...
+Learn more about image generation with DALL-E [here](https://platform.openai.com/docs/guides/images).
 
+## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
 ```ini
 [OpenAI]
