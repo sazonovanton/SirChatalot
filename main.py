@@ -144,6 +144,7 @@ text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegra
 speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
 gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
 VISION = gpt.vision
+IMAGE_GENERATION = gpt.image_generation
 from chatutils.filesproc import FilesProc
 fp = FilesProc()
 
@@ -386,12 +387,12 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
                 try:
                     await update.message.reply_markdown(part)
                 except:
-                    await update.message.reply_markdown_v2(escaping(part))
+                    await update.message.reply_markdown_v2(await escaping(part))
             elif markdown == 2:
                 try:
                     await update.message.reply_markdown_v2(part)
                 except:
-                    await update.message.reply_markdown_v2(escaping(part))
+                    await update.message.reply_markdown_v2(await escaping(part))
             else:
                 # if markdown is not 0, 1 or 2, send message without markdown
                 await update.message.reply_text(part)
@@ -417,12 +418,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     else:
         logger.info("Restricted access to: " + str(user))
 
+@is_authorized
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''
     Send a message when the command /help is issued
     '''
-    help_text = 'This bot is just a fun experiment. To delete your chat history, use /delete command. You can also send voice messages and files.'
-    await send_message(update, help_text)
+    help_text = "This is a bot that allows you to chat with an AI.\n"
+    help_text += "Commands:\n"
+    help_text += "/start - Start the bot\n"
+    help_text += "/help - Show this message\n"
+    help_text += "/delete - Delete chat history\n"
+    help_text += "/statistics - Show statistics\n"
+    help_text += "/limit - Check user rate limit\n"
+    help_text += "/style - Choose a style for a bot\n"
+    help_text += "/imagine <prompt> - Generate an image\n" if IMAGE_GENERATION else ""
+    help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
+    help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
+    help_text += "Bot will answer to your voice messages if you send them.\n" if speech_engine is not None else ""
+    if IMAGE_GENERATION:
+        help_text += "\nIf you want to try generating an image you can also use some keywords in prompt to control the process:\n"
+        help_text += " `--natural` - for natural style\n `--vivid` - for vivid style\n `--revision` - for displaying a revised prompt\n `--horizontal` - for horizontal image\n `--vertical` - for vertical image\n"
+        help_text += "\nExample: `/imagine a cat on a table --natural --horizontal`\n"
+    await send_message(update, help_text, markdown=1)
 
 @is_authorized
 async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -699,7 +716,7 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Process images - multimodal chat
     '''
     if not VISION:
-        # await update.message.reply_text("Sorry, working with images is not supported.")
+        await update.message.reply_text("Sorry, working with images is not supported.")
         return None
     # Recieve image
     global application
@@ -753,6 +770,9 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Send a message with generated image when the command /imagine is issued
     Example: /imagine A cat on a table
     '''
+    if not IMAGE_GENERATION:
+        await update.message.reply_text("Sorry, image generation is not supported.")
+        return None
     global application
     try:
         # send typing action

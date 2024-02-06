@@ -310,10 +310,45 @@ class OpenAIEngine:
             * revision - if True, returns revised prompt
             * quality - quality of image (standard or hd - only for dall-e-3)
         See https://platform.openai.com/docs/api-reference/images/create for more details
+
+        You can use the following keywords in prompt:
+            * --natural - for natural style
+            * --vivid - for vivid style
+            * --sd - for standard quality
+            * --hd - for hd quality
+            * --revision - for revised prompt
+            * --horizontal - for horizontal image
+            * --vertical - for vertical image
         '''
         if self.image_generation == False:
             return None
         try:
+            # extract arguments from prompt (if any)
+            if '--natural' in prompt:
+                style = 'natural'
+                prompt = prompt.replace('--natural', '')
+            if '--vivid' in prompt:
+                style = 'vivid'
+                prompt = prompt.replace('--vivid', '')
+            if '--sd' in prompt:
+                quality = 'standard'
+                prompt = prompt.replace('--sd', '')
+            if '--hd' in prompt:
+                quality = 'hd'
+                prompt = prompt.replace('--hd', '')
+            if '--revision' in prompt:
+                revision = True
+                prompt = prompt.replace('--revision', '')
+            if '--horizontal' in prompt:
+                size = '1792x1024'
+                prompt = prompt.replace('--horizontal', '')
+            if '--vertical' in prompt:
+                size = '1024x1792'
+                prompt = prompt.replace('--vertical', '')
+            if '--natural' in prompt or '--vivid' in prompt or '--sd' in prompt or '--hd' in prompt or '--revision' in prompt or '--horizontal' in prompt or '--vertical' in prompt:
+                prompt = prompt.strip()
+            if prompt == '':
+                return None, 'No text prompt was given. Please try again.'
             revised_prompt, b64_image = None, None
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
             response = await self.client.images.generate(
@@ -335,7 +370,7 @@ class OpenAIEngine:
         except self.openai.BadRequestError as e:
             logger.exception('OpenAI BadRequestError')
             if 'content_policy_violation' in str(e):
-                return None, 'Your request was rejected because it may contain text that is not allowed by safety system. Please try something else.'
+                return None, 'Your request was rejected because it may violate content policy. Please review it and try again.'
             return None, 'Your request was rejected. Please review it and try again.'
         except self.openai.RateLimitError as e:
             logger.exception('OpenAI RateLimitError')
@@ -592,7 +627,7 @@ class YandexEngine:
         self.model_completion_price = 0
 
         self.vision = False # Not supported yet
-        self.image_size = None
+        self.image_generation = False # Not supported yet
 
     def speech_init(self):
         '''

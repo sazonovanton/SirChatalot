@@ -218,7 +218,7 @@ Beware that right now functionalty for calculating cost of usage is not working 
 `gpt-4-vision-preview` is a model from GPT-4 Turbo family, which can be more capable than GPT-4 and offered at a lower price.  
 
 ## Image generation
-You can generate images with DALL-E while using OpenAI API. To do that, you need to change the `OpenAI.ImageGeneration` field to `True` in the `./data/.config` file:
+You can generate images with OpenAI API. To do that, you need to change the `OpenAI.ImageGeneration` field to `True` in the `./data/.config` file:
 ```ini
 ...
 ImageGeneration = False
@@ -226,6 +226,9 @@ ImageGenModel = dall-e-3
 ImageGenerationSize = 1024x1024
 ImageGenerationStyle = vivid
 ...
+```
+To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
+
 Learn more about image generation with DALL-E [here](https://platform.openai.com/docs/guides/images).
 
 ## Using OpenAI compatible APIs
@@ -278,6 +281,7 @@ The bot has the following commands:
 * `/statistics`: shows the bot usage.
 * `/style`: changes the style of the bot from chat.
 * `/limit`: shows the current rate-limit for the user.
+* `/imagine <text>`: generates an image based on the text. You can use it only if `OpenAI.ImageGeneration` is set to `True` (see *Image generation*).
 * Any other message (including voice message) will generate a response from the bot.
 
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the `/start` command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.
