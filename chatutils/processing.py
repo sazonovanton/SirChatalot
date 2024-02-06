@@ -341,8 +341,8 @@ class ChatProc:
                 logger.debug('Could not add stats. No ID provided')
                 return None
             if id not in self.stats:
-                self.stats[id] = {'Tokens used': 0, 'Speech2text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0, 'Images generated': 0}
-            self.stats[id]['Speech2text seconds'] += round(speech2text_seconds) if speech2text_seconds is not None else 0
+                self.stats[id] = {'Tokens used': 0, 'Speech to text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0, 'Images generated': 0}
+            self.stats[id]['Speech to text seconds'] += round(speech2text_seconds) if speech2text_seconds is not None else 0
             self.stats[id]['Messages sent'] += messages_sent if messages_sent is not None else 0
             self.stats[id]['Voice messages sent'] += voice_messages_sent if voice_messages_sent is not None else 0
             self.stats[id]['Prompt tokens used'] += prompt_tokens_used if prompt_tokens_used is not None else 0
@@ -364,10 +364,11 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not add statistics for user: ' + str(id))
 
-    async def get_stats(self, id=None):
+    async def get_stats(self, id=None, counter=0):
         '''
         Get statistics (tokens used, speech2text in seconds used, messages sent, voice messages sent) by user
-        Input id of user
+        Input: 
+            - id: id of user
         '''
         try:
             # get statistics by user
@@ -380,13 +381,27 @@ class ChatProc:
                     if key in ['Tokens used']:
                         continue # deprecated values
                     statisitics += key + ': ' + str(value) + '\n'
-                cost = self.stats[id]['Speech2text seconds'] / 60 * self.s2t_model_price
+                cost = self.stats[id]['Speech to text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
                 cost += self.stats[id]['Completion tokens used'] / 1000 * self.model_completion_price
                 cost += self.stats[id]['Images generated'] * self.image_generation_price
-                statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 4))
+                statisitics += '\nAppoximate cost of usage is $' + str(round(cost, 2))
                 return statisitics
             return None
+        except KeyError as e:
+            logger.exception('Could not get statistics for user: ' + str(id) + ' due to missing key: ' + str(e))
+            # add key to stats and try again
+            current_stats = self.stats[id]
+            key_missing = str(e).split('\'')[1]
+            current_stats[key_missing] = 0
+            self.stats[id] = current_stats
+            try:
+                pickle.dump(self.stats, open(self.stats_location, "wb"))
+            except Exception as e:
+                logger.exception('Could not get statistics for user after adding keys: ' + str(id))
+            if counter > 6:
+                return 'There was an error while getting statistics. Please, try again.'
+            return await self.get_stats(id=id, counter=counter+1) # recursive call
         except Exception as e:
             logger.exception('Could not get statistics for user: ' + str(id))
             return None
