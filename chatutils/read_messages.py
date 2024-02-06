@@ -42,11 +42,11 @@ rating = []
 total_tokens = {}
 for userid in stats.keys():
     cost = 0
-    cost += stats[userid]['Prompt tokens used'] / 1000 * 0.01
-    cost += stats[userid]['Completion tokens used'] / 1000 * 0.03
-    cost += stats[userid]['Images generated'] * 0.04
-    # total += stats[userid]['Speech2text seconds'] / 60 * 0.006
-    cost += stats[userid]['Speech to text seconds'] / 60 * 0.006
+    cost += stats[userid]['Prompt tokens used'] / 1000 * 0.01 if 'Prompt tokens used' in stats[userid] else 0
+    cost += stats[userid]['Completion tokens used'] / 1000 * 0.03 if 'Completion tokens used' in stats[userid] else 0
+    cost += stats[userid]['Images generated'] * 0.04 if 'Images generated' in stats[userid] else 0
+    total += stats[userid]['Speech2text seconds'] / 60 * 0.006 if 'Speech2text seconds' in stats[userid] else 0
+    cost += stats[userid]['Speech to text seconds'] / 60 * 0.006 if 'Speech to text seconds' in stats[userid] else 0
     print(f'User {userid} spent around ${round(cost, 2)}')
     rating.append((userid, round(cost, 3)))
     total += cost
