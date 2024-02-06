@@ -68,6 +68,7 @@ ImageGeneration = False
 ImageGenModel = dall-e-3
 ImageGenerationSize = 1024x1024
 ImageGenerationStyle = vivid
+ImageGenerationPrice = 0.04
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 
@@ -122,7 +123,7 @@ OpenAI:
 * OpenAI.ImageGenModel: The model to use for image generation. Default: `dall-e-3`.
 * OpenAI.ImageGenerationSize: The size of the image to generate. Default: `1024x1024`.
 * OpenAI.ImageGenerationStyle: The style of the image to generate. Default: `vivid`.
-* OpenAI.ImageGenerationPrice: The price of the model to use for image generation (per image, in USD).  
+* OpenAI.ImageGenerationPrice: The price of the model to use for image generation (per square SD image, in USD).  
 
 Files:
 * Files.Enabled: Whether to enable files support. Optional. Default: `True`.
@@ -225,6 +226,7 @@ ImageGeneration = False
 ImageGenModel = dall-e-3
 ImageGenerationSize = 1024x1024
 ImageGenerationStyle = vivid
+ImageGenerationPrice = 0.04
 ...
 ```
 To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  

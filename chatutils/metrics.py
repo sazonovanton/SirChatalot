@@ -21,7 +21,7 @@ total_cost = 0
 for userid in stats.keys():
     total_cost += stats[userid]['Prompt tokens used'] / 1000 * 0.0015
     total_cost += stats[userid]['Completion tokens used']/   1000 * 0.002
-    total_cost += stats[userid]['Speech2text seconds'] / 60 * 0.006
+    total_cost += stats[userid]['Speech to text seconds'] / 60 * 0.006
 total_cost = round(total_cost, 3)
 
 # Calculate total number of users
@@ -37,7 +37,7 @@ for userid in stats.keys():
 # Calculate total number of seconds spent on speech2text
 total_speech2text = 0
 for userid in stats.keys():
-    total_speech2text += stats[userid]['Speech2text seconds']
+    total_speech2text += stats[userid]['Speech to text seconds']
 
 # Calculate average number of messages per user per last hour
 total_messages_last_hour = 0

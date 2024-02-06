@@ -24,6 +24,7 @@ ImageGeneration = False
 ImageGenModel = dall-e-3
 ImageGenerationSize = 1024x1024
 ImageGenerationStyle = vivid
+ImageGenerationPrice = 0.04
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 
