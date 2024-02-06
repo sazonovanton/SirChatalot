@@ -309,6 +309,7 @@ class OpenAIEngine:
             * n - number of images to generate (only 1 for dall-e-3)
             * revision - if True, returns revised prompt
             * quality - quality of image (standard or hd - only for dall-e-3)
+            
         See https://platform.openai.com/docs/api-reference/images/create for more details
 
         You can use the following keywords in prompt:
@@ -316,7 +317,6 @@ class OpenAIEngine:
             * --vivid - for vivid style
             * --sd - for standard quality
             * --hd - for hd quality
-            * --revision - for revised prompt
             * --horizontal - for horizontal image
             * --vertical - for vertical image
         '''
@@ -337,9 +337,6 @@ class OpenAIEngine:
             if '--hd' in prompt:
                 quality = 'hd'
                 prompt = prompt.replace('--hd', '')
-            if '--revision' in prompt:
-                revision = True
-                prompt = prompt.replace('--revision', '')
             if '--horizontal' in prompt:
                 if self.image_model == 'dall-e-3':
                     size = '1792x1024'
@@ -348,8 +345,7 @@ class OpenAIEngine:
                 if self.image_model == 'dall-e-3':
                     size = '1024x1792'
                 prompt = prompt.replace('--vertical', '')
-            if '--natural' in prompt or '--vivid' in prompt or '--sd' in prompt or '--hd' in prompt or '--revision' in prompt or '--horizontal' in prompt or '--vertical' in prompt:
-                prompt = prompt.strip()
+            prompt = prompt.strip()
             if prompt == '':
                 return None, 'No text prompt was given. Please try again.'
             revised_prompt, b64_image = None, None

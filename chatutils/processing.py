@@ -222,8 +222,10 @@ class ChatProc:
     async def init_style(self, id=0, style=None):
         '''
         Init style of chat
-        Input id of user and style
         Create chat history if it does not exist
+        Input:
+            * id - id of user
+            * style - style of chat (default: None)
         '''         
         try:   
             # get chat history
@@ -249,7 +251,10 @@ class ChatProc:
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
         Chat with GPT
-        Input id of user and message
+        Input:
+            * id - id of user
+            * message - message to chat with GPT
+            * style - style of chat (default: None)
         '''
         try:
             # Init style if it is not set
@@ -285,10 +290,16 @@ class ChatProc:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
         
-    async def imagine(self, id=0, prompt=None, size=None, style=None, quality=None):
+    async def imagine(self, id=0, prompt=None, size=None, style=None, quality=None, add_to_chat=True):
         '''
         Generate image from text
-        Input id of user and prompt
+        Input: 
+            * id - id of user
+            * prompt - text for image generation (add --revision to display revised prompt)
+            * size - size of image 
+            * style - style of image
+            * quality - quality of image
+            * add_to_chat - add information about image to chat history (default: True)
         '''
         try:
             if self.image_generation is False:
@@ -303,16 +314,35 @@ class ChatProc:
                 style = self.image_generation_style
             if quality is None:
                 quality = self.image_generation_quality
-            # generate image
-            image, text = await self.text_engine.imagine(prompt=prompt, size=size, style=style, quality=quality, revision=False)
+            # generate image    
+            revision = False        
+            if '--revision' in prompt:
+                prompt = prompt.replace('--revision', '')
+                revision = True
+            image, text = await self.text_engine.imagine(prompt=prompt, size=size, style=style, quality=quality, revision=True)
+            if image is not None:
+                # add statistics
+                try:
+                    await self.add_stats(id=id, images_generated=1)
+                except Exception as e:
+                    logger.exception('Could not add image generation statistics for user: ' + str(id))
+                # add information to history
+                if add_to_chat:
+                    try:
+                        messages = self.chats[id]
+                        messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
+                        self.chats[id] = messages
+                        pickle.dump(self.chats, open(self.chats_location, "wb"))
+                    except Exception as e:
+                        logger.error('Could not add image to chat for user: ' + str(id))
+                # add text to chat if it is not None
+                if revision:
+                    text = 'Revised prompt: ' + text
+                else:
+                    text = None
             if image is None and text is None:
                 logger.error('Could not generate image from prompt: ' + prompt)
                 return 'Sorry, I could not generate an image from your prompt.'
-            # add statistics
-            try:
-                await self.add_stats(id=id, images_generated=1)
-            except Exception as e:
-                logger.exception('Could not add image generation statistics for user: ' + str(id))
             # return image
             return image, text
         except Exception as e:
@@ -334,7 +364,14 @@ class ChatProc:
     async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None, images_generated=None):
         '''
         Add statistics (tokens used, messages sent, voice messages sent) by user
-        Input id of user, tokens used, speech2text in seconds used, messages sent, voice messages sent
+        Input:
+            * id - id of user
+            * speech2text_seconds - seconds used for speech2text
+            * messages_sent - messages sent
+            * voice_messages_sent - voice messages sent
+            * prompt_tokens_used - tokens used for prompt
+            * completion_tokens_used - tokens used for completion
+            * images_generated - images generated
         '''
         try:
             if id is None:
@@ -368,7 +405,7 @@ class ChatProc:
         '''
         Get statistics (tokens used, speech2text in seconds used, messages sent, voice messages sent) by user
         Input: 
-            - id: id of user
+            * id - id of user
         '''
         try:
             # get statistics by user
@@ -378,8 +415,8 @@ class ChatProc:
             if id in self.stats:
                 statisitics = ''
                 for key, value in self.stats[id].items():
-                    if key in ['Tokens used']:
-                        continue # deprecated values
+                    if key in ['Tokens used', 'Speech2text seconds']:
+                        continue # deprecated values to ignore (for backward compatibility)
                     statisitics += key + ': ' + str(value) + '\n'
                 cost = self.stats[id]['Speech to text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
