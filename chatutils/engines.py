@@ -370,7 +370,7 @@ class OpenAIEngine:
                     revised_prompt = None
             return b64_image, revised_prompt
         except self.openai.BadRequestError as e:
-            logger.exception('OpenAI BadRequestError')
+            logger.error('OpenAI BadRequestError: ' + str(e))
             if 'content_policy_violation' in str(e):
                 return None, 'Your request was rejected because it may violate content policy. Please review it and try again.'
             return None, 'Your request was rejected. Please review it and try again.'

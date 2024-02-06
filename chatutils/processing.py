@@ -334,7 +334,7 @@ class ChatProc:
                         self.chats[id] = messages
                         pickle.dump(self.chats, open(self.chats_location, "wb"))
                     except Exception as e:
-                        logger.error('Could not add image to chat for user: ' + str(id))
+                        logger.error('Could not add image to chat for user: ' + str(id) + ' due to: ' + str(e))
                 # add text to chat if it is not None
                 if revision:
                     text = 'Revised prompt: ' + text
