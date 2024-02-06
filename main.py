@@ -387,12 +387,14 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
                 try:
                     await update.message.reply_markdown(part)
                 except:
-                    await update.message.reply_markdown_v2(await escaping(part))
+                    esc_part = await escaping(part)
+                    await update.message.reply_markdown_v2(esc_part)
             elif markdown == 2:
                 try:
                     await update.message.reply_markdown_v2(part)
                 except:
-                    await update.message.reply_markdown_v2(await escaping(part))
+                    esc_part = await escaping(part)
+                    await update.message.reply_markdown_v2(esc_part)
             else:
                 # if markdown is not 0, 1 or 2, send message without markdown
                 await update.message.reply_text(part)
@@ -423,7 +425,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     '''
     Send a message when the command /help is issued
     '''
-    help_text = "This is a bot that allows you to chat with an AI.\n"
+    help_text = "This is a bot that allows you to chat with an AI.\n\n"
     help_text += "Commands:\n"
     help_text += "/start - Start the bot\n"
     help_text += "/help - Show this message\n"

@@ -323,6 +323,7 @@ class OpenAIEngine:
         if self.image_generation == False:
             return None
         try:
+            prompt = prompt.replace('—', '--')
             # extract arguments from prompt (if any)
             if '--natural' in prompt:
                 style = 'natural'
@@ -340,10 +341,12 @@ class OpenAIEngine:
                 revision = True
                 prompt = prompt.replace('--revision', '')
             if '--horizontal' in prompt:
-                size = '1792x1024'
+                if self.image_model == 'dall-e-3':
+                    size = '1792x1024'
                 prompt = prompt.replace('--horizontal', '')
             if '--vertical' in prompt:
-                size = '1024x1792'
+                if self.image_model == 'dall-e-3':
+                    size = '1024x1792'
                 prompt = prompt.replace('--vertical', '')
             if '--natural' in prompt or '--vivid' in prompt or '--sd' in prompt or '--hd' in prompt or '--revision' in prompt or '--horizontal' in prompt or '--vertical' in prompt:
                 prompt = prompt.strip()
@@ -364,8 +367,11 @@ class OpenAIEngine:
             if response.data[0].b64_json:
                 b64_image = response.data[0].b64_json
             if revision:
-                if 'revised_prompt' in response.data[0]:
+                try:
                     revised_prompt = response.data[0].revised_prompt
+                except Exception as e:
+                    logger.warning(f'Could not get revised prompt: {e}')
+                    revised_prompt = None
             return b64_image, revised_prompt
         except self.openai.BadRequestError as e:
             logger.exception('OpenAI BadRequestError')
