@@ -307,7 +307,7 @@ class OpenAIEngine:
             if self.function_calling:
                 # TODO: working with function calling - now it is for testing only
                 response = await self.client.chat.completions.create(
-                        model='gpt-4-turbo-preview',
+                        model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
                         messages=messages,
