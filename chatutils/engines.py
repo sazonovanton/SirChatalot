@@ -125,7 +125,7 @@ class OpenAIEngine:
                             "prompt": {
                                 "type": "string",
                                 "description": "Text prompt for image generation"
-                            }
+                            },
                         }
                     }
                 }
@@ -407,7 +407,7 @@ class OpenAIEngine:
             * --vertical - for vertical image
         '''
         if self.image_generation == False:
-            return None
+            return None, None
         try:
             prompt = prompt.replace('—', '--')
             # extract arguments from prompt (if any)
@@ -716,6 +716,7 @@ class YandexEngine:
 
         self.vision = False # Not supported yet
         self.image_generation = False # Not supported yet
+        self.function_calling = False # Not supported yet
 
     def speech_init(self):
         '''

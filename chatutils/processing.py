@@ -58,6 +58,8 @@ class ChatProc:
             self.image_generation_style = self.text_engine.image_generation_style
             self.image_generation_quality = self.text_engine.image_generation_quality
             self.image_generation_price = self.text_engine.image_generation_price
+
+        self.function_calling = self.text_engine.function_calling
         
         if speech is None:
             self.speech_engine = None
@@ -284,20 +286,22 @@ class ChatProc:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             
             # TODO: check if function was called
-            if type(response) == tuple:
-                if response[0] == 'function':
-                    if response[1] == 'generate_image':
-                        image, text = response[2][0], response[2][1]
-                        # add to chat history
-                        messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
-                        self.chats[id] = messages
-                        pickle.dump(self.chats, open(self.chats_location, "wb"))
-                        # add statistics
-                        try:
-                            await self.add_stats(id=id, images_generated=1)
-                        except Exception as e:
-                            logger.exception('Could not add image generation statistics for user: ' + str(id))
-                        return ('image', image)
+            if self.function_calling:
+                if type(response) == tuple:
+                    if response[0] == 'function':
+                        if response[1] == 'generate_image':
+                            image, text = response[2][0], response[2][1]
+                            # add to chat history
+                            messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
+                            self.chats[id] = messages
+                            pickle.dump(self.chats, open(self.chats_location, "wb"))
+                            # add statistics
+                            try:
+                                await self.add_stats(id=id, images_generated=1)
+                            except Exception as e:
+                                logger.exception('Could not add image generation statistics for user: ' + str(id))
+                            return ('image', image)
+                        
             # save chat history
             self.chats[id] = messages
             # save chat history to file
