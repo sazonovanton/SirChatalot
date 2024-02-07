@@ -249,6 +249,31 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not init style for user: ' + str(id))
             return False
+        
+    async def add_to_chat_history(self, id=0, message=None):
+        '''
+        Add message to chat history
+        Input:
+            * id - id of user
+            * message - message to add to chat history (JSON format: {"role": "user", "content": "message"})
+        '''
+        try:
+            if id not in self.chats:
+                # If there is no chat, then create it
+                success = await self.init_style(id=id)
+                if not success:
+                    logger.error('Could not init style for user: ' + str(id))
+                    return False
+            messages = self.chats[id]
+            messages.append(message)
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
+            return True
+        except Exception as e:
+            logger.exception('Could not add message to chat history for user: ' + str(id))
+            return False
 
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
@@ -292,9 +317,10 @@ class ChatProc:
                         if response[1] == 'generate_image':
                             image, text = response[2][0], response[2][1]
                             # add to chat history
-                            messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
-                            self.chats[id] = messages
-                            pickle.dump(self.chats, open(self.chats_location, "wb"))
+                            await self.add_to_chat_history(
+                                id=id, 
+                                message={"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"}
+                                )
                             # add statistics
                             try:
                                 await self.add_stats(id=id, images_generated=1)
@@ -349,13 +375,10 @@ class ChatProc:
                     logger.exception('Could not add image generation statistics for user: ' + str(id))
                 # add information to history
                 if add_to_chat:
-                    try:
-                        messages = self.chats[id]
-                        messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
-                        self.chats[id] = messages
-                        pickle.dump(self.chats, open(self.chats_location, "wb"))
-                    except Exception as e:
-                        logger.error('Could not add image to chat for user: ' + str(id) + ' due to: ' + str(e))
+                    await self.add_to_chat_history(
+                        id=id, 
+                        message={"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"}
+                    )
                 # add text to chat if it is not None
                 if revision:
                     text = 'Revised prompt: ' + text
