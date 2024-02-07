@@ -499,6 +499,13 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to message: ' + update.message.text)
+    # TODO: function calling
+    # if answer is base64, send it as a photo
+    if type(answer) == tuple:
+        if answer[0] == 'image':
+            image_bytes = base64.b64decode(answer[1])
+            await update.message.reply_photo(photo=image_bytes)
+            return None
     await send_message(update, answer, markdown=1)
 
 @is_authorized

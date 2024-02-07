@@ -277,10 +277,27 @@ class ChatProc:
             response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
             try:
-                await self.add_stats(id=id, completion_tokens_used=int(tokens_used['completion']))
-                await self.add_stats(id=id, prompt_tokens_used=int(tokens_used['prompt']))
+                if tokens_used is not None:
+                    await self.add_stats(id=id, completion_tokens_used=int(tokens_used['completion']))
+                    await self.add_stats(id=id, prompt_tokens_used=int(tokens_used['prompt']))
             except Exception as e:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
+            
+            # TODO: check if function was called
+            if type(response) == tuple:
+                if response[0] == 'function':
+                    if response[1] == 'generate_image':
+                        image, text = response[2][0], response[2][1]
+                        # add to chat history
+                        messages.append({"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"})
+                        self.chats[id] = messages
+                        pickle.dump(self.chats, open(self.chats_location, "wb"))
+                        # add statistics
+                        try:
+                            await self.add_stats(id=id, images_generated=1)
+                        except Exception as e:
+                            logger.exception('Could not add image generation statistics for user: ' + str(id))
+                        return ('image', image)
             # save chat history
             self.chats[id] = messages
             # save chat history to file

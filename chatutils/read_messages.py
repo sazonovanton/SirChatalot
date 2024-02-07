@@ -51,7 +51,7 @@ for userid in stats.keys():
     rating.append((userid, round(cost, 3)))
     total += cost
 
-print('Statistics:\n====================================')
+print('\n====================================')
 print('         Total ($): ', round(total, 2))
 print('====================================')
 print('         Users: ', len(stats.keys()))
