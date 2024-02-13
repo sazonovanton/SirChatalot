@@ -69,6 +69,7 @@ ImageGenModel = dall-e-3
 ImageGenerationSize = 1024x1024
 ImageGenerationStyle = vivid
 ImageGenerationPrice = 0.04
+FunctionCalling = False
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 
@@ -124,6 +125,7 @@ OpenAI:
 * OpenAI.ImageGenerationSize: The size of the image to generate. Default: `1024x1024`.
 * OpenAI.ImageGenerationStyle: The style of the image to generate. Default: `vivid`.
 * OpenAI.ImageGenerationPrice: The price of the model to use for image generation (per square SD image, in USD).  
+* OpenAI.FunctionCalling: Whether to use function calling capabilities (see section *Function calling*). Default: `False`.
 
 Files:
 * Files.Enabled: Whether to enable files support. Optional. Default: `True`.
@@ -232,6 +234,20 @@ ImageGenerationPrice = 0.04
 To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
 
 Learn more about image generation with DALL-E [here](https://platform.openai.com/docs/guides/images).
+
+## Function calling
+You can use function calling capabilities. This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
+Right now only image generation is supported via function calls.  
+To use this functionality you should make some changes in configuration file. Example:  
+```ini
+...
+[OpenAI]
+FunctionCalling = True
+...
+```
+Don't forget to set `ImageGeneration` to `True` if you want to use image generation.  
+Beware that function calling is working only with some models and don't work with moels that support vision.   
+Learn more about function calling [here](https://platform.openai.com/docs/guides/function-calling).
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:

@@ -27,6 +27,7 @@ ImageGenerationStyle = vivid
 ImageGenerationPrice = 0.04
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
+FunctionCalling = False
 
 [Files]
 Enabled = True

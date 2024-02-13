@@ -22,6 +22,7 @@ import os
 import hashlib
 import tiktoken
 import asyncio
+import json
 
 ######## OpenAI Engine ########
 
@@ -58,6 +59,7 @@ class OpenAIEngine:
             "ImageGenerationStyle": "vivid",
             "ImageGenerationQuality": "standard",
             "ImageGenerationPrice": 0,
+            "FunctionCalling": False,
             })
         self.config.read('./data/.config')   
         # check if alternative API base is used
@@ -101,6 +103,7 @@ class OpenAIEngine:
         self.vision = self.config.getboolean("OpenAI", "Vision")
         self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
         self.image_generation = self.config.getboolean("OpenAI", "ImageGeneration") 
+        self.function_calling = self.config.getboolean("OpenAI", "FunctionCalling") 
         if self.image_generation:
             self.image_generation_size = self.config.get("OpenAI", "ImageGenerationSize")
             self.image_model = self.config.get("OpenAI", "ImageGenModel")
@@ -110,6 +113,23 @@ class OpenAIEngine:
         if self.vision:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
+        if self.function_calling:
+            # TODO: working with function calling - now only image generation is supported for testing
+            self.function_calling_tools = [
+                {
+                    "name": "generate_image",
+                    "description": "Generate image from text prompt using DALL-E",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "prompt": {
+                                "type": "string",
+                                "description": "Text prompt for image generation"
+                            },
+                        }
+                    }
+                }
+            ]
 
         if self.max_chat_length is not None:
             print('Max chat length:', self.max_chat_length)
@@ -129,6 +149,10 @@ class OpenAIEngine:
             print('Image generation via DALL-E is enabled')
             print('-- Image generation is used to create images from text. It can be changed in the self.config file.')
             print('-- Learn more: https://platform.openai.com/docs/guides/images/usage\n')
+        if self.function_calling:
+            print('Function calling is enabled')
+            print('-- Function calling is used to call functions from OpenAI API. It can be changed in the self.config file.')
+            print('-- Learn more: https://platform.openai.com/docs/guides/function-calling\n')
 
     def speech_init(self):
         '''
@@ -182,6 +206,57 @@ class OpenAIEngine:
             logger.exception('Could not trim messages')
             return None
         
+    async def generate_image(self, prompt):
+        '''
+        Generate image from text prompt
+        '''
+        try:
+            b64_image, revised_prompt = await self.imagine(prompt, id='function', size="1024x1024", style="vivid", n=1, quality="standard", revision=True)
+            return (b64_image, revised_prompt)
+        except Exception as e:
+            logger.exception('Could not generate image')
+            return None
+        
+    async def detect_function_called(self, response):
+        '''
+        TODO: Function calling is in highly experimental stage
+
+        Detect if function was called in response
+        Learn more: https://platform.openai.com/docs/guides/function-calling
+        Input:
+            * response - response from GPT
+        Output:
+            * response - response from GPT (None if function was not detected or there was an error)
+        '''
+        try:
+            if response is None:
+                return response
+            if not self.function_calling:
+                return response
+            if len(self.function_calling_tools) == 0:
+                return response
+            available_functions = {
+                "generate_image": self.generate_image,
+            }
+            response_message = response.choices[0].message
+            function_call = response_message.function_call
+            if not function_call:
+                return response
+            function_name = function_call.name
+            function_to_call = available_functions[function_name]
+            function_args = json.loads(function_call.arguments)
+            function_response = await function_to_call(
+                prompt = function_args.get("prompt"),
+            )
+            tokens = {
+                "prompt": response.usage.prompt_tokens,
+                "completion": response.usage.completion_tokens
+            }
+            return ('function', function_name, function_response, tokens)
+        except Exception as e:
+            logger.error('Could not detect function called: ' + str(e))
+            return response
+        
     async def chat(self, id=0, messages=None, attempt=0):
         '''
         Chat with GPT
@@ -229,21 +304,32 @@ class OpenAIEngine:
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
-            if user_id is None:
+            if self.function_calling:
+                # TODO: working with function calling - now it is for testing only
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
-                        messages=messages
+                        messages=messages,
+                        user=str(user_id),
+                        functions=self.function_calling_tools,
+                        function_call="auto",
                 )
+                response = await self.detect_function_called(response)
+                if response is not None:
+                    if type(response) == tuple:
+                        if response[0] == 'function':
+                            logger.info(f'Function {response[1]} was called by user {id}')
+                            return response, messages, response[3]
             else:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
                         messages=messages,
-                        user=user_id
+                        user=str(user_id)
                 )
+
             prompt_tokens = int(response.usage.prompt_tokens)
             completion_tokens = int(response.usage.completion_tokens)
 
@@ -286,7 +372,7 @@ class OpenAIEngine:
         # process response
         response = response.choices[0].message.content
         # add response to chat history
-        messages.append({"role": "assistant", "content": response})
+        messages.append({"role": "assistant", "content": str(response)})
         # save chat history to file
         if self.max_chat_length is not None:
             if self.chat_deletion:
@@ -321,7 +407,7 @@ class OpenAIEngine:
             * --vertical - for vertical image
         '''
         if self.image_generation == False:
-            return None
+            return None, None
         try:
             prompt = prompt.replace('—', '--')
             # extract arguments from prompt (if any)
@@ -630,6 +716,7 @@ class YandexEngine:
 
         self.vision = False # Not supported yet
         self.image_generation = False # Not supported yet
+        self.function_calling = False # Not supported yet
 
     def speech_init(self):
         '''

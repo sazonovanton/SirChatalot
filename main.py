@@ -438,7 +438,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if speech_engine is not None else ""
     if IMAGE_GENERATION:
-        help_text += "\nIf you want to try generating an image you can also use some keywords in prompt to control the process:\n"
+        help_text += "\nFor image generation you can just ask the bot to make an image. It can do it by itself due to fucntion calling enabled. Example: `Draw a cat on a table for me.` or `Create a picture of a cat on a table.`\n" if gpt.function_calling else ""
+        help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
         help_text += " `--natural` - for natural style\n `--vivid` - for vivid style\n `--revision` - for displaying a revised prompt\n `--horizontal` - for horizontal image\n `--vertical` - for vertical image\n"
         help_text += "\nExample: `/imagine a cat on a table --natural --horizontal`\n"
     await send_message(update, help_text, markdown=1)
@@ -499,6 +500,13 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
         logger.error('Could not get answer to message: ' + update.message.text)
+    # TODO: function calling
+    # if answer is base64, send it as a photo
+    if type(answer) == tuple:
+        if answer[0] == 'image':
+            image_bytes = base64.b64decode(answer[1])
+            await update.message.reply_photo(photo=image_bytes)
+            return None
     await send_message(update, answer, markdown=1)
 
 @is_authorized
