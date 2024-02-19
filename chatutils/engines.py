@@ -23,6 +23,7 @@ import hashlib
 import tiktoken
 import asyncio
 import json
+import time
 
 ######## OpenAI Engine ########
 
@@ -59,6 +60,8 @@ class OpenAIEngine:
             "ImageGenerationStyle": "vivid",
             "ImageGenerationQuality": "standard",
             "ImageGenerationPrice": 0,
+            "ImageRateLimitCount": 0,
+            "ImageRateLimitTime": 0,
             "FunctionCalling": False,
             })
         self.config.read('./data/.config')   
@@ -110,6 +113,9 @@ class OpenAIEngine:
             self.image_generation_style = self.config.get("OpenAI", "ImageGenerationStyle") 
             self.image_generation_quality = self.config.get("OpenAI", "ImageGenerationQuality")
             self.image_generation_price = float(self.config.get("OpenAI", "ImageGenerationPrice"))
+            self.image_rate_limit_count = int(self.config.get("OpenAI", "ImageRateLimitCount"))
+            self.image_rate_limit_time = int(self.config.get("OpenAI", "ImageRateLimitTime"))
+            self.image_rate_limit = {}
         if self.vision:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
@@ -148,6 +154,8 @@ class OpenAIEngine:
         if self.image_generation:
             print('Image generation via DALL-E is enabled')
             print('-- Image generation is used to create images from text. It can be changed in the self.config file.')
+            if self.image_rate_limit_count > 0 and self.image_rate_limit_time > 0:
+                print(f'-- Image generation is rate limited (only {self.image_rate_limit_count} images per {self.image_rate_limit_time} seconds are allowed).')
             print('-- Learn more: https://platform.openai.com/docs/guides/images/usage\n')
         if self.function_calling:
             print('Function calling is enabled')
@@ -179,14 +187,21 @@ class OpenAIEngine:
         '''
         Convert speech to text using OpenAI API
         '''
-        if self.speech_initiation == False:
+        try:
+            if self.speech_initiation == False:
+                return None
+            audio_file = await self.convert_ogg(audio_file)
+            audio = open(audio_file, "rb")
+            transcript = await self.client.audio.transcriptions.create(self.s2t_model, audio)
+            audio.close()
+            transcript = transcript['text']
+            return transcript
+        except self.openai.RateLimitError as e:
+            logger.error(f'OpenAI RateLimitError: {e}')
+            return 'Service is getting rate limited. Please try again later.'
+        except Exception as e:
+            logger.exception('Could not convert speech to text')
             return None
-        audio_file = await self.convert_ogg(audio_file)
-        audio = open(audio_file, "rb")
-        transcript = await self.client.audio.transcriptions.create(self.s2t_model, audio)
-        audio.close()
-        transcript = transcript['text']
-        return transcript
 
     async def trim_messages(self, messages, trim_count=1):
         '''
@@ -341,7 +356,7 @@ class OpenAIEngine:
 
         # if ratelimit is reached
         except self.openai.RateLimitError as e:
-            logger.exception('Rate limit error')
+            logger.error(f'OpenAI RateLimitError: {e}')
             return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if chat is too long
         except self.openai.BadRequestError as e:
@@ -383,7 +398,30 @@ class OpenAIEngine:
             # if chat is too long, return response and advice to delete session
             response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
         return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
-    
+
+    async def image_rate_limit_check(self, id):
+        '''
+        Check if image generation is not rate limited
+        Return True if not rate limited, False if rate limited
+        '''
+        try:
+            if self.image_rate_limit_count <= 0 or self.image_rate_limit_time <= 0:
+                return True
+            if id not in self.image_rate_limit:
+                self.image_rate_limit[id] = []
+            # add current time to the list
+            current_time = time.time()
+            self.image_rate_limit[id].append(current_time)
+            # remove old times
+            self.image_rate_limit[id] = [t for t in self.image_rate_limit[id] if current_time - t < self.image_rate_limit_time]
+            # check if count is not exceeded
+            if len(self.image_rate_limit[id]) > self.image_rate_limit_count:
+                return False
+            return True
+        except Exception as e:
+            logger.error(f'Could not check image rate limit due to an error: {e}')
+            return True
+
     async def imagine(self, prompt, id=0, size="1024x1024", style="vivid", n=1, revision=False, quality="standard"):
         '''
         Create image from text prompt
@@ -408,6 +446,10 @@ class OpenAIEngine:
         '''
         if self.image_generation == False:
             return None, None
+        # check if image generation is not rate limited
+        if self.image_generation:
+            if await self.image_rate_limit_check(id) == False:
+                return None, f'Image generation is rate limited (only {self.image_rate_limit_count} images per {round(self.image_rate_limit_time/60)} minutes are allowed). Please try again later.'
         try:
             prompt = prompt.replace('—', '--')
             # extract arguments from prompt (if any)
@@ -461,7 +503,7 @@ class OpenAIEngine:
                 return None, 'Your request was rejected because it may violate content policy. Please review it and try again.'
             return None, 'Your request was rejected. Please review it and try again.'
         except self.openai.RateLimitError as e:
-            logger.exception('OpenAI RateLimitError')
+            logger.error(f'OpenAI RateLimitError: {e}')
             return None, 'Service is getting rate limited. Please try again later.'
         except Exception as e:
             logger.exception('Could not imagine image from text')
@@ -520,7 +562,10 @@ class OpenAIEngine:
             # check if there is image in message and leave only text
             if self.vision:
                 message, trimmed = await self.leave_only_text(message)
-            response = await self.client.moderations.create(input=[message['content']])
+            response = await self.client.moderations.create(
+                input=[message['content']],
+                model='text-moderation-stable',
+                )
             output = response.results[0]
             if output.flagged:
                 categories = output.categories
@@ -536,6 +581,10 @@ class OpenAIEngine:
                 logger.info('Message from user ' + str(id) + ' was flagged (' + str(flagged_categories) + ')')
                 return False
             return True
+        except self.openai.RateLimitError as e:
+            logger.error(f'OpenAI RateLimitError: {e}')
+        except self.openai.InternalServerError as e:
+            logger.error(f'OpenAI InternalServerError: {e}')
         except Exception as e:
             logger.exception('Could not moderate message')
             return None
