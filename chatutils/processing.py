@@ -109,7 +109,7 @@ class ChatProc:
                 audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
                 self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
             except Exception as e:
-                logger.exception('Could not add speech2text statistics for user: ' + str(id))
+                logger.exception(f'Could not add speech2text statistics for user: ' + str(id))
         # delete audio file
         try:
             audio_file = str(audio_file)
@@ -299,7 +299,8 @@ class ChatProc:
                 messages = self.chats[id]
             else:
                 # Add message to the chat
-                messages.append({"role": "user", "content": message})
+                # messages.append({"role": "user", "content": message})
+                await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
             # Wait for response
             response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
@@ -316,22 +317,26 @@ class ChatProc:
                     if response[0] == 'function':
                         if response[1] == 'generate_image':
                             image, text = response[2][0], response[2][1]
-                            # add to chat history
-                            await self.add_to_chat_history(
-                                id=id, 
-                                message={"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"}
-                                )
-                            # add statistics
-                            try:
+                            if image is not None:
+                                # add to chat history
+                                await self.add_to_chat_history(
+                                    id=id, 
+                                    message={"role": "assistant", "content": f"<system: image - generated from the prompt: {text}>"}
+                                    )
+                                # add statistics
                                 await self.add_stats(id=id, images_generated=1)
-                            except Exception as e:
-                                logger.exception('Could not add image generation statistics for user: ' + str(id))
-                            return ('image', image)
+                                response = ('image', image, text)
+                            elif image is None and text is not None:
+                                text = 'Image was not generated. ' + text
+                                await self.add_to_chat_history(
+                                    id=id, 
+                                    message={"role": "assistant", "content": f"<system: {text}>"}
+                                    )
+                                response = text
+                            else:
+                                response = 'Sorry, something went wrong.'
+                                logger.error(f'Function was called, but image was not generated: {response}')
                         
-            # save chat history
-            self.chats[id] = messages
-            # save chat history to file
-            pickle.dump(self.chats, open(self.chats_location, "wb"))
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
@@ -369,10 +374,7 @@ class ChatProc:
             image, text = await self.text_engine.imagine(prompt=prompt, size=size, style=style, quality=quality, revision=True)
             if image is not None:
                 # add statistics
-                try:
-                    await self.add_stats(id=id, images_generated=1)
-                except Exception as e:
-                    logger.exception('Could not add image generation statistics for user: ' + str(id))
+                await self.add_stats(id=id, images_generated=1)
                 # add information to history
                 if add_to_chat:
                     await self.add_to_chat_history(
