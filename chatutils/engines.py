@@ -243,6 +243,7 @@ class OpenAIEngine:
         Output:
             * response - response from GPT (None if function was not detected or there was an error)
         '''
+        response_message = None
         try:
             if response is None:
                 return response
@@ -269,7 +270,7 @@ class OpenAIEngine:
             }
             return ('function', function_name, function_response, tokens)
         except Exception as e:
-            logger.error('Could not detect function called: ' + str(e))
+            logger.error(f'Could not detect function called: {e}. Response: {response_message}')
             return response
         
     async def chat(self, id=0, messages=None, attempt=0):

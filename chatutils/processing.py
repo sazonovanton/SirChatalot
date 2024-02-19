@@ -321,18 +321,17 @@ class ChatProc:
                                 # add to chat history
                                 await self.add_to_chat_history(
                                     id=id, 
-                                    message={"role": "assistant", "content": f"<system: image - generated from the prompt: {text}>"}
+                                    message={"role": "function", "name": response[1], "content": str(text)}
                                     )
                                 # add statistics
                                 await self.add_stats(id=id, images_generated=1)
                                 response = ('image', image, text)
                             elif image is None and text is not None:
-                                text = 'Image was not generated. ' + text
+                                response = f'Image was not generated. {text}'
                                 await self.add_to_chat_history(
                                     id=id, 
-                                    message={"role": "assistant", "content": f"<system: {text}>"}
+                                    message={"role": "assistant", "content": response}
                                     )
-                                response = text
                             else:
                                 response = 'Sorry, something went wrong.'
                                 logger.error(f'Function was called, but image was not generated: {response}')
