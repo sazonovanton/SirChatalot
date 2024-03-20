@@ -235,7 +235,7 @@ class ChatProc:
                 style = self.system_message
             # if vision is enabled, then add information about it
             if self.vision:
-                style += '\n# You have vision capabilities enabled, it means that you can images in chat'
+                style += '\n# You have vision capabilities enabled, it means that you can see images in chat'
             # get messages if chat exists
             if id in self.chats:
                 messages = self.chats[id]
@@ -401,9 +401,10 @@ class ChatProc:
         try:
             payload = pickle.load(open(filepath, "rb")) 
             return payload
-        except:
+        except Exception as e:
             payload = {}
             pickle.dump(payload, open(filepath, "wb"))
+            logger.debug(f'Could not load file: {filepath}. Created new file.')
             return payload
         
     async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None, images_generated=None):

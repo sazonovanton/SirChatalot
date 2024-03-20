@@ -214,8 +214,9 @@ class OpenAIEngine:
                 return None
             system_message = messages[0]
             messages = messages[1:]
+            logger.debug(f'Deleting messages: {messages[:trim_count]}')
             messages = messages[trim_count:]
-            messages.insert(0, system_message)            
+            messages.insert(0, system_message)         
             return messages
         except Exception as e:
             logger.exception('Could not trim messages')
@@ -290,6 +291,7 @@ class OpenAIEngine:
             * messages - messages from GPT (all messages - list of dictionaries with last message at the end)
             * tokens - number of tokens used in response (dict - {"prompt": int, "completion": int})
             If not successful returns None
+        If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
         '''
         if self.text_initiation == False:
             return None, None, None
@@ -308,7 +310,7 @@ class OpenAIEngine:
 
             # Trim if too long
             if messages_tokens > self.max_tokens:
-                while await self.count_tokens(messages) > self.max_tokens:
+                while await self.count_tokens(messages) > int(self.max_tokens*0.8):
                     messages = await self.trim_messages(messages)
                     if messages is None:
                         return 'There was an error. Please contact the developer.', messages, {"prompt": prompt_tokens, "completion": completion_tokens}
@@ -387,6 +389,7 @@ class OpenAIEngine:
             return None, messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # process response
         response = response.choices[0].message.content
+        # response = response.replace("'", "\\'")
         # add response to chat history
         messages.append({"role": "assistant", "content": str(response)})
         # save chat history to file
@@ -605,6 +608,7 @@ class OpenAIEngine:
                     message, trimmed = await self.leave_only_text(message)
                 text = message['role'] + ': ' + message['content']
                 tokens += len(encoding.encode(text))
+            logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
             logger.exception('Could not count tokens in text')
@@ -956,6 +960,7 @@ class YandexEngine:
             for message in messages:
                 text = message['role'] + ': ' + message['content']
                 tokens += len(encoding.encode(text))
+            logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
             logger.exception('Could not count tokens in text')

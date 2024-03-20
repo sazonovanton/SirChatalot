@@ -358,18 +358,31 @@ async def chat_modes_read(filepath='./data/chat_modes.ini'):
         logger.exception('Could not read chat modes from file: ' + filepath)
         return None
 
+# async def escaping(text):
+#     special_chars = "_*[]()~`>#+-=|{}.!"
+#     escaped_text = ""
+
+#     for char in text:
+#         if char in special_chars:
+#             escaped_text += "\\" + char
+#         else:
+#             escaped_text += char
+            
+#     escaped_text = escaped_text.replace('"', '\\"')
+#     return escaped_text
+
 async def escaping(text):
-    '''
-    Inside (...) part of inline link definition, all ')' and '\' must be escaped with a preceding '\' character.
-    In all other places characters:
-    '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' 
-    must be escaped with the preceding character '\'.
-    '''
-    escaped = text.translate(str.maketrans({"-":  r"\-", "]":  r"\]", "^":  r"\^", "$":  r"\$", "*":  r"\*", ".":  r"\.", "!":  r"\!",
-                                          "_":  r"\_", "[":  r"\[", "(":  r"\(", ")":  r"\)", "~":  r"\~", "`":  r"\`", ">":  r"\>",
-                                            "#":  r"\#", "+":  r"\+", "=":  r"\=", "|":  r"\|", "{":  r"\{", "}":  r"\}",
-                                            }))
-    return escaped
+   '''
+   Inside (...) part of inline link definition, all ')' and '\' must be escaped with a preceding '\' character.
+   In all other places characters:
+   '_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!' 
+   must be escaped with the preceding character '\'.
+   '''
+   escaped = text.translate(str.maketrans({"-":  r"\-", "]":  r"\]", "^":  r"\^", "$":  r"\$", "*":  r"\*", ".":  r"\.", "!":  r"\!",
+                                         "_":  r"\_", "[":  r"\[", "(":  r"\(", ")":  r"\)", "~":  r"\~", "`":  r"\`", ">":  r"\>",
+                                           "#":  r"\#", "+":  r"\+", "=":  r"\=", "|":  r"\|", "{":  r"\{", "}":  r"\}",
+                                           }))
+   return escaped
 
 async def send_message(update: Update, text, max_length=4096, markdown=0):
     '''
@@ -378,7 +391,7 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
     try:
         # split text into parts
         parts = [text[i:i+max_length] for i in range(0, len(text), max_length)]
-        logger.debug(f'>> Text length: {len(text)}. Split into {len(parts)} parts.')
+        logger.debug(f'>> Text length: {len(text)}. Split into {len(parts)} parts (markdown={markdown}).')
         # send each part
         for part in parts:
             if markdown == 0:
@@ -386,15 +399,16 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
             elif markdown == 1:
                 try:
                     await update.message.reply_markdown(part)
-                except:
-                    esc_part = await escaping(part)
-                    await update.message.reply_markdown_v2(esc_part)
+                except Exception as e:
+                    logger.debug(f'(!) Error sending message (mk1 - {e}): {part}')
+                    await send_message(update, part, markdown=2)
             elif markdown == 2:
                 try:
-                    await update.message.reply_markdown_v2(part)
-                except:
                     esc_part = await escaping(part)
                     await update.message.reply_markdown_v2(esc_part)
+                except Exception as e:
+                    logger.debug(f'(!) Error sending message (mk2 - {e}): {part}')
+                    await update.message.reply_text(part)
             else:
                 # if markdown is not 0, 1 or 2, send message without markdown
                 await update.message.reply_text(part)
