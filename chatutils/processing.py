@@ -442,11 +442,8 @@ class ChatProc:
                                 response = 'Sorry, something went wrong.'
                                 logger.error(f'Function was called, but image was not generated: {response}')
             else:
-                # add to chat history
-                await self.add_to_chat_history(
-                    id=id, 
-                    message={"role": "assistant", "content": response}
-                    )
+                # save chat history
+                await self.save_chat(id=id, messages=messages)
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
