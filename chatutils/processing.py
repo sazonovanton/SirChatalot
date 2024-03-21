@@ -21,7 +21,6 @@ import pickle
 import os
 from pydub import AudioSegment
 from datetime import datetime
-import asyncio
 
 # Support: OpenAI API, YandexGPT API
 from chatutils.engines import OpenAIEngine, YandexEngine
@@ -31,12 +30,14 @@ class ChatProc:
         text = text.lower()
         speech = speech.lower() if speech is not None else None
         self.max_tokens = 2000
+        self.summarize_too_long = False
         self.log_chats = config.getboolean("Logging", "LogChats") if config.has_option("Logging", "LogChats") else False
         self.model_prompt_price, self.model_completion_price = 0, 0
         self.audio_format, self.s2t_model_price = ".wav", 0
         if text == "openai":
             self.text_engine = OpenAIEngine(text=True)
             self.max_tokens = self.text_engine.max_tokens
+            self.summarize_too_long = self.text_engine.summarize_too_long
             self.model_prompt_price = self.text_engine.model_prompt_price
             self.model_completion_price = self.text_engine.model_completion_price
         elif text == "yagpt" or text == "yandexgpt" or text == "yandex":
@@ -76,6 +77,8 @@ class ChatProc:
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
         print('-- System message is used to set personality to the bot. It can be changed in the self.config file.\n')
+        if self.summarize_too_long:
+            print('-- Summarize too long is set to True. It means that if the text is too long, then it will be summarized instead of trimmed.\n')
 
         self.file_summary_tokens = int(config.get("Files", "MaxSummaryTokens")) if config.has_option("OpenAI", "MaxSummaryTokens") else (self.max_tokens // 2)
         self.max_file_length = int(config.get("Files", "MaxFileLength")) if config.has_option("OpenAI", "MaxFileLength") else 10000
@@ -272,8 +275,95 @@ class ChatProc:
             pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
-            logger.exception('Could not add message to chat history for user: ' + str(id))
+            logger.error(f'Could not add message to chat history for user {id}: {e}')
             return False
+        
+    async def save_chat(self, id=0, messages=None):
+        '''
+        Save chat history
+        Input id of user and messages
+        '''
+        try:
+            if messages is None:
+                logger.error('Could not save chat history. No messages provided')
+                return False
+            if id not in self.chats:
+                # If there is no chat, then create it
+                success = await self.init_style(id=id)
+                if not success:
+                    logger.error('Could not init style for user: ' + str(id))
+                    return False
+            # save chat history
+            self.chats[id] = messages
+            # save chat history to file
+            pickle.dump(self.chats, open(self.chats_location, "wb"))
+            logger.debug(f'Chat history for user {id} was saved successfully')
+            return True
+        except Exception as e:
+            logger.error(f'Could not save chat history for user {id}: {e}')
+            return False
+        
+    async def count_tokens(self, messages):
+        '''
+        Count tokens in messages
+        Input messages
+        '''
+        return await self.text_engine.count_tokens(messages)
+    
+    async def chat_summary(self, messages):
+        '''
+        Chat with GPT to summarize messages
+        Input messages
+        '''
+        return await self.text_engine.chat_summary(messages)
+
+    async def trim_messages(self, messages, trim_count=1):
+        '''
+        Trim messages (delete first trim_count messages)
+        Do not trim system message (role == 'system', id == 0)
+        '''
+        try:
+            if messages is None or len(messages) <= 1:
+                logger.warning('Could not trim messages')
+                return None
+            system_message = messages[0]
+            messages = messages[1:]
+            logger.debug(f'Deleting messages: {messages[:trim_count]}')
+            messages = messages[trim_count:]
+            messages.insert(0, system_message)
+            return messages
+        except Exception as e:
+            logger.error(f'Could not trim messages: {e}')
+            return None
+        
+    async def summarize_messages(self, messages, leave_messages=2):
+        '''
+        Summarize messages (leave only last leave_messages messages)
+        Do not summarize system message (role == 'system', id == 0)
+        '''
+        try:
+            if messages is None or len(messages) <= leave_messages:
+                logger.warning('Could not summarize messages')
+                return None
+            system_message = messages[0]
+            last_messages = messages[-leave_messages:]
+            logger.debug(f'Summarizing {len(messages)} messages, leaving only {len(last_messages)} last messages')
+            messages = messages[1:-leave_messages]
+            # summarize messages
+            summary, token_usage = await self.chat_summary(messages)
+            messages = []
+            messages.append(system_message)
+            messages.append({
+                "role": "assistant",
+                "content": f"<Previous conversation summary: {summary}>"
+            })
+            for message in last_messages:
+                messages.append(message)
+            logger.debug(f'Summarized messages to {len(messages)} messages, token usage: {token_usage}')
+            return messages, token_usage
+        except Exception as e:
+            logger.error(f'Could not summarize messages: {e}')
+            return None, {"prompt": 0, "completion": 0}
 
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
@@ -301,13 +391,29 @@ class ChatProc:
                 # Add message to the chat
                 # messages.append({"role": "user", "content": message})
                 await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
+            # Trim or summarize messages if they are too long
+            messages_tokens = await self.count_tokens(messages)
+            prompt_tokens, completion_tokens = 0, 0
+            if messages_tokens is None:
+                messages_tokens = 0
+            if messages_tokens > self.max_tokens:
+                if not self.summarize_too_long:
+                    while await self.count_tokens(messages) > int(self.max_tokens*0.8):
+                        messages = await self.trim_messages(messages)
+                else:
+                    messages, token_usage = await self.summarize_messages(messages)
+                    prompt_tokens += int(token_usage['prompt'])
+                    completion_tokens += int(token_usage['completion'])
+                if messages is None:
+                    return 'There was an error due to a long conversation. Please, contact the administrator or /delete your chat history.'
+
             # Wait for response
             response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
             try:
                 if tokens_used is not None:
-                    await self.add_stats(id=id, completion_tokens_used=int(tokens_used['completion']))
-                    await self.add_stats(id=id, prompt_tokens_used=int(tokens_used['prompt']))
+                    await self.add_stats(id=id, completion_tokens_used=int(completion_tokens + tokens_used['completion']))
+                    await self.add_stats(id=id, prompt_tokens_used=int(prompt_tokens + tokens_used['prompt']))
             except Exception as e:
                 logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             
@@ -335,7 +441,9 @@ class ChatProc:
                             else:
                                 response = 'Sorry, something went wrong.'
                                 logger.error(f'Function was called, but image was not generated: {response}')
-                        
+            else:
+                # save chat history
+                await self.save_chat(id, messages) 
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))

@@ -28,6 +28,7 @@ ImageGenerationPrice = 0.04
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 FunctionCalling = False
+SummarizeTooLong = False
 
 [Files]
 Enabled = True

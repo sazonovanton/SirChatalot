@@ -152,6 +152,7 @@ rates.txt
 *.wav
 *.pickle
 moderation.txt
+*.bak
 
 *.txt
 *.ppt 

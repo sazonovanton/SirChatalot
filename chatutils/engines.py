@@ -63,6 +63,7 @@ class OpenAIEngine:
             "ImageRateLimitCount": 0,
             "ImageRateLimitTime": 0,
             "FunctionCalling": False,
+            "SummarizeTooLong": False,
             })
         self.config.read('./data/.config')   
         # check if alternative API base is used
@@ -102,7 +103,8 @@ class OpenAIEngine:
         self.max_chat_length = int(self.config.get("OpenAI", "MaxSessionLength")) if self.config.has_option("OpenAI", "MaxSessionLength") else None
         self.chat_deletion = self.config.getboolean("OpenAI", "ChatDeletion")
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
-        
+        self.summarize_too_long = self.config.getboolean("OpenAI", "SummarizeTooLong") 
+
         self.vision = self.config.getboolean("OpenAI", "Vision")
         self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
         self.image_generation = self.config.getboolean("OpenAI", "ImageGeneration") 
@@ -202,25 +204,6 @@ class OpenAIEngine:
         except Exception as e:
             logger.exception('Could not convert speech to text')
             return None
-
-    async def trim_messages(self, messages, trim_count=1):
-        '''
-        Trim messages (delete first trim_count messages)
-        Do not trim system message (role == 'system', id == 0)
-        '''
-        try:
-            if messages is None or len(messages) <= 1:
-                logger.warning('Could not trim messages')
-                return None
-            system_message = messages[0]
-            messages = messages[1:]
-            logger.debug(f'Deleting messages: {messages[:trim_count]}')
-            messages = messages[trim_count:]
-            messages.insert(0, system_message)         
-            return messages
-        except Exception as e:
-            logger.exception('Could not trim messages')
-            return None
         
     async def generate_image(self, prompt):
         '''
@@ -308,17 +291,6 @@ class OpenAIEngine:
             if messages_tokens is None:
                 messages_tokens = 0
 
-            # Trim if too long
-            if messages_tokens > self.max_tokens:
-                while await self.count_tokens(messages) > int(self.max_tokens*0.8):
-                    messages = await self.trim_messages(messages)
-                    if messages is None:
-                        return 'There was an error. Please contact the developer.', messages, {"prompt": prompt_tokens, "completion": completion_tokens}
-                # recalculate tokens
-                messages_tokens = await self.count_tokens(messages)
-                if messages_tokens is None:
-                    messages_tokens = 0
-
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
@@ -389,7 +361,6 @@ class OpenAIEngine:
             return None, messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # process response
         response = response.choices[0].message.content
-        # response = response.replace("'", "\\'")
         # add response to chat history
         messages.append({"role": "assistant", "content": str(response)})
         # save chat history to file
@@ -513,7 +484,7 @@ class OpenAIEngine:
             logger.exception('Could not imagine image from text')
             return None, None
 
-    async def summary(self, text, size=240):
+    async def summary(self, text, size=400):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
@@ -748,6 +719,7 @@ class YandexEngine:
             "Temperature": 0.7,
             "MaxTokens": 1500,
             "instructionText": "You are a helpful chatbot assistant named Sir Chatalot.",
+            "SummarizeTooLong": False,
             })
         self.config.read('./data/.config') 
         self.chat_vars = {} 
@@ -757,6 +729,7 @@ class YandexEngine:
         self.chat_vars['Endpoint'] = self.config.get("YandexGPT", "ChatEndpoint")
         self.chat_vars['InstructEndpoint'] = self.config.get("YandexGPT", "InstructEndpoint")
         self.chat_vars['Model'] = self.config.get("YandexGPT", "ChatModel")
+        self.model = self.chat_vars['Model']
         self.chat_vars['PartialResults'] = self.config.getboolean("YandexGPT", "PartialResults")
         self.chat_vars['Temperature'] = self.config.getfloat("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
@@ -767,6 +740,7 @@ class YandexEngine:
         self.max_tokens = self.chat_vars['MaxTokens']
         self.model_prompt_price = 0
         self.model_completion_price = 0
+        self.summarize_too_long = self.config.getboolean("YandexGPT", "SummarizeTooLong") 
 
         self.vision = False # Not supported yet
         self.image_generation = False # Not supported yet
