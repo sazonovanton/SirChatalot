@@ -27,7 +27,7 @@ There are also some additional styles that you can choose from: Alice, Bob, Char
 Styles can be set up in the `./data/chat_modes.ini` file. You can add your own styles there or change the existing ones.
 
 ## Configuration
-The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file).  
+The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file). Example configuration file is in the `./data` directory.  
 File should contain (for OpenAI API):
 ```ini
 [Telegram]
@@ -176,8 +176,9 @@ Using GPT-4 will require more money, but it will also give you more power. GPT-4
 `gpt-4-1106-preview` is a model from GPT-4 Turbo family, which can be more powerful than GPT-4 and offered at a lower price.  
 
 ## Vision
-GPT-4 can now [understand images](https://platform.openai.com/docs/guides/vision) with a new model `gpt-4-vision-preview`. You can use it with SirChatalot.  
-To use this functionality you should make some changes in configuration file. Example:  
+Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
+To use this functionality you should make some changes in configuration file  (change OpenAI to Anthropic if you use Claude).    
+Example:  
 ```ini
 ...
 [OpenAI]
@@ -191,12 +192,11 @@ DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 ...
 ```  
-Check if you have an access to GPT-4V.  
-Models can be found here: https://platform.openai.com/docs/models/gpt-4  
-Prices can be found here: https://openai.com/pricing  
+Check if you have an access to GPT-4V or Claude 3 models with vision capabilities.  
+OpenAI models can be found [here](https://platform.openai.com/docs/models/gpt-4) and prices can be found [here](https://openai.com/pricing).   
+Claude 3 models and prices can be found [here](https://docs.anthropic.com/claude/docs/models-overview).
 
-Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.    
-`gpt-4-vision-preview` is a model from GPT-4 Turbo family, which can be more capable than GPT-4 and offered at a lower price.  
+Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.   
 
 ## Image generation
 You can generate images with OpenAI API. To do that, you need to change the `OpenAI.ImageGeneration` field to `True` in the `./data/.config` file:
@@ -214,7 +214,7 @@ To generate an image, send the bot a message with the `/imagine <text>` command.
 Learn more about image generation with DALL-E [here](https://platform.openai.com/docs/guides/images).
 
 ## Function calling
-You can use function calling capabilities. This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
+You can use function calling capabilities with OpenAI. This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
 Right now only image generation is supported via function calls.  
 To use this functionality you should make some changes in configuration file. Example:  
 ```ini
@@ -320,7 +320,7 @@ SummarizeTooLong = True
 
 You can find Claude models [here](https://docs.anthropic.com/claude/docs/models-overview).
 
-You can also set up HTTP proxy for API requests in the `./data/.config` file. Example:
+You can also set up HTTP proxy for API requests in the `./data/.config` file (tested) like this:
 ```ini
 [Anthropic]
 ...
@@ -388,6 +388,14 @@ You can use Docker to run the bot. You need to build the image first. To do that
 docker compose up -d
 ```
 This will build the image and run the container. You can then use the bot as described above.  
+To rebuild the image add `--build` flag to the command:
+```bash
+docker compose up -d --build
+```
+If you are using custo docker-compose file, you can use it like this:
+```bash
+docker compose -f docker-compose.yml up -d --build
+```
 To stop the container, run the following command:
 ```bash
 docker compose down
@@ -395,7 +403,7 @@ docker compose down
 
 ## Read messages
 You can read user messages for moderation purposes with `read_messages.py`.  
-Call it from project root dir like this:
+Call it from projects `chatutils` directory with:
 ```bash
 python3 read_messages.py
 ```  
@@ -407,13 +415,12 @@ python3 read_messages.py
 * The bot can store messages in a log file in a event of an error. The file is not encrypted and can be accessed by anyone with access to the server.
 * The bot temporarily stores voice messages in `./data/voice` directory. The files are deleted after processing (successful or not), but can remain on the server if the event of an error. The files are not encrypted and can be accessed by anyone with access to the server.
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
-* The bot will try to continue conversation in the event of reaching maximum number of tokens by trimming the conversation history or summarazing it (`OpenAI.SummarizeTooLong`). If the conversation is long enough to cause errors, it will be deleted if `OpenAI.ChatDeletion` set to `True` in the `./data/.config` file (see *Configuration*).
+* The bot will try to continue conversation in the event of reaching maximum number of tokens by trimming the conversation history or summarazing it (`SummarizeTooLong`). If the conversation is long enough to cause errors, it will be deleted if `ChatDeletion` set to `True` in the `./data/.config` file (see *Configuration*).
 * The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
 * The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see *Configuration*), the file will be stored in `./data/files` directory. The files are not encrypted and can be accessed by anyone with access to the server.
 * If message is flagged by the OpenAI Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 * Functionalty for calculating cost of usage is not working for images for now, so you should pay attenion to that.    
-
 
 ## License
 This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). See the `LICENSE` file for more details.
@@ -421,6 +428,9 @@ This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.h
 ## Acknowledgements
 * [OpenAI ChatGPT API](https://platform.openai.com/docs/guides/chat) - The API used for generating responses.
 * [OpenAI Whisper API](https://platform.openai.com/docs/guides/speech-to-text) - The API used for speech recognition.
+* [OpenAI DALL-E API](https://platform.openai.com/docs/guides/images) - The API used for generating images.
+* [Yandex GPT API](https://cloud.yandex.ru/docs/yandexgpt/) - The API used for generating responses.
+* [Anthropic Claude API](https://docs.anthropic.com/claude/docs/text-generation) - The API used for generating responses.
 * [python-telegram-bot](https://github.com/python-telegram-bot/python-telegram-bot) - The library used for interacting with the Telegram API.
 * [FFmpeg](https://ffmpeg.org/) - The library used for converting voice messages.
 * [pydub](https://github.com/jiaaro/pydub) - The library used for finding the duration of voice messages.
