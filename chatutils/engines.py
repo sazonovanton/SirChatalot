@@ -1040,11 +1040,14 @@ class AnthropicEngine:
             if messages is None:
                 return system_prompt, None
             logger.debug(f'Messages to revise for Anthropic: {len(messages)}')
+            # first message must use the "user" role
             # itterate over messages
             for message in messages:
                 if message['role'] == 'system':
                     system_prompt += f"{message['content']}\n"
                     continue
+                if len(new_messages) == 0 and message['role'] != 'user':
+                    new_messages.append({"role": "user", "content": ""})
                 if message['role'] == 'user' and self.vision:
                     if type(message['content']) == list:
                         new_message = {

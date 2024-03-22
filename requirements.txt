@@ -1,5 +1,6 @@
 python-telegram-bot>=20.1
 openai>=1.0.0
+anthropic
 tiktoken
 pydub>=0.25.1
 PyPDF2
