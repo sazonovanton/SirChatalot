@@ -1,0 +1,21 @@
+[Telegram]
+Token = 123456789:ABCDEFGHKLMNOPQRSTUVWXYZ
+AccessCodes = myaccesscode
+GeneralRateLimit = 60
+RateLimitTime = 3600
+TextEngine = Claude
+
+[Anthropic]
+SecretKey = sk-ant-api-123456789
+ChatModel = claude-3-haiku-20240307
+ChatModelPromptPrice = 0.00025
+ChatModelCompletionPrice = 0.00125
+Temperature = 0.7
+MaxTokens = 1500
+SystemMessage = You are a librarian named Bob whom one may met in tavern. You a chatting with user via Telegram messenger.
+EndUserID = False
+Vision = True
+ImageSize = 768
+DeleteImageAfterAnswer = False
+ImageDescriptionOnDelete = False
+SummarizeTooLong = False

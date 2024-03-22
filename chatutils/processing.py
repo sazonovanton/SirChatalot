@@ -22,8 +22,8 @@ import os
 from pydub import AudioSegment
 from datetime import datetime
 
-# Support: OpenAI API, YandexGPT API
-from chatutils.engines import OpenAIEngine, YandexEngine
+# Support: OpenAI API, YandexGPT API, Claude API
+from chatutils.engines import OpenAIEngine, YandexEngine, AnthropicEngine
 
 class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
@@ -36,15 +36,18 @@ class ChatProc:
         self.audio_format, self.s2t_model_price = ".wav", 0
         if text == "openai":
             self.text_engine = OpenAIEngine(text=True)
-            self.max_tokens = self.text_engine.max_tokens
-            self.summarize_too_long = self.text_engine.summarize_too_long
-            self.model_prompt_price = self.text_engine.model_prompt_price
-            self.model_completion_price = self.text_engine.model_completion_price
         elif text == "yagpt" or text == "yandexgpt" or text == "yandex":
             self.text_engine = YandexEngine(text=True)
+        elif text == "claude" or text == "anthropic":
+            self.text_engine = AnthropicEngine(text=True)
         else:
             logger.error("Unknown text engine: {}".format(text))
             raise Exception("Unknown text engine: {}".format(text))
+        
+        self.model_prompt_price = self.text_engine.model_prompt_price
+        self.model_completion_price = self.text_engine.model_completion_price
+        self.max_tokens = self.text_engine.max_tokens
+        self.summarize_too_long = self.text_engine.summarize_too_long
         
         self.vision = self.text_engine.vision
         if self.vision:
@@ -80,8 +83,8 @@ class ChatProc:
         if self.summarize_too_long:
             print('-- Summarize too long is set to True. It means that if the text is too long, then it will be summarized instead of trimmed.\n')
 
-        self.file_summary_tokens = int(config.get("Files", "MaxSummaryTokens")) if config.has_option("OpenAI", "MaxSummaryTokens") else (self.max_tokens // 2)
-        self.max_file_length = int(config.get("Files", "MaxFileLength")) if config.has_option("OpenAI", "MaxFileLength") else 10000
+        self.file_summary_tokens = int(config.get("Files", "MaxSummaryTokens")) if config.has_option("Files", "MaxSummaryTokens") else (self.max_tokens // 2)
+        self.max_file_length = int(config.get("Files", "MaxFileLength")) if config.has_option("Files", "MaxFileLength") else 10000
 
         # load chat history from file
         self.chats_location = "./data/tech/chats.pickle"
