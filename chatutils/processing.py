@@ -329,8 +329,8 @@ class ChatProc:
             if messages is None or len(messages) <= 1:
                 logger.warning('Could not trim messages')
                 return None
-            system_message = messages[0]
-            messages = messages[1:]
+            system_message = messages[0] if messages[0]['role'] == 'system' else {"role": "system", "content": self.system_message}
+            messages = messages[1:] if messages[0]['role'] == 'system' else messages
             logger.debug(f'Deleting messages: {messages[:trim_count]}')
             messages = messages[trim_count:]
             messages.insert(0, system_message)
@@ -348,10 +348,10 @@ class ChatProc:
             if messages is None or len(messages) <= leave_messages:
                 logger.warning('Could not summarize messages')
                 return None
-            system_message = messages[0]
+            system_message = messages[0] if messages[0]['role'] == 'system' else {"role": "system", "content": self.system_message}
             last_messages = messages[-leave_messages:]
             logger.debug(f'Summarizing {len(messages)} messages, leaving only {len(last_messages)} last messages')
-            messages = messages[1:-leave_messages]
+            messages = messages[1:-leave_messages] if messages[0]['role'] == 'system' else messages[:-leave_messages]
             # summarize messages
             summary, token_usage = await self.chat_summary(messages)
             messages = []
@@ -722,7 +722,10 @@ class ChatProc:
             else:
                 messages = [{"role": "system", "content": style}]
             # change style
-            messages[0]['content'] = style
+            if messages[0]['role'] == 'system':
+                messages[0]['content'] = style 
+            else:
+                messages.insert(0, {"role": "system", "content": style})
             # save chat history
             self.chats[id] = messages
             # save chat history to file

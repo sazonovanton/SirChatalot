@@ -506,25 +506,32 @@ class OpenAIEngine:
             if messages is None or len(messages) == 0:
                 return None
             text = ''
+            prompt_tokens, completion_tokens = 0, 0
             # Concatenate all messages into a single string
             for i in range(1, len(messages)):
                 message = messages[i]
-                image_description = self.describe_image(message)
+                image_description, token_usage = await self.describe_image(message)
                 if image_description is None:
                     text += message['role'] + ': ' + str(message['content']) + '\n'
                 else:
                     text += message['role'] + ': ' + '<There was an image here, description: ' + image_description + '\n'
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
             if short:
                 # Generate short summary
                 summary, token_usage = await self.summary(text, size=30)
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
             else:
                 # Generate long summary
                 summary, token_usage = await self.summary(text)
-            return summary, token_usage
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
+            return summary, {"prompt": prompt_tokens, "completion": completion_tokens}
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None, {"prompt": 0, "completion": 0}
-
+        
     async def moderation_pass(self, message, id=0):
         try:
             # check if message is not empty
@@ -1052,30 +1059,30 @@ class AnthropicEngine:
                 
                 # TODO: optimize this part
                 if len(new_messages) == 0 and message['role'] != 'user':
-                    new_messages.append({"role": "user", "content": ""})
-                last_role = new_messages[-1]['role'] if len(new_messages) > 0 else None
-                if last_role is not None:
-                    if message['role'] == last_role:
-                        if message['role'] == 'user':
-                            new_messages.append({"role": "assistant", "content": ""})
-                        else:
-                            new_messages.append({"role": "user", "content": ""})
+                    new_messages.append({"role": "user", "content": "<start>"})
+                last_role = new_messages[-1]['role'] if len(new_messages) > 0 else 'None'
+                if message['role'] == last_role and type(message['content']) == str:
+                    new_messages[-1]['content'] += '\n' + message['content']
+                    continue
 
                 if message['role'] == 'user' and self.vision:
                     if type(message['content']) == list:
-                        new_message = {
-                            "role": "user",
-                            "content": []
-                        }
+                        if last_role == 'user' and type(new_messages[-1]['content']) == list:
+                            pass
+                        else:
+                            new_messages.append({
+                                "role": "user",
+                                "content": []
+                            })
                         for item in message['content']:
                             if item['type'] == 'text':
-                                new_message['content'].append({
+                                new_messages[-1]['content'].append({
                                     "type": "text",
                                     "text": item['text'],
                                 })
                             elif item['type'] == 'image':
                                 image_url = str(item['image_url']['url']).replace('data:image/jpeg;base64,', '')
-                                new_message['content'].append({
+                                new_messages[-1]['content'].append({
                                     "type": "image",
                                     "source": {
                                         "type": "base64",
@@ -1084,7 +1091,6 @@ class AnthropicEngine:
                                     }
                                 })
                         logger.debug(f'Image was added to message for Anthropic')
-                        new_messages.append(new_message)
                         continue
                 new_messages.append(message)
             return system_prompt, new_messages
@@ -1133,10 +1139,8 @@ class AnthropicEngine:
                     system=system_prompt,
                     messages=new_messages
             )
-
             prompt_tokens = int(response.usage.input_tokens)
             completion_tokens = int(response.usage.output_tokens)
-
             # Delete images from chat history
             if self.vision and self.delete_image_after_chat:
                 messages, token_usage = await self.delete_images(messages)
@@ -1215,21 +1219,28 @@ class AnthropicEngine:
             if messages is None or len(messages) == 0:
                 return None
             text = ''
+            prompt_tokens, completion_tokens = 0, 0
             # Concatenate all messages into a single string
             for i in range(1, len(messages)):
                 message = messages[i]
-                image_description = self.describe_image(message)
+                image_description, token_usage = await self.describe_image(message)
                 if image_description is None:
                     text += message['role'] + ': ' + str(message['content']) + '\n'
                 else:
                     text += message['role'] + ': ' + '<There was an image here, description: ' + image_description + '\n'
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
             if short:
                 # Generate short summary
                 summary, token_usage = await self.summary(text, size=30)
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
             else:
                 # Generate long summary
                 summary, token_usage = await self.summary(text)
-            return summary, token_usage
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
+            return summary, {"prompt": prompt_tokens, "completion": completion_tokens}
         except Exception as e:
             logger.exception('Could not summarize chat history')
             return None, {"prompt": 0, "completion": 0}
