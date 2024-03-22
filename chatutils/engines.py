@@ -77,7 +77,7 @@ class OpenAIEngine:
         # TODO: working with other parameters
         self.client = AsyncOpenAI(
             api_key=self.config.get("OpenAI", "SecretKey"),
-            base_url=self.base_url
+            base_url=self.base_url,
         )
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
@@ -339,13 +339,13 @@ class OpenAIEngine:
             if 'does not exist' in str(e):
                 logger.error(f'Invalid model error for model {self.model}')
                 return 'Something went wrong with an attempt to use the model. Please contact the developer.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens} 
-            logger.exception('Invalid request error')
+            logger.error(f'Invalid request error: {e}')
             if self.chat_deletion or attempt > 0:
-                logger.info(f'Chat session for user {id} was deleted due to an error')
+                logger.debug(f'Chat session for user {id} was deleted due to an error')
                 messages = messages[0]
                 return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
             else:
-                return 'It seems that chat session is too long. You can /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+                return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if something else
         except Exception as e:
             logger.exception('Could not get response from GPT')
@@ -508,7 +508,12 @@ class OpenAIEngine:
             text = ''
             # Concatenate all messages into a single string
             for i in range(1, len(messages)):
-                text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
+                message = messages[i]
+                image_description = self.describe_image(message)
+                if image_description is None:
+                    text += message['role'] + ': ' + str(message['content']) + '\n'
+                else:
+                    text += message['role'] + ': ' + '<There was an image here, description: ' + image_description + '\n'
             if short:
                 # Generate short summary
                 summary, token_usage = await self.summary(text, size=30)
@@ -606,6 +611,8 @@ class OpenAIEngine:
             # no need to describe
             return None
         try:
+            prompt_tokens, completion_tokens = 0, 0
+            summary = None
             message_copy = message.copy()   
             # Check if there is images in message
             if 'content' in message_copy and type(message_copy['content']) == list:
@@ -901,7 +908,7 @@ class YandexEngine:
             text = ''
             # Concatenate all messages into a single string
             for i in range(1, len(messages)):
-                text += messages[i]['role'] + ': ' + messages[i]['content'] + '\n'
+                text += messages[i]['role'] + ': ' + str(messages[i]['content']) + '\n'
             if short:
                 # Generate short summary
                 summary = await self.summary(text, size=30)
@@ -930,6 +937,417 @@ class YandexEngine:
         except Exception as e:
             logger.exception('Could not count tokens in text')
             return None
+    
+    
+class AnthropicEngine:
+    def __init__(self, text=False, speech=False):
+        '''
+        Initialize Anthropic API for text generation
+        Available: text generation, speech2text
+        '''
+        from anthropic import AsyncAnthropic
+        import anthropic 
+        self.anthropic = anthropic
+        import configparser
+        self.config = configparser.SafeConfigParser({
+            "ChatModel": "claude-3-haiku-20240307",
+            "ChatModelCompletionPrice": 0,
+            "ChatModelPromptPrice": 0,
+            "Temperature": 0.7,
+            "MaxTokens": 3997,
+            "EndUserID": False,
+            "ChatDeletion": False,
+            "SystemMessage": "You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.",
+            "MaxFileLength": 10000,
+            "MinLengthTokens": 100,
+            "Vision": False,
+            "ImageSize": 512,
+            "SummarizeTooLong": False,
+            })
+        self.config.read('./data/.config')   
+        # check if alternative API base is used
+        self.base_url = None
+        if self.config.has_option("Anthropic", "APIBase"):
+            if str(self.config.get("Anthropic", "APIBase")).lower() not in ['default', '', 'none', 'false']:
+                self.base_url = self.config.get("Anthropic", "APIBase")
+            else:
+                self.base_url = None
+        # Set up the API 
+        # TODO: working with other parameters
+        proxy = self.config.get("Anthropic", "Proxy") if self.config.has_option("Anthropic", "Proxy") else None
+        # proxy = {"http://": proxy, "https://": proxy} if proxy else None
+        self.client = AsyncAnthropic(
+            api_key=self.config.get("Anthropic", "SecretKey"),
+            base_url=self.base_url,
+            proxies=proxy,
+        )
+        self.text_initiation, self.speech_initiation = text, speech
+        self.text_init() if self.text_initiation else None
+
+        self.image_generation = False
+        self.function_calling = False
+
+        logger.info('Anthropic Engine was initialized')
+
+    def text_init(self):
+        '''
+        Initialize text generation
+        '''
+        self.model = self.config.get("Anthropic", "ChatModel")
+        self.model_completion_price = float(self.config.get("Anthropic", "ChatModelCompletionPrice")) 
+        self.model_prompt_price = float(self.config.get("Anthropic", "ChatModelPromptPrice")) 
+        self.temperature = float(self.config.get("Anthropic", "Temperature"))
+        self.max_tokens = int(self.config.get("Anthropic", "MaxTokens"))
+        self.end_user_id = self.config.getboolean("Anthropic", "EndUserID") 
+        self.system_message = self.config.get("Anthropic", "SystemMessage")
+        self.file_summary_tokens = int(self.config.get("Anthropic", "MaxSummaryTokens")) if self.config.has_option("Anthropic", "MaxSummaryTokens") else (self.max_tokens // 2)
+        self.max_file_length = int(self.config.get("Anthropic", "MaxFileLength"))
+        self.min_length_tokens = int(self.config.get("Anthropic", "MinLengthTokens")) 
+        self.max_chat_length = int(self.config.get("Anthropic", "MaxSessionLength")) if self.config.has_option("Anthropic", "MaxSessionLength") else None
+        self.chat_deletion = self.config.getboolean("Anthropic", "ChatDeletion")
+        self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
+        self.summarize_too_long = self.config.getboolean("Anthropic", "SummarizeTooLong") 
+
+        self.vision = self.config.getboolean("Anthropic", "Vision")
+        self.image_size = int(self.config.get("Anthropic", "ImageSize")) 
+        if self.vision:
+            self.delete_image_after_chat = self.config.getboolean("Anthropic", "DeleteImageAfterAnswer") if self.config.has_option("Anthropic", "DeleteImageAfterAnswer") else False
+            self.image_description = self.config.getboolean("Anthropic", "ImageDescriptionOnDelete") if self.config.has_option("Anthropic", "ImageDescriptionOnDelete") else False
+
+        if self.max_chat_length is not None:
+            print('Max chat length:', self.max_chat_length)
+            print('-- Max chat length is states a length of chat session. It can be changed in the self.config file.\n')
+        if self.chat_deletion:
+            print('Chat deletion is enabled')
+            print('-- Chat deletion is used to force delete old chat sessions. Without it long sessions should be summaried. It can be changed in the self.config file.\n')
+        if self.vision:
+            print('Vision is enabled')
+            print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
+            print('-- Learn more: https://docs.anthropic.com/claude/docs/vision\n')
+
+    async def revise_messages(self, messages):
+        '''
+        Revise messages from OpenAI API format to Anthropic format
+        Input:
+            * messages - list of dictionaries with messages
+        Output:
+            * system_prompt - system message
+            * new_messages - list of dictionaries with revised messages
+        '''
+        try:
+            new_messages = []
+            system_prompt = ""
+            if messages is None:
+                return system_prompt, None
+            logger.debug(f'Messages to revise for Anthropic: {len(messages)}')
+            # itterate over messages
+            for message in messages:
+                if message['role'] == 'system':
+                    system_prompt += f"{message['content']}\n"
+                    continue
+                if message['role'] == 'user' and self.vision:
+                    if type(message['content']) == list:
+                        new_message = {
+                            "role": "user",
+                            "content": []
+                        }
+                        for item in message['content']:
+                            if item['type'] == 'text':
+                                new_message['content'].append({
+                                    "type": "text",
+                                    "text": item['text'],
+                                })
+                            elif item['type'] == 'image':
+                                image_url = str(item['image_url']['url']).replace('data:image/jpeg;base64,', '')
+                                new_message['content'].append({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/jpeg",
+                                        "data": image_url,
+                                    }
+                                })
+                        logger.debug(f'Image was added to message for Anthropic')
+                        new_messages.append(new_message)
+                        continue
+                new_messages.append(message)
+            return system_prompt, new_messages
+        except Exception as e:
+            logger.error(f'Could not revise messages for Anthropic: {e}')
+            return "", None
+        
+    async def chat(self, id=0, messages=None, attempt=0):
+        '''
+        Chat with Claude
+        Input id of user and message
+        Input:
+          * id - id of user
+          * messages = [
+                {"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot."},
+                {"role": "user", "content": "Hello, how are you?"},
+                {"role": "assistant", "content": "I am fine, how are you?"},
+                ...]
+          * attempt - attempt to send message
+        Output:
+            * response - response from Claude (just text of last reply)
+            * messages - messages from Claude (all messages - list of dictionaries with last message at the end)
+            * tokens - number of tokens used in response (dict - {"prompt": int, "completion": int})
+            If not successful returns None
+        If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
+        '''
+        if self.text_initiation == False:
+            return None, None, None
+        if messages is None:
+            return None, None, None
+        prompt_tokens, completion_tokens = 0, 0
+        # get response from Claude
+        try:
+            messages_tokens = await self.count_tokens(messages)
+            if messages_tokens is None:
+                messages_tokens = 0
+
+            # user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
+            requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
+            requested_tokens = max(requested_tokens, 50)
+            system_prompt, new_messages = await self.revise_messages(messages)
+            response = await self.client.messages.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=requested_tokens,
+                    system=system_prompt,
+                    messages=new_messages
+            )
+
+            prompt_tokens = int(response.usage.input_tokens)
+            completion_tokens = int(response.usage.output_tokens)
+
+            # Delete images from chat history
+            if self.vision and self.delete_image_after_chat:
+                messages, token_usage = await self.delete_images(messages)
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
+
+        # if connection problems
+        except self.anthropic.APIConnectionError as e:
+            logger.error(f'Anthropic APIConnectionError: {e}')
+            return 'Anthropic service is not available. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        # if ratelimit is reached
+        except self.anthropic.RateLimitError as e:
+            logger.error(f'Anthropic RateLimitError: {e}')
+            return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        # if chat is too long
+        except self.anthropic.BadRequestError as e:
+            if 'does not exist' in str(e):
+                logger.error(f'Invalid model error for model {self.model}')
+                return 'Something went wrong with an attempt to use the model. Please contact the administrator.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens} 
+            logger.error(f'Invalid request error: {e}')
+            if self.chat_deletion or attempt > 0:
+                logger.debug(f'Chat session for user {id} was deleted due to an error')
+                messages = messages[0]
+                return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
+            else:
+                return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        # if something else
+        except Exception as e:
+            logger.error(f'Could not get response from Claude: {e}')
+            return None, messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        # process response
+        response = response.content[0].text
+        # add response to chat history
+        messages.append({"role": "assistant", "content": str(response)})
+        # save chat history to file
+        if self.max_chat_length is not None:
+            if self.chat_deletion:
+                l = len([i for i in messages if i['role'] == 'user'])
+                if self.max_chat_length - l <= 3:
+                    response += '\n*System*: You are close to the session limit. Messages left: ' + str(self.max_chat_length - l) + '.'
+        if attempt == 1:
+            # if chat is too long, return response and advice to delete session
+            response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
+        return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
+
+    async def summary(self, text, size=400):
+        '''
+        Make summary of text
+        Input text and size of summary (in tokens)
+        '''
+        # Get a summary prompt
+        system_prompt = f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'
+        summary = []
+        summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
+        # Get the response from the API
+        requested_tokens = min(size, self.max_tokens)
+        response = await self.client.messages.create(
+                model=self.model,
+                temperature=self.temperature, 
+                max_tokens=requested_tokens,
+                system=system_prompt,
+                messages=summary
+        )
+        prompt_tokens = int(response.usage.input_tokens)
+        completion_tokens = int(response.usage.output_tokens)
+        response = response.content[0].text 
+        # Return the response
+        return response, {"prompt": prompt_tokens, "completion": completion_tokens}
+
+    async def chat_summary(self, messages, short=False):
+        '''
+        Summarize chat history
+        Input messages and short flag (states that summary should be in one sentence)
+        '''
+        try:
+            if messages is None or len(messages) == 0:
+                return None
+            text = ''
+            # Concatenate all messages into a single string
+            for i in range(1, len(messages)):
+                message = messages[i]
+                image_description = self.describe_image(message)
+                if image_description is None:
+                    text += message['role'] + ': ' + str(message['content']) + '\n'
+                else:
+                    text += message['role'] + ': ' + '<There was an image here, description: ' + image_description + '\n'
+            if short:
+                # Generate short summary
+                summary, token_usage = await self.summary(text, size=30)
+            else:
+                # Generate long summary
+                summary, token_usage = await self.summary(text)
+            return summary, token_usage
+        except Exception as e:
+            logger.exception('Could not summarize chat history')
+            return None, {"prompt": 0, "completion": 0}
+
+    async def count_tokens(self, messages, model='gpt-3.5-turbo'):
+        '''
+        Count tokens in messages via tiktoken
+        ! ALGORITHM IS NOT ACCURATE AND USED JUST FOR ESTIMATION !
+        '''
+        try:
+            # Get the encoding for the model
+            encoding = tiktoken.encoding_for_model(model)
+            # Count the number of tokens
+            tokens = 0
+            for message in messages:
+                # Check if there is images in message and leave only text
+                if self.vision:
+                    message, trimmed = await self.leave_only_text(message)
+                text = message['role'] + ': ' + message['content']
+                tokens += len(encoding.encode(text))
+            logger.debug(f'Messages were counted for tokens: {tokens}')
+            return tokens
+        except Exception as e:
+            logger.exception('Could not count tokens in text')
+            return None
+        
+    async def leave_only_text(self, message):
+        '''
+        Leave only text in message with images
+        '''
+        if message is None:
+            return None, False
+        try:
+            message_copy = message.copy()
+            # Check if there is images in message
+            trimmed = False
+            if 'content' in message_copy and type(message_copy['content']) == list:
+                # Leave only text in message
+                for i in range(len(message_copy['content'])):
+                    if message_copy['content'][i]['type'] == 'text':
+                        message_copy['content'] = message_copy['content'][i]['text']
+                        trimmed = True
+                        break
+            return message_copy, trimmed
+        except Exception as e:
+            logger.exception('Could not leave only text in message')
+            return message, False
+        
+    async def describe_image(self, message, user_id=None):
+        '''
+        Describe image that was sent by user
+        '''
+        if self.vision == False:
+            # no need to describe
+            return None
+        try:
+            prompt_tokens, completion_tokens = 0, 0
+            summary = None
+            message_copy = message.copy()   
+            # Check if there is images in message
+            if 'content' in message_copy and type(message_copy['content']) == list:
+                # Describe image
+                success = False
+                for i in range(len(message_copy['content'])):
+                    if message_copy['content'][i]['type'] == 'image':
+                        image_url = message_copy['content'][i]['image_url']
+                        success = True
+                        break
+                if success == False:
+                    return None, {"prompt": 0, "completion": 0}
+                new_message = {
+                    "role": 'user',
+                    "content": [{
+                            "type": "text",
+                            "text": "Describe given image, answer with description only."
+                        },
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_url,
+                            },
+                        }
+                    ]
+                }
+
+                response = await self.client.messages.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=400,
+                        messages=[new_message],
+                        # user=str(user_id)
+                )
+                prompt_tokens = int(response.usage.input_tokens)
+                completion_tokens = int(response.usage.output_tokens)
+                summary = response.content[0].text 
+                # log to logger file fact of message being received
+                logger.debug(f'Image was summarized by Anthropic API to: {summary}')
+            return summary, {"prompt": prompt_tokens, "completion": completion_tokens}
+        except Exception as e:
+            logger.error(f'Could not describe image with Anthropic API: {e}')
+            return None, {"prompt": 0, "completion": 0}
+
+    async def delete_images(self, messages):
+        '''
+        Filter out images from chat history, replace them with text
+        '''
+        if self.vision == False:
+            # no need to filter
+            return None
+        try:
+            tokens_prompt, tokens_completion = 0, 0
+            # Check if there is images in messages
+            for i in range(len(messages)):
+                # Leave only text in message
+                text, trimmed = await self.leave_only_text(messages[i])
+                if trimmed == False:
+                    # no images in message
+                    continue
+                text = text['content'] 
+                if self.image_description:
+                    image_description, token_usage = await self.describe_image(messages[i])
+                    tokens_prompt += int(token_usage['prompt'])
+                    tokens_completion += int(token_usage['completion'])
+                    text += f'\n<There was an image here, but it was deleted. Image description: {image_description} Resend the image if you needed.>'
+                else:
+                    text += '\n<There was an image here, but it was deleted from the dialog history to keep low usage of API. Resend the image if you needed.>'
+                messages[i] = {"role": messages[i]['role'], "content": text}
+                logger.debug(f'Image was deleted from chat history')
+            return messages, {"prompt": tokens_prompt, "completion": tokens_completion}
+        except Exception as e:
+            logger.exception('Could not filter images')
+            return None, {"prompt": 0, "completion": 0}
         
 
 ####### TEST #######
@@ -937,8 +1355,9 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     # engine = OpenAIEngine(text=True)
-    engine = YandexEngine(text=True)
-    # engine = TextGenEngine(text=True)
+    # engine = YandexEngine(text=True)
+    engine = AnthropicEngine(text=True)
+
     messages = [
         {"role": "system", "content": "Your name is Sir Chatalot, you are assisting the user with a task."},
         {"role": "user", "content": "Hello, how are you?"},

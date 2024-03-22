@@ -1,23 +1,17 @@
 # SirChatalot
 
 This is a Telegram bot that can use various services to generate responses to messages.  
-As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT](https://cloud.yandex.ru/docs/yandexgpt/) to generate responses, OpenAI's GPT-4 models with vision support for image-based tasks and DALL-E for image generation. 
+As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT API](https://cloud.yandex.ru/docs/yandexgpt/) or [Claude API](https://docs.anthropic.com/claude/docs/text-generation) to generate responses to text messages. OpenAI's [GPT-4 models](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) or Anthropic's [Claude 3 models](https://docs.anthropic.com/claude/docs/models-overview) can have vision capabilities.  
+If you use OpenAI's API, you can also generate images with [DALL-E](https://platform.openai.com/docs/guides/images).
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.
 
 This bot is also support working with files (`.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf` and `.txt`). It extract texts from them and then generate a response. To fully use this feature, you need to install the `catdoc` (for Linux) or `comtypes` for windows. `.doc` and `.ppt` files support won't work without it.
 
-## Possible breaking changes
-In the end of July 2023 there was made some changes to a bot architecture.  
-Now bot can use different chat engines, not only OpenAI (which is still default).  
-Legacy mode is no longer supported.  
-In addition, the bot was upgraded to use new version of the OpenAI Python API library, which introduced [significant changes](https://github.com/openai/openai-python/discussions/742).
 
 ## Getting Started
 * Create a bot using the [BotFather](https://t.me/botfather).
 * Clone the repository.
-
-### Manual steps
 * Install the required packages by running the command `pip install -r requirements.txt`.
 * Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.
 * If you use Linux - install `catdoc` for `.doc` and `.ppt` files support and test it calling `catdoc` in the terminal. `.doc` and `.ppt` files support won't work without it.  
@@ -33,7 +27,8 @@ There are also some additional styles that you can choose from: Alice, Bob, Char
 Styles can be set up in the `./data/chat_modes.ini` file. You can add your own styles there or change the existing ones.
 
 ## Configuration
-The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file) and should contain the following fields:
+The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file).  
+File should contain (for OpenAI API):
 ```ini
 [Telegram]
 Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -82,25 +77,13 @@ MaxFileSizeMB = 10
 MaxSummaryTokens = 1000
 MaxFileLength = 10000
 DeleteAfterProcessing = True
-
-[YandexGPT]
-KeyID=aaaaaaaaaaaaaaaaaa
-SecretKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-CatalogID=bbbbbbbbbbbbbbbbbbbb
-ChatEndpoint=https://llm.api.cloud.yandex.net/llm/v1alpha/chat
-InstructEndpoint=https://llm.api.cloud.yandex.net/llm/v1alpha/instruct
-ChatModel=general
-PartialResults=False
-Temperature=700
-MaxTokens=1500
-instructionText=You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 ```
 Telegram:
 * Telegram.Token: The token for the Telegram bot.
 * Telegram.AccessCodes: A comma-separated list of access codes that can be used to add users to the whitelist. If no access codes are provided, anyone who not in the banlist will be able to use the bot.
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
-* Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT`.
+* Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT` and `Claude`.
 * Logging.LogLevel: The logging level. Optional, default is `WARNING`.
 * Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
 
@@ -140,19 +123,8 @@ Files:
 * Files.MaxFileLength: The maximum number of tokens to use for generating summaries. Optional. Default: `10000`.
 * Files.DeleteAfterProcessing: Whether to delete files after processing. Optional. Deafult: `True`.
 
-YandexGPT:
-* YandexGPT.KeyID: The key ID for the Yandex Cloud.
-* YandexGPT.SecretKey: The secret key for the Yandex Cloud.
-* YandexGPT.CatalogID: The catalog ID for the Yandex Cloud.
-* YandexGPT.ChatEndpoint: The endpoint for the Yandex Cloud chat API.
-* YandexGPT.InstructEndpoint: The endpoint for the Yandex Cloud instruct API.
-* YandexGPT.ChatModel: The model to use for generating responses (`general`).
-* YandexGPT.PartialResults: Whether to use partial results. Optional. Default: `False`. Does not change anything for now in the current implementation.
-* YandexGPT.Temperature: The temperature to use for generating responses.
-* YandexGPT.MaxTokens: The maximum number of tokens to use for generating responses.
-* YandexGPT.instructionText: The message that will shape your bot's personality.
-
-Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.
+Configuration should be stored in the `./data/.config` file. Use the `config.example` file in the `./data` directory as a template.  
+Claude and YandexGPT configurations are different, see *Using YandexGPT* and *Using Claude (Anthropic API)* sections for more details.
 
 ## Styles
 Bot supports different styles that can be triggered with `/style` command.  
@@ -272,17 +244,14 @@ All this values are optional. Do not set them if you don't know what they are.
 Library [openai-python](https://github.com/openai/openai-python) is used for API requests.  
 Tested with [LocalAI](https://github.com/mudler/LocalAI). Vision is still untested for alternative APIs.  
 
-
 ## Using YandexGPT
 YandexGPT is in Preview, you should request access to it.  
 You should have a service account Yandex Cloud account to use YandexGPT (https://cloud.yandex.ru/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API.  
-To use YandexGPT, you need to change the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file:
+To use YandexGPT, you need to change the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file and replace the `OpenAI` section with `YandexGPT` section:
 ```ini
 [Telegram]
 Token = 111111111:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = 123456789
-GeneralRateLimit = 60
-RateLimitTime = 3600
 TextEngine = YandexGPT
 
 [YandexGPT]
@@ -294,7 +263,71 @@ Temperature=700
 MaxTokens=1500
 instructionText=You are a helpful assistant named Sir Chatalot.
 ```
+
+* YandexGPT.KeyID: The key ID for the Yandex Cloud.
+* YandexGPT.SecretKey: The secret key for the Yandex Cloud.
+* YandexGPT.CatalogID: The catalog ID for the Yandex Cloud.
+* YandexGPT.ChatEndpoint: The endpoint for the Yandex Cloud chat API.
+* YandexGPT.InstructEndpoint: The endpoint for the Yandex Cloud instruct API.
+* YandexGPT.ChatModel: The model to use for generating responses (`general`).
+* YandexGPT.PartialResults: Whether to use partial results. Optional. Default: `False`. Does not change anything for now in the current implementation.
+* YandexGPT.Temperature: The temperature to use for generating responses.
+* YandexGPT.MaxTokens: The maximum number of tokens to use for generating responses.
+* YandexGPT.instructionText: The message that will shape your bot's personality.  
+
 YandexGPT support is experimental and can be unstable, please submit an issue if you find a problem.  
+
+## Using Claude (Anthropic API) 
+Claude is a family of large language models developed by [Anthropic](https://www.anthropic.com/). You should [get access](https://docs.anthropic.com/claude/docs/getting-access-to-claude) to it first.   
+You need to install [Anthropic's Python SDK](https://github.com/anthropics/anthropic-sdk-python) beforehand by running:
+```bash
+pip install anthropic
+```  
+To use Claude, you need to change the `Telegram.TextEngine` field to `Claude` or `Anthropic` in the `./data/.config` file and replace the `OpenAI` section with `Anthropic` section:
+```ini
+[Telegram]
+Token = 111111111:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+AccessCodes = 123456789
+TextEngine = Claude
+
+[Anthropic]
+SecretKey = sk-ant-******
+ChatModel = claude-3-haiku-20240307
+ChatModelPromptPrice = 0.00025
+ChatModelCompletionPrice = 0.00125
+Temperature = 0.7
+MaxTokens = 1500
+SystemMessage = You are a librarian named Bob whom one may met in tavern. You a chatting with user via Telegram messenger.
+Vision = True
+ImageSize = 768
+DeleteImageAfterAnswer = False
+ImageDescriptionOnDelete = False
+SummarizeTooLong = True
+```
+
+* Anthropic.SecretKey: The secret key for the Anthropic API.
+* Anthropic.ChatModel: The model to use for generating responses (`claude-3-haiku-20240307` by default).
+* Anthropic.ChatModelPromptPrice: The price of the model to use for generating responses (per 1000 tokens, in USD).
+* Anthropic.ChatModelCompletionPrice: The price of the model to use for generating responses (per 1000 tokens, in USD).
+* Anthropic.Temperature: The temperature to use for generating responses.
+* Anthropic.MaxTokens: The maximum number of tokens to use for generating responses.
+* Anthropic.SystemMessage: The message that will shape your bot's personality.
+* Anthropic.Vision: Whether to use vision capabilities of Claude 3 models. Default: `False`.
+* Anthropic.ImageSize: Maximum size of images. If image is bigger than that it will be resized. Default: `512`
+* Anthropic.DeleteImageAfterAnswer: Whether to delete image after it was seen by model. Enable it to keep cost of API usage low. Default: `False`.
+* Anthropic.ImageDescriptionOnDelete: Whether to replace image with it description after it was deleted (see `OpenAI.DeleteImageAfterAnswer`). Default: `False`.
+* Anthropic.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
+
+You can find Claude models [here](https://docs.anthropic.com/claude/docs/models-overview).
+
+You can also set up HTTP proxy for API requests in the `./data/.config` file. Example:
+```ini
+[Anthropic]
+...
+Proxy = http://login:password@proxy:port
+...
+```  
+Example of configuration for using Claude API is in the `./data/config.claude.example` file.
 
 ## Running the Bot
 To run the bot, simply run the command `python3 main.py`. The bot will start and will wait for messages. 
@@ -377,7 +410,7 @@ python3 read_messages.py
 * The bot will try to continue conversation in the event of reaching maximum number of tokens by trimming the conversation history or summarazing it (`OpenAI.SummarizeTooLong`). If the conversation is long enough to cause errors, it will be deleted if `OpenAI.ChatDeletion` set to `True` in the `./data/.config` file (see *Configuration*).
 * The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
 * The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see *Configuration*), the file will be stored in `./data/files` directory. The files are not encrypted and can be accessed by anyone with access to the server.
-* If message is flagged by the Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
+* If message is flagged by the OpenAI Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 * Functionalty for calculating cost of usage is not working for images for now, so you should pay attenion to that.    
 
