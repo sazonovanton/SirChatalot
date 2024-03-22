@@ -10,7 +10,7 @@ This bot is also support working with files, see [Files](#files) section for mor
 ## Navigation
 * [Getting Started](#getting-started)
 * [Configuration](#configuration)
-* [Using Claude](#using-claude-anthropic-api)
+* [Using Claude](#using-claude)
 * [Using YandexGPT](#using-yandexgpt)
 * [Vision](#vision)
 * [Image generation](#image-generation)
