@@ -1041,13 +1041,26 @@ class AnthropicEngine:
                 return system_prompt, None
             logger.debug(f'Messages to revise for Anthropic: {len(messages)}')
             # first message must use the "user" role
+            # roles must alternate between "user" and "assistant", but found multiple "assistant" roles in a row
             # itterate over messages
-            for message in messages:
+            i = 0
+            for i in range(len(messages)):
+                message = messages[i]
                 if message['role'] == 'system':
                     system_prompt += f"{message['content']}\n"
                     continue
+                
+                # TODO: optimize this part
                 if len(new_messages) == 0 and message['role'] != 'user':
                     new_messages.append({"role": "user", "content": ""})
+                last_role = new_messages[-1]['role'] if len(new_messages) > 0 else None
+                if last_role is not None:
+                    if message['role'] == last_role:
+                        if message['role'] == 'user':
+                            new_messages.append({"role": "assistant", "content": ""})
+                        else:
+                            new_messages.append({"role": "user", "content": ""})
+
                 if message['role'] == 'user' and self.vision:
                     if type(message['content']) == list:
                         new_message = {
