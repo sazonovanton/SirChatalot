@@ -345,16 +345,7 @@ class OpenAIEngine:
                 messages = messages[0]
                 return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
             else:
-                logger.info(f'Chat session for user {id} was summarized due to an error')
-                style = messages[0]['content'] + '\n Your previous conversation summary: '
-
-                style, token_usage = await self.chat_summary(messages[:-1])
-                prompt_tokens += int(token_usage['prompt'])
-                completion_tokens += int(token_usage['completion'])
-
-                response, messages, token_usage = await self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
-                prompt_tokens += int(token_usage['prompt'])
-                completion_tokens += int(token_usage['completion'])
+                return 'It seems that chat session is too long. You can /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if something else
         except Exception as e:
             logger.exception('Could not get response from GPT')
