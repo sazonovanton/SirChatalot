@@ -122,39 +122,7 @@ class OpenAIEngine:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
         if self.function_calling:
-            # TODO: working with function calling - now only image generation is supported for testing
-            self.available_functions = {
-                "generate_image": self.generate_image,
-            }
-            self.function_calling_tools = [
-                {   
-                    "type": "function",
-                    "function": {
-                        "name": "generate_image",
-                        "description": "Generate image from text prompt using DALL-E",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {
-                                    "type": "string",
-                                    "description": "Text prompt for image generation"
-                                },
-                                "image_orientation": {
-                                    "type": "string",
-                                    "enum": ["landscape", "portrait"],
-                                    "description": "Orientation of image, if not specified, square image is generated"
-                                },
-                                "image_style": {
-                                    "type": "string",
-                                    "enum": ["natural", "vivid"],
-                                    "description": "Style of image, if not specified, vivid image is generated"
-                                }
-                            },
-                            "required": ["prompt"],
-                        }
-                    }
-                }
-            ]
+            self.function_calling_tools = None
 
         if self.max_chat_length is not None:
             print('Max chat length:', self.max_chat_length)
@@ -267,10 +235,12 @@ class OpenAIEngine:
         '''
         response_message = None
         try:
-            logger.debug(f'Detecting function called in response: {response}')
+            logger.debug(f'Detecting function called in response: "{response}"')
             if response is None:
                 return response
             if not self.function_calling:
+                return response
+            if self.function_calling_tools is None:
                 return response
             if len(self.function_calling_tools) == 0:
                 return response
@@ -280,12 +250,6 @@ class OpenAIEngine:
                 return response
             function_name = tool_calls[0].function.name
             function_args = json.loads(tool_calls[0].function.arguments)
-            # function_to_call = self.available_functions[function_name]
-            # function_response = await function_to_call(
-            #     prompt = function_args.get("prompt"),
-            #     image_orientation = function_args.get("image_orientation"),
-            #     image_style = function_args.get("image_style"),
-            # )
             tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
@@ -371,7 +335,7 @@ class OpenAIEngine:
         # if ratelimit is reached
         except self.openai.RateLimitError as e:
             logger.error(f'OpenAI RateLimitError: {e}')
-            return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            return 'Service is limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if chat is too long
         except self.openai.BadRequestError as e:
             # if 'openai.error.InvalidRequestError: The model: `gpt-4` does not exist'

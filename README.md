@@ -268,8 +268,10 @@ Don't forget to enable Image generation (see [Image generation](#image-generatio
 Beware that function calling is working only with some models and don't work with models that support vision.   
 Learn more about function calling [here](https://platform.openai.com/docs/guides/function-calling).
 
-## Image generation - WIP - supported with OpenAI
+## Image generation
 You can generate images. Right now only [DALL-E](https://platform.openai.com/docs/guides/images) is supported.
+<details>
+<summary> WIP - unsupported </summary>
 To use this functionality you should make some changes in configuration file. Example:  
 ```ini
 ...
@@ -282,9 +284,10 @@ RateLimitTime = 3600
 BasePrice = 0.04
 ...
 ```  
-If you want to use OpenAI text engine and image generation you can omit `APIKey` field in the `ImageGeneration` section. Key will be taken from the `OpenAI` section.  
+If you want to use OpenAI text engine and image generation you can omit `APIKey` field in the `ImageGeneration` section. Key will be taken from the `OpenAI` section.
+</details>
 
-Alternatively, you can set up DALL-E in OpenAI section of the `./data/.config` file (deprecated - supported now):
+You can set up DALL-E in OpenAI section of the `./data/.config` file (supported now):
 ```ini
 ...
 ImageGeneration = False
@@ -297,7 +300,7 @@ ImageGenerationPrice = 0.04
 To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
 Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Function calling](#function-calling)), you can generate images with function calling just by asking the bot to do it.
 
-## Web Search - WIP - not supported
+## Web Search
 You can use web search capabilities with function calling.  
 Right now only Google search is supported (via [Google Search API](https://developers.google.com/custom-search/v1/overview)).  
 To enable web search you should make some changes in configuration file. Example:  
@@ -307,9 +310,11 @@ To enable web search you should make some changes in configuration file. Example
 [Search]
 Engine = google
 APIKey = ******
+CSEID = ******
 ...
 ```  
-Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).
+Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).  
+SirChatalot will only have information about the first 10 results (title, link and description). It can not open links right now. 
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:

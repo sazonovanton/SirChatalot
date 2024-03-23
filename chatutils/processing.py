@@ -64,15 +64,78 @@ class ChatProc:
             self.image_generation_price = self.text_engine.image_generation_price
 
         self.function_calling = self.text_engine.function_calling
-        
+        if self.function_calling:
+            from chatutils.web_engines import GoogleEngine
+            self.webengine = None
+            self.available_functions = {}
+            self.function_calling_tools = []
+            if 'Search' in config:
+                if str(config.get("Search", "Engine")).lower() == "google":
+                    self.webengine = GoogleEngine()
+                    logger.debug(f'Web search engine is set to Google')
+            self.available_functions = {
+                "generate_image": self.text_engine.generate_image,
+            }
+            self.function_calling_tools = [
+                {   
+                    "type": "function",
+                    "function": {
+                        "name": "generate_image",
+                        "description": "Generate image from text prompt using DALL-E",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Text prompt for image generation"
+                                },
+                                "image_orientation": {
+                                    "type": "string",
+                                    "enum": ["landscape", "portrait"],
+                                    "description": "Orientation of image, if not specified, square image is generated"
+                                },
+                                "image_style": {
+                                    "type": "string",
+                                    "enum": ["natural", "vivid"],
+                                    "description": "Style of image, if not specified, vivid image is generated"
+                                }
+                            },
+                            "required": ["prompt"],
+                        }
+                    }
+                }
+            ]
+            
+            if self.webengine is not None:
+                self.available_functions["web_search"] = self.webengine.search
+                self.function_calling_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "web_search",
+                            "description": "Search the web using Search Engine API",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "query": {
+                                        "type": "string",
+                                        "description": "Query for web search"
+                                    }
+                                },
+                                "required": ["query"],
+                            }
+                        }
+                    }
+                )
+
+            self.text_engine.function_calling_tools = self.function_calling_tools
+
         if speech is None:
             self.speech_engine = None
         elif speech == "openai":
             self.speech_engine = OpenAIEngine(speech=True)
             self.audio_format = self.speech_engine.audio_format
             self.s2t_model_price = self.speech_engine.s2t_model_price
-        # elif speech == "runpod":
-        #     self.speech_engine = RunpodEngine(speech=True)
         else:
             logger.error("Unknown speech2text engine: {}".format(speech))
             raise Exception("Unknown speech2text engine: {}".format(speech))
@@ -418,7 +481,7 @@ class ChatProc:
                     await self.add_stats(id=id, completion_tokens_used=int(completion_tokens + tokens_used['completion']))
                     await self.add_stats(id=id, prompt_tokens_used=int(prompt_tokens + tokens_used['prompt']))
             except Exception as e:
-                logger.exception('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
+                logger.error('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
             
             # TODO: check if function was called
             if self.function_calling:
@@ -428,19 +491,18 @@ class ChatProc:
                             # call function to generate image
                             function_name, function_args = response[1], response[2]
                             logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
-                            function_to_call = self.text_engine.available_functions[function_name]
+                            function_to_call = self.available_functions[function_name]
                             function_response = await function_to_call(
                                 prompt = function_args.get("prompt"),
                                 image_orientation = function_args.get("image_orientation"),
                                 image_style = function_args.get("image_style"),
                             )
-                            # image, text = response[2][0], response[2][1]
                             image, text = function_response[0], function_response[1]
                             if image is not None:
                                 # add to chat history
                                 await self.add_to_chat_history(
                                     id=id, 
-                                    message={"role": "function", "name": response[1], "content": str(text)}
+                                    message={"role": "function", "name": function_name, "content": str(text)}
                                     )
                                 # add statistics
                                 await self.add_stats(id=id, images_generated=1)
@@ -454,6 +516,35 @@ class ChatProc:
                             else:
                                 response = 'Sorry, something went wrong.'
                                 logger.error(f'Function was called, but image was not generated: {response}')
+                        elif response[1] == 'web_search':
+                            # call function to search the web
+                            function_name, function_args = response[1], response[2]
+                            logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
+                            function_to_call = self.available_functions[function_name]
+                            function_response = await function_to_call(
+                                query = function_args.get("query"),
+                            )
+                            if function_response is None:
+                                function_response = 'Error while searching the web'
+                            await self.add_to_chat_history(
+                                id=id, 
+                                message={"role": "function", "name": function_name, "content": str(function_response)}
+                                )
+                            # Push response to LLM again
+                            messages = self.chats[id]
+                            logger.debug(f'Pushing response to LLM again: {function_response}')
+                            response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
+                            # add statistics
+                            try:
+                                if tokens_used is not None:
+                                    await self.add_stats(id=id, completion_tokens_used=int(completion_tokens + tokens_used['completion']))
+                                    await self.add_stats(id=id, prompt_tokens_used=int(prompt_tokens + tokens_used['prompt']))
+                            except Exception as e:
+                                logger.error('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
+                            if response is None:
+                                response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
+                            else:
+                                await self.save_chat(id=id, messages=messages)
             else:
                 # save chat history
                 await self.save_chat(id=id, messages=messages)
