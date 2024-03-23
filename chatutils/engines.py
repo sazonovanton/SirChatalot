@@ -478,7 +478,7 @@ class OpenAIEngine:
             logger.exception('Could not imagine image from text')
             return None, None
 
-    async def summary(self, text, size=300):
+    async def summary(self, text, size=420):
         '''
         Make summary of text
         Input text and size of summary (in tokens)

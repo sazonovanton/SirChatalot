@@ -78,9 +78,10 @@ class URLOpen:
     Deletes unnecessary tags and returns the text in the body
     '''
     def __init__(self):
+        self.trim_len = config.getint("Search", "TrimLength") if config.has_option("Search", "TrimLength") else 6000
         logger.info('URL Open Initialized')
 
-    async def parse_data(self, data, trim_len=3000):
+    async def parse_data(self, data):
         try:
             soup = BeautifulSoup(data, 'html.parser')
             body = soup.find('body')
@@ -88,7 +89,7 @@ class URLOpen:
             for tag in body.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'li', 'ul', 'ol', 'blockquote']):
                 text += tag.get_text().strip() + '\n'
             text = text.replace('\n', ' ')
-            text = text[:trim_len]
+            text = text[:self.trim_len]
             if len(text) < 5:
                 text = None
             return text

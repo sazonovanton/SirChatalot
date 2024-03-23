@@ -311,11 +311,15 @@ To enable web search you should make some changes in configuration file. Example
 Engine = google
 APIKey = ******
 CSEID = ******
+URLSummary = False
+TrimLength = 3000
 ...
 ```  
 Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).  
 SirChatalot will only have information about the first 5 results (title, link and description).  
 It can try to open only links provided (or from history), but will not walk through the pages when using web search.  
+`URLSummary` parameter is used to tell the bot to summarize the content of the page.   
+`TrimLength` is used to limit the length of the parsed text (context can be lost).  
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:

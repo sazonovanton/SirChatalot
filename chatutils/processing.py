@@ -109,7 +109,7 @@ class ChatProc:
             
             if self.webengine is not None:
                 self.urlopener = URLOpen()
-                self.url_summary = True
+                self.url_summary = config.getboolean("Search", "URLSummary") if config.has_option("Search", "URLSummary") else False
                 self.available_functions["web_search"] = self.webengine.search
                 self.function_calling_tools.append(
                     {
@@ -571,7 +571,7 @@ class ChatProc:
                             elif self.url_summary:
                                 # create summary of the content
                                 logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
-                                function_response, token_usage = await self.text_engine.summary(f'Text from URL: {function_response}')
+                                function_response, token_usage = await self.text_engine.summary(f'User message: {message}. Text from URL: {function_response}')
                                 if function_response is None:
                                     function_response = 'Error while summarizing the content of the URL'
                                 else:
