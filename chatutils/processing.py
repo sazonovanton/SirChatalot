@@ -65,8 +65,9 @@ class ChatProc:
 
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
-            from chatutils.web_engines import GoogleEngine
+            from chatutils.web_engines import URLOpen, GoogleEngine
             self.webengine = None
+            self.urlopener = None
             self.available_functions = {}
             self.function_calling_tools = []
             if 'Search' in config:
@@ -107,6 +108,8 @@ class ChatProc:
             ]
             
             if self.webengine is not None:
+                self.urlopener = URLOpen()
+                self.url_summary = True
                 self.available_functions["web_search"] = self.webengine.search
                 self.function_calling_tools.append(
                     {
@@ -123,6 +126,26 @@ class ChatProc:
                                     }
                                 },
                                 "required": ["query"],
+                            }
+                        }
+                    }
+                )
+                self.available_functions["url_opener"] = self.urlopener.open_url
+                self.function_calling_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": "url_opener",
+                            "description": "Open URL and get the content",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "url": {
+                                        "type": "string",
+                                        "description": "URL to open"
+                                    }
+                                },
+                                "required": ["url"],
                             }
                         }
                     }
@@ -170,22 +193,23 @@ class ChatProc:
             transcript = await self.speech_engine.speech_to_text(audio_file)
             transcript += ' (it was a voice message transcription)'
         except Exception as e:
-            logger.exception('Could not convert voice to text')
+            logger.error('Could not convert voice to text')
             transcript = None
         if transcript is not None:
             # add statistics
             try:
                 audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
-                self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
             except Exception as e:
-                logger.exception(f'Could not add speech2text statistics for user: ' + str(id))
+                logger.error('Could not get audio duration: ' + str(audio_file))
+                audio = None
+            self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
         # delete audio file
         try:
             audio_file = str(audio_file)
             os.remove(audio_file.replace('.ogg', self.audio_format))
             logger.debug('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
         except Exception as e:
-            logger.exception('Could not delete converted audio file: ' + str(audio_file))
+            logger.error('Could not delete converted audio file: ' + str(audio_file))
         return transcript
     
     async def chat_voice(self, id=0, audio_file=None):
@@ -440,6 +464,7 @@ class ChatProc:
             * style - style of chat (default: None)
         '''
         try:
+            prompt_tokens, completion_tokens = 0, 0
             # Init style if it is not set
             if id not in self.chats:
                 success = await self.init_style(id=id, style=style)
@@ -459,7 +484,6 @@ class ChatProc:
                 await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
             # Trim or summarize messages if they are too long
             messages_tokens = await self.count_tokens(messages)
-            prompt_tokens, completion_tokens = 0, 0
             if messages_tokens is None:
                 messages_tokens = 0
             if messages_tokens > self.max_tokens:
@@ -474,23 +498,19 @@ class ChatProc:
                     return 'There was an error due to a long conversation. Please, contact the administrator or /delete your chat history.'
 
             # Wait for response
-            response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
+            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
             # add statistics
-            try:
-                if tokens_used is not None:
-                    await self.add_stats(id=id, completion_tokens_used=int(completion_tokens + tokens_used['completion']))
-                    await self.add_stats(id=id, prompt_tokens_used=int(prompt_tokens + tokens_used['prompt']))
-            except Exception as e:
-                logger.error('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
-            
+            if token_usage is not None:
+                prompt_tokens += int(token_usage['prompt'])
+                completion_tokens += int(token_usage['completion'])
             # TODO: check if function was called
             if self.function_calling:
                 if type(response) == tuple:
                     if response[0] == 'function':
+                        function_name, function_args = response[1], response[2]
+                        logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
                         if response[1] == 'generate_image':
                             # call function to generate image
-                            function_name, function_args = response[1], response[2]
-                            logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
                             function_to_call = self.available_functions[function_name]
                             function_response = await function_to_call(
                                 prompt = function_args.get("prompt"),
@@ -518,8 +538,6 @@ class ChatProc:
                                 logger.error(f'Function was called, but image was not generated: {response}')
                         elif response[1] == 'web_search':
                             # call function to search the web
-                            function_name, function_args = response[1], response[2]
-                            logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
                             function_to_call = self.available_functions[function_name]
                             function_response = await function_to_call(
                                 query = function_args.get("query"),
@@ -533,14 +551,46 @@ class ChatProc:
                             # Push response to LLM again
                             messages = self.chats[id]
                             logger.debug(f'Pushing response to LLM again: {function_response}')
-                            response, messages, tokens_used = await self.text_engine.chat(id=id, messages=messages)
+                            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
                             # add statistics
-                            try:
-                                if tokens_used is not None:
-                                    await self.add_stats(id=id, completion_tokens_used=int(completion_tokens + tokens_used['completion']))
-                                    await self.add_stats(id=id, prompt_tokens_used=int(prompt_tokens + tokens_used['prompt']))
-                            except Exception as e:
-                                logger.error('Could not add tokens used in statistics for user: ' + str(id) + ' and response: ' + str(response))
+                            if token_usage is not None:
+                                prompt_tokens += int(token_usage['prompt'])
+                                completion_tokens += int(token_usage['completion'])
+                            if response is None:
+                                response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
+                            else:
+                                await self.save_chat(id=id, messages=messages)
+                        elif response[1] == 'url_opener':
+                            # call function to open URL
+                            function_to_call = self.available_functions[function_name]
+                            function_response = await function_to_call(
+                                url = function_args.get("url"),
+                            )
+                            if function_response is None:
+                                function_response = 'Error while opening the URL or there was no content'
+                            elif self.url_summary:
+                                # create summary of the content
+                                logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
+                                function_response, token_usage = await self.text_engine.summary(f'Text from URL: {function_response}')
+                                if function_response is None:
+                                    function_response = 'Error while summarizing the content of the URL'
+                                else:
+                                    prompt_tokens += int(token_usage['prompt'])
+                                    completion_tokens += int(token_usage['completion'])
+                            else:
+                                pass
+                            await self.add_to_chat_history(
+                                id=id, 
+                                message={"role": "function", "name": function_name, "content": str(function_response)}
+                                )
+                            # Push response to LLM again
+                            messages = self.chats[id]
+                            logger.debug(f'Pushing response of URL opener to LLM again: {function_response}')
+                            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
+                            # add statistics
+                            if token_usage is not None:
+                                prompt_tokens += int(token_usage['prompt'])
+                                completion_tokens += int(token_usage['completion'])
                             if response is None:
                                 response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
                             else:
@@ -548,6 +598,8 @@ class ChatProc:
             else:
                 # save chat history
                 await self.save_chat(id=id, messages=messages)
+            # add statistics
+            await self.add_stats(id=id, prompt_tokens_used=prompt_tokens, completion_tokens_used=completion_tokens)
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
@@ -646,7 +698,7 @@ class ChatProc:
             # save statistics to file (unsafe way)
             pickle.dump(self.stats, open(self.stats_location, "wb"))
         except KeyError as e:
-            logger.exception('Could not add statistics for user: ' + str(id))
+            logger.error('Could not add statistics for user: ' + str(id))
             # add key to stats and try again
             current_stats = self.stats[id]
             key_missing = str(e).split('\'')[1]
@@ -655,9 +707,9 @@ class ChatProc:
             try:
                 pickle.dump(self.stats, open(self.stats_location, "wb"))
             except Exception as e:
-                logger.exception('Could not add statistics for user after adding keys: ' + str(id))
+                logger.error('Could not add statistics for user after adding keys: ' + str(id))
         except Exception as e:
-            logger.exception('Could not add statistics for user: ' + str(id))
+            logger.error('Could not add statistics for user: ' + str(id))
 
     async def get_stats(self, id=None, counter=0):
         '''

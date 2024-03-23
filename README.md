@@ -314,7 +314,8 @@ CSEID = ******
 ...
 ```  
 Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).  
-SirChatalot will only have information about the first 10 results (title, link and description). It can not open links right now. 
+SirChatalot will only have information about the first 5 results (title, link and description).  
+It can try to open only links provided (or from history), but will not walk through the pages when using web search.  
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:

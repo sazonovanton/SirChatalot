@@ -478,27 +478,31 @@ class OpenAIEngine:
             logger.exception('Could not imagine image from text')
             return None, None
 
-    async def summary(self, text, size=400):
+    async def summary(self, text, size=300):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
         '''
-        # Get a summary prompt
-        summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'}]
-        summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
-        # Get the response from the API
-        requested_tokens = min(size, self.max_tokens)
-        response = await self.client.chat.completions.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=requested_tokens,
-                messages=summary
-        )
-        prompt_tokens = int(response.usage.prompt_tokens)
-        completion_tokens = int(response.usage.completion_tokens)
+        try:
+            # Get a summary prompt
+            summary = [{"role": "system", "content": f'You are very great at summarizing text. Answer to user message with summary only.'}]
+            summary.append({"role": "user", "content": str(text)})
+            # Get the response from the API
+            requested_tokens = min(size, self.max_tokens)
+            response = await self.client.chat.completions.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=requested_tokens,
+                    messages=summary
+            )
+            prompt_tokens = int(response.usage.prompt_tokens)
+            completion_tokens = int(response.usage.completion_tokens)
 
-        # Return the response
-        return response.choices[0].message.content, {"prompt": prompt_tokens, "completion": completion_tokens}
+            # Return the response
+            return response.choices[0].message.content, {"prompt": prompt_tokens, "completion": completion_tokens}
+        except Exception as e:
+            logger.exception('Could not summarize text')
+            return None, {"prompt": 0, "completion": 0}
 
     async def chat_summary(self, messages, short=False):
         '''
