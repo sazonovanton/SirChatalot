@@ -425,7 +425,17 @@ class ChatProc:
                 if type(response) == tuple:
                     if response[0] == 'function':
                         if response[1] == 'generate_image':
-                            image, text = response[2][0], response[2][1]
+                            # call function to generate image
+                            function_name, function_args = response[1], response[2]
+                            logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
+                            function_to_call = self.text_engine.available_functions[function_name]
+                            function_response = await function_to_call(
+                                prompt = function_args.get("prompt"),
+                                image_orientation = function_args.get("image_orientation"),
+                                image_style = function_args.get("image_style"),
+                            )
+                            # image, text = response[2][0], response[2][1]
+                            image, text = function_response[0], function_response[1]
                             if image is not None:
                                 # add to chat history
                                 await self.add_to_chat_history(

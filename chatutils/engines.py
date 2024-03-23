@@ -123,6 +123,9 @@ class OpenAIEngine:
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
         if self.function_calling:
             # TODO: working with function calling - now only image generation is supported for testing
+            self.available_functions = {
+                "generate_image": self.generate_image,
+            }
             self.function_calling_tools = [
                 {   
                     "type": "function",
@@ -271,26 +274,24 @@ class OpenAIEngine:
                 return response
             if len(self.function_calling_tools) == 0:
                 return response
-            available_functions = {
-                "generate_image": self.generate_image,
-            }
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
             if not tool_calls:
                 return response
             function_name = tool_calls[0].function.name
-            function_to_call = available_functions[function_name]
             function_args = json.loads(tool_calls[0].function.arguments)
-            function_response = await function_to_call(
-                prompt = function_args.get("prompt"),
-                image_orientation = function_args.get("image_orientation"),
-                image_style = function_args.get("image_style"),
-            )
+            # function_to_call = self.available_functions[function_name]
+            # function_response = await function_to_call(
+            #     prompt = function_args.get("prompt"),
+            #     image_orientation = function_args.get("image_orientation"),
+            #     image_style = function_args.get("image_style"),
+            # )
             tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
             }
-            return ('function', function_name, function_response, tokens)
+            # return ('function', function_name, function_response, tokens)
+            return ('function', function_name, function_args, tokens)
         except Exception as e:
             logger.error(f'Could not detect function called: {e}. Response: {response_message}')
             return response

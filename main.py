@@ -507,7 +507,6 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     answer = await gpt.chat(id=update.effective_user.id, message=update.message.text)
     # DEBUG
     logger.debug(f'>> Username: {update.effective_user.username}. Message: {update.message.text}')
-    logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     # add stats
     await gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
@@ -518,9 +517,11 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # if answer is base64, send it as a photo
     if type(answer) == tuple:
         if answer[0] == 'image':
+            logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image ({answer[2]}')
             image_bytes = base64.b64decode(answer[1])
             await update.message.reply_photo(photo=image_bytes)
             return None
+    logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     await send_message(update, answer, markdown=1)
 
 @is_authorized
