@@ -124,16 +124,30 @@ class OpenAIEngine:
         if self.function_calling:
             # TODO: working with function calling - now only image generation is supported for testing
             self.function_calling_tools = [
-                {
-                    "name": "generate_image",
-                    "description": "Generate image from text prompt using DALL-E",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "prompt": {
-                                "type": "string",
-                                "description": "Text prompt for image generation"
+                {   
+                    "type": "function",
+                    "function": {
+                        "name": "generate_image",
+                        "description": "Generate image from text prompt using DALL-E",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "prompt": {
+                                    "type": "string",
+                                    "description": "Text prompt for image generation"
+                                },
+                                "image_orientation": {
+                                    "type": "string",
+                                    "enum": ["landscape", "portrait"],
+                                    "description": "Orientation of image, if not specified, square image is generated"
+                                },
+                                "image_style": {
+                                    "type": "string",
+                                    "enum": ["natural", "vivid"],
+                                    "description": "Style of image, if not specified, vivid image is generated"
+                                }
                             },
+                            "required": ["prompt"],
                         }
                     }
                 }
@@ -205,12 +219,33 @@ class OpenAIEngine:
             logger.exception('Could not convert speech to text')
             return None
         
-    async def generate_image(self, prompt):
+    async def generate_image(self, prompt, image_orientation=None, image_style=None):
         '''
         Generate image from text prompt
+        Input:
+            * prompt - text prompt
+            * orientation - orientation of image (landscape, portrait, default is None - square)
+            * style - style of image (natural or vivid, default is None - vivid)
         '''
         try:
-            b64_image, revised_prompt = await self.imagine(prompt, id='function', size="1024x1024", style="vivid", n=1, quality="standard", revision=True)
+            logger.debug(f'Generating image from prompt: {prompt}, orientation: {image_orientation}, style: {image_style}')
+            if self.image_generation == False:
+                return None, None
+            if prompt is None:
+                return None, None
+            
+            size="1024x1024"
+            style="vivid"
+            if image_orientation is not None:
+                if image_orientation == 'landscape':
+                    size = '1792x1024'
+                if image_orientation == 'portrait':
+                    size = '1024x1792'
+            if image_style is not None:
+                if image_style == 'natural':
+                    style = 'natural'
+
+            b64_image, revised_prompt = await self.imagine(prompt, id='function', size=size, style=style, n=1, quality="standard", revision=True)
             return (b64_image, revised_prompt)
         except Exception as e:
             logger.exception('Could not generate image')
@@ -229,6 +264,7 @@ class OpenAIEngine:
         '''
         response_message = None
         try:
+            logger.debug(f'Detecting function called in response: {response}')
             if response is None:
                 return response
             if not self.function_calling:
@@ -239,14 +275,16 @@ class OpenAIEngine:
                 "generate_image": self.generate_image,
             }
             response_message = response.choices[0].message
-            function_call = response_message.function_call
-            if not function_call:
+            tool_calls = response_message.tool_calls
+            if not tool_calls:
                 return response
-            function_name = function_call.name
+            function_name = tool_calls[0].function.name
             function_to_call = available_functions[function_name]
-            function_args = json.loads(function_call.arguments)
+            function_args = json.loads(tool_calls[0].function.arguments)
             function_response = await function_to_call(
                 prompt = function_args.get("prompt"),
+                image_orientation = function_args.get("image_orientation"),
+                image_style = function_args.get("image_style"),
             )
             tokens = {
                 "prompt": response.usage.prompt_tokens,
@@ -302,8 +340,8 @@ class OpenAIEngine:
                         max_tokens=requested_tokens,
                         messages=messages,
                         user=str(user_id),
-                        functions=self.function_calling_tools,
-                        function_call="auto",
+                        tools=self.function_calling_tools,
+                        tool_choice="auto",
                 )
                 response = await self.detect_function_called(response)
                 if response is not None:
