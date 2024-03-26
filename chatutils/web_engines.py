@@ -31,8 +31,11 @@ class GoogleEngine:
     Google Search Engine
     '''
     def __init__(self):
-        self.api_key = config.get("Search", "APIKey")
-        self.cse_id = config.get("Search", "CSEID")
+        self.api_key = config.get("Web", "APIKey")
+        self.cse_id = config.get("Web", "CSEID")
+        self.search_results  = config.getint("Web", "SearchResults") if config.has_option("Web", "SearchResults") else 5
+        self.search_results = min(self.search_results, 10)
+        self.search_results = max(self.search_results, 1)
         self.base_url = "https://www.googleapis.com/customsearch/v1"
         logger.info('Google Engine Initialized')
 
@@ -47,21 +50,15 @@ class GoogleEngine:
             results.append(result)
         return results
 
-    async def search(self, query, results=5):
-        try:
-            results = int(results)
-        except:
-            results = 5
-        results = min(results, 10)
-        results = max(results, 1)
+    async def search(self, query):
         params = {
             "key": self.api_key,
             "cx": self.cse_id,
             "q": query,
-            "num": results
+            "num": self.search_results
         }
         try:
-            logger.debug(f'Searching for: "{query}". Results: {results}')
+            logger.debug(f'Searching for: "{query}". Results number: {self.search_results}')
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
                     data = await response.json()
@@ -78,8 +75,8 @@ class URLOpen:
     Deletes unnecessary tags and returns the text in the body
     '''
     def __init__(self):
-        self.trim_len = config.getint("Search", "TrimLength") if config.has_option("Search", "TrimLength") else 6000
-        logger.info('URL Open Initialized')
+        self.trim_len = config.getint("Web", "TrimLength") if config.has_option("Web", "TrimLength") else None
+        logger.info(f'URL Open Initialized, trim length: {self.trim_len}')
 
     async def parse_data(self, data):
         try:
@@ -89,7 +86,8 @@ class URLOpen:
             for tag in body.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a', 'li', 'ul', 'ol', 'blockquote']):
                 text += tag.get_text().strip() + '\n'
             text = text.replace('\n', ' ')
-            text = text[:self.trim_len]
+            if self.trim_len is not None:
+                text = text[:self.trim_len]
             if len(text) < 5:
                 text = None
             return text

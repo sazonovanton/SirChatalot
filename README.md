@@ -307,8 +307,8 @@ To enable web search you should make some changes in configuration file. Example
 ```ini
 ...
 
-[Search]
-Engine = google
+[Web]
+SearchEngine = google
 APIKey = ******
 CSEID = ******
 URLSummary = False
@@ -316,6 +316,7 @@ TrimLength = 3000
 ...
 ```  
 Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).  
+If `SearchEngine` is not set, web search functionality will not be enabled.  
 SirChatalot will only have information about the first 5 results (title, link and description).  
 It can try to open only links provided (or from history), but will not walk through the pages when using web search.  
 `URLSummary` parameter is used to tell the bot to summarize the content of the page.   

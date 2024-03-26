@@ -66,90 +66,29 @@ class ChatProc:
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
             from chatutils.web_engines import URLOpen, GoogleEngine
+            if text == "openai":
+                from chatutils.tools_config import OpenAIConfig as tools_config
             self.webengine = None
             self.urlopener = None
             self.available_functions = {}
             self.function_calling_tools = []
-            if 'Search' in config:
-                if str(config.get("Search", "Engine")).lower() == "google":
-                    self.webengine = GoogleEngine()
-                    logger.debug(f'Web search engine is set to Google')
-            self.available_functions = {
-                "generate_image": self.text_engine.generate_image,
-            }
-            self.function_calling_tools = [
-                {   
-                    "type": "function",
-                    "function": {
-                        "name": "generate_image",
-                        "description": "Generate image from text prompt using DALL-E",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {
-                                    "type": "string",
-                                    "description": "Text prompt for image generation"
-                                },
-                                "image_orientation": {
-                                    "type": "string",
-                                    "enum": ["landscape", "portrait"],
-                                    "description": "Orientation of image, if not specified, square image is generated"
-                                },
-                                "image_style": {
-                                    "type": "string",
-                                    "enum": ["natural", "vivid"],
-                                    "description": "Style of image, if not specified, vivid image is generated"
-                                }
-                            },
-                            "required": ["prompt"],
-                        }
-                    }
-                }
-            ]
-            
-            if self.webengine is not None:
-                self.urlopener = URLOpen()
-                self.url_summary = config.getboolean("Search", "URLSummary") if config.has_option("Search", "URLSummary") else False
-                self.available_functions["web_search"] = self.webengine.search
-                self.function_calling_tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "web_search",
-                            "description": "Search the web using Search Engine API",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "query": {
-                                        "type": "string",
-                                        "description": "Query for web search"
-                                    }
-                                },
-                                "required": ["query"],
-                            }
-                        }
-                    }
-                )
-                self.available_functions["url_opener"] = self.urlopener.open_url
-                self.function_calling_tools.append(
-                    {
-                        "type": "function",
-                        "function": {
-                            "name": "url_opener",
-                            "description": "Open URL and get the content",
-                            "parameters": {
-                                "type": "object",
-                                "properties": {
-                                    "url": {
-                                        "type": "string",
-                                        "description": "URL to open"
-                                    }
-                                },
-                                "required": ["url"],
-                            }
-                        }
-                    }
-                )
+            if self.image_generation:
+                self.available_functions["generate_image"] = self.text_engine.generate_image
+                self.function_calling_tools.append(tools_config.image_generation)
+            if 'Web' in config:
+                if config.has_option("Web", "SearchEngine"):
+                    if str(config.get("Web", "SearchEngine")).lower() == "google":
+                        self.webengine = GoogleEngine()
+                        logger.debug(f'Web search engine is set to Google')
+                        self.available_functions["web_search"] = self.webengine.search
+                        self.function_calling_tools.append(tools_config.web_search)
+                if config.has_option("Web", "UrlOpen"):
+                    if config.getboolean("Web", "UrlOpen"):
+                        self.urlopener = URLOpen()
+                        self.url_summary = config.getboolean("Web", "URLSummary") if config.has_option("Web", "URLSummary") else False
+                        logger.debug(f'URL opener is enabled, URL summary is set to {self.url_summary}')
+                        self.available_functions["url_opener"] = self.urlopener.open_url
+                        self.function_calling_tools.append(tools_config.url_opener)
 
             self.text_engine.function_calling_tools = self.function_calling_tools
 
@@ -581,7 +520,7 @@ class ChatProc:
                                 pass
                             await self.add_to_chat_history(
                                 id=id, 
-                                message={"role": "function", "name": function_name, "content": str(function_response)}
+                                message={"role": "function", "name": function_name, "content": f"URL content: {function_response}"}
                                 )
                             # Push response to LLM again
                             messages = self.chats[id]
