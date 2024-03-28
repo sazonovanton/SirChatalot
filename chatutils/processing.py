@@ -556,7 +556,7 @@ class ChatProc:
             * add_to_chat - add information about image to chat history (default: True)
         '''
         try:
-            if self.image_generation is False:
+            if self.image_generation == False:
                 logger.error('Image generation is not available')
                 return 'Sorry, image generation is not available.'
             if prompt is None:
@@ -669,6 +669,12 @@ class ChatProc:
                 for key, value in self.stats[id].items():
                     if key in ['Tokens used', 'Speech2text seconds']:
                         continue # deprecated values to ignore (for backward compatibility)
+                    if self.image_generation == False:
+                        if key == 'Images generated':
+                            continue
+                    if self.speech_engine is None:
+                        if key in ['Speech to text seconds', 'Voice messages sent']:
+                            continue
                     statisitics += key + ': ' + str(value) + '\n'
                 if self.speech_engine:
                     cost += self.stats[id]['Speech to text seconds'] / 60 * self.s2t_model_price
