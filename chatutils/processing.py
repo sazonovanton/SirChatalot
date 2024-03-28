@@ -93,13 +93,14 @@ class ChatProc:
 
             self.text_engine.function_calling_tools = self.function_calling_tools
 
-        if speech == "openai":
-            self.speech_engine = OpenAIEngine(speech=True)
-            self.audio_format = self.speech_engine.audio_format
-            self.s2t_model_price = self.speech_engine.s2t_model_price
-        else:
-            logger.error("Unknown speech2text engine: {}".format(speech))
-            raise Exception("Unknown speech2text engine: {}".format(speech))
+        if self.speech_engine is not None:
+            if speech == "openai":
+                self.speech_engine = OpenAIEngine(speech=True)
+                self.audio_format = self.speech_engine.audio_format
+                self.s2t_model_price = self.speech_engine.s2t_model_price
+            else:
+                logger.error("Unknown speech2text engine: {}".format(speech))
+                raise Exception("Unknown speech2text engine: {}".format(speech))
         
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
