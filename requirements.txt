@@ -8,3 +8,5 @@ python-docx
 python-pptx
 comtypes
 Pillow
+aiohttp
+BeautifulSoup4

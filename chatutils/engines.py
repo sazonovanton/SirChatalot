@@ -122,36 +122,7 @@ class OpenAIEngine:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
         if self.function_calling:
-            # TODO: working with function calling - now only image generation is supported for testing
-            self.function_calling_tools = [
-                {   
-                    "type": "function",
-                    "function": {
-                        "name": "generate_image",
-                        "description": "Generate image from text prompt using DALL-E",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "prompt": {
-                                    "type": "string",
-                                    "description": "Text prompt for image generation"
-                                },
-                                "image_orientation": {
-                                    "type": "string",
-                                    "enum": ["landscape", "portrait"],
-                                    "description": "Orientation of image, if not specified, square image is generated"
-                                },
-                                "image_style": {
-                                    "type": "string",
-                                    "enum": ["natural", "vivid"],
-                                    "description": "Style of image, if not specified, vivid image is generated"
-                                }
-                            },
-                            "required": ["prompt"],
-                        }
-                    }
-                }
-            ]
+            self.function_calling_tools = None
 
         if self.max_chat_length is not None:
             print('Max chat length:', self.max_chat_length)
@@ -264,33 +235,27 @@ class OpenAIEngine:
         '''
         response_message = None
         try:
-            logger.debug(f'Detecting function called in response: {response}')
+            logger.debug(f'Detecting function called in response: "{response}"')
             if response is None:
                 return response
             if not self.function_calling:
                 return response
+            if self.function_calling_tools is None:
+                return response
             if len(self.function_calling_tools) == 0:
                 return response
-            available_functions = {
-                "generate_image": self.generate_image,
-            }
             response_message = response.choices[0].message
             tool_calls = response_message.tool_calls
             if not tool_calls:
                 return response
             function_name = tool_calls[0].function.name
-            function_to_call = available_functions[function_name]
             function_args = json.loads(tool_calls[0].function.arguments)
-            function_response = await function_to_call(
-                prompt = function_args.get("prompt"),
-                image_orientation = function_args.get("image_orientation"),
-                image_style = function_args.get("image_style"),
-            )
             tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
             }
-            return ('function', function_name, function_response, tokens)
+            # return ('function', function_name, function_response, tokens)
+            return ('function', function_name, function_args, tokens)
         except Exception as e:
             logger.error(f'Could not detect function called: {e}. Response: {response_message}')
             return response
@@ -370,7 +335,7 @@ class OpenAIEngine:
         # if ratelimit is reached
         except self.openai.RateLimitError as e:
             logger.error(f'OpenAI RateLimitError: {e}')
-            return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            return 'Service is limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if chat is too long
         except self.openai.BadRequestError as e:
             # if 'openai.error.InvalidRequestError: The model: `gpt-4` does not exist'
@@ -513,27 +478,31 @@ class OpenAIEngine:
             logger.exception('Could not imagine image from text')
             return None, None
 
-    async def summary(self, text, size=400):
+    async def summary(self, text, size=420):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
         '''
-        # Get a summary prompt
-        summary = [{"role": "system", "content": f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'}]
-        summary.append({"role": "user", "content": 'Make a summary:\n' + str(text)})
-        # Get the response from the API
-        requested_tokens = min(size, self.max_tokens)
-        response = await self.client.chat.completions.create(
-                model=self.model,
-                temperature=self.temperature, 
-                max_tokens=requested_tokens,
-                messages=summary
-        )
-        prompt_tokens = int(response.usage.prompt_tokens)
-        completion_tokens = int(response.usage.completion_tokens)
+        try:
+            # Get a summary prompt
+            summary = [{"role": "system", "content": f'You are very great at summarizing text. Answer to user message with summary only.'}]
+            summary.append({"role": "user", "content": str(text)})
+            # Get the response from the API
+            requested_tokens = min(size, self.max_tokens)
+            response = await self.client.chat.completions.create(
+                    model=self.model,
+                    temperature=self.temperature, 
+                    max_tokens=requested_tokens,
+                    messages=summary
+            )
+            prompt_tokens = int(response.usage.prompt_tokens)
+            completion_tokens = int(response.usage.completion_tokens)
 
-        # Return the response
-        return response.choices[0].message.content, {"prompt": prompt_tokens, "completion": completion_tokens}
+            # Return the response
+            return response.choices[0].message.content, {"prompt": prompt_tokens, "completion": completion_tokens}
+        except Exception as e:
+            logger.exception('Could not summarize text')
+            return None, {"prompt": 0, "completion": 0}
 
     async def chat_summary(self, messages, short=False):
         '''

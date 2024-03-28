@@ -254,21 +254,6 @@ Claude 3 models and prices can be found [here](https://docs.anthropic.com/claude
 
 Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.   
 
-## Image generation
-You can generate images with OpenAI API. To do that, you need to change the `OpenAI.ImageGeneration` field to `True` in the `./data/.config` file:
-```ini
-...
-ImageGeneration = False
-ImageGenModel = dall-e-3
-ImageGenerationSize = 1024x1024
-ImageGenerationStyle = vivid
-ImageGenerationPrice = 0.04
-...
-```
-To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
-
-Learn more about image generation with DALL-E [here](https://platform.openai.com/docs/guides/images).
-
 ## Function calling
 You can use function calling capabilities with OpenAI. This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
 Right now only image generation is supported via function calls.  
@@ -279,9 +264,63 @@ To use this functionality you should make some changes in configuration file. Ex
 FunctionCalling = True
 ...
 ```
-Don't forget to set `ImageGeneration` to `True` if you want to use image generation.  
-Beware that function calling is working only with some models and don't work with moels that support vision.   
+Don't forget to enable Image generation (see [Image generation](#image-generation)).  
+Beware that function calling is working only with some models and don't work with models that support vision.   
 Learn more about function calling [here](https://platform.openai.com/docs/guides/function-calling).
+
+## Image generation
+You can generate images. Right now only [DALL-E](https://platform.openai.com/docs/guides/images) is supported.
+<details>
+<summary> WIP - unsupported </summary>
+To use this functionality you should make some changes in configuration file. Example:  
+```ini
+...
+[ImageGeneration]
+Engine = dalle
+APIKey = ******
+Model = dall-e-3
+RateLimitCount = 16
+RateLimitTime = 3600
+BasePrice = 0.04
+...
+```  
+If you want to use OpenAI text engine and image generation you can omit `APIKey` field in the `ImageGeneration` section. Key will be taken from the `OpenAI` section.
+</details>
+
+You can set up DALL-E in OpenAI section of the `./data/.config` file (supported now):
+```ini
+...
+ImageGeneration = False
+ImageGenModel = dall-e-3
+ImageGenerationSize = 1024x1024
+ImageGenerationStyle = vivid
+ImageGenerationPrice = 0.04
+...
+```
+To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
+Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Function calling](#function-calling)), you can generate images with function calling just by asking the bot to do it.
+
+## Web Search
+You can use web search capabilities with function calling.  
+Right now only Google search is supported (via [Google Search API](https://developers.google.com/custom-search/v1/overview)).  
+To enable web search you should make some changes in configuration file. Example:  
+```ini
+...
+
+[Web]
+SearchEngine = google
+APIKey = ******
+CSEID = ******
+URLSummary = False
+TrimLength = 3000
+...
+```  
+Keep in mind that you should also set `FunctionCalling` to `True` in the `./data/.config` file (see [Function calling](#function-calling)).  
+If `SearchEngine` is not set, web search functionality will not be enabled.  
+SirChatalot will only have information about the first 5 results (title, link and description).  
+It can try to open only links provided (or from history), but will not walk through the pages when using web search.  
+`URLSummary` parameter is used to tell the bot to summarize the content of the page.   
+`TrimLength` is used to limit the length of the parsed text (context can be lost).  
 
 ## Using OpenAI compatible APIs
 You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
