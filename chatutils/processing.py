@@ -665,12 +665,13 @@ class ChatProc:
                 return None
             if id in self.stats:
                 statisitics = ''
+                cost = 0
                 for key, value in self.stats[id].items():
                     if key in ['Tokens used', 'Speech2text seconds']:
                         continue # deprecated values to ignore (for backward compatibility)
                     statisitics += key + ': ' + str(value) + '\n'
                 if self.speech_engine:
-                    cost = self.stats[id]['Speech to text seconds'] / 60 * self.s2t_model_price
+                    cost += self.stats[id]['Speech to text seconds'] / 60 * self.s2t_model_price
                 cost += self.stats[id]['Prompt tokens used'] / 1000 * self.model_prompt_price 
                 cost += self.stats[id]['Completion tokens used'] / 1000 * self.model_completion_price
                 if self.image_generation:
@@ -679,7 +680,7 @@ class ChatProc:
                 return statisitics
             return None
         except KeyError as e:
-            logger.error('Could not get statistics for user: ' + str(id) + ' due to missing key: ' + str(e))
+            logger.error(f'Could not get statistics for user {id} due to missing key: {e}')
             # add key to stats and try again
             current_stats = self.stats[id]
             key_missing = str(e).split('\'')[1]
@@ -688,12 +689,12 @@ class ChatProc:
             try:
                 pickle.dump(self.stats, open(self.stats_location, "wb"))
             except Exception as e:
-                logger.error('Could not get statistics for user after adding keys: ' + str(id))
+                logger.error(f'Could not get statistics for user {id} after adding keys: {e}')
             if counter > 6:
                 return 'There was an error while getting statistics. Please, try again.'
             return await self.get_stats(id=id, counter=counter+1) # recursive call
         except Exception as e:
-            logger.error('Could not get statistics for user (other exception): ' + str(id))
+            logger.error(f'Could not get statistics for user {id}: {e}')
             return None
         
     async def dump_chat(self, id=None, plain=False, chatname=None) -> bool:
