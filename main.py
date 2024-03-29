@@ -451,8 +451,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
     help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if speech_engine is not None else ""
+    if gpt.function_calling:
+        if gpt.webengine is not None:
+            help_text += "\nYou can ask the bot to find something on the web. Just ask it to search for something. It will make request to a serach engine and will see a snippets of the first results. Example: `Find me a links to the best websites about cats.`\n"
+        if gpt.urlopener is not None:
+            help_text += "\nBot can also open a link for you, but this functionality is very limited. Example: `Summaraize the article from the link https://en.wikipedia.org/wiki/Cat_(Unix)`\n"
     if IMAGE_GENERATION:
-        help_text += "\nFor image generation you can just ask the bot to make an image. It can do it by itself due to fucntion calling enabled. Example: `Draw a cat on a table for me.` or `Create a picture of a cat on a table.`\n" if gpt.function_calling else ""
+        help_text += "\nImage generation is enabled. That means you can ask the bot to generate an image based on your prompt.\n"
+        if gpt.function_calling:
+            help_text += "\nYou can also just ask the bot to make an image. Example: `Draw a cat on a table for me.` or `Create a picture of a dog on a table.`\n" 
         if gpt.image_generation_engine_name == "dalle":
             help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
             help_text += " `--natural` - for natural style\n `--vivid` - for vivid style\n `--revision` - for displaying a revised prompt\n `--horizontal` - for horizontal image\n `--vertical` - for vertical image\n"
@@ -460,7 +467,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         elif gpt.image_generation_engine_name == "stability":
             help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
             help_text += " `--ratio 16:9` - for 16:9 aspect ratio (possible values: 1:1, 16:9, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21)\n `--negative <negative prompt>` - for negative prompt\n `--seed 0` - for seed value (postive integer, 0 for random)\n `--horizontal` - for horizontal image (16:9)\n `--vertical` - for vertical image (9:16)\n"
-            help_text += "\nExample: `/imagine a cat on a table --ratio 2:3 --seed 42`\n"
+            help_text += "\nExample: `/imagine a cat on a table --ratio 2:3`\n"
         else:
             pass
     await send_message(update, help_text, markdown=1)

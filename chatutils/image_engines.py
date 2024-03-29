@@ -306,6 +306,8 @@ class StabilityEngine:
             * --ratio 16:9 - for 16:9 ratio (or any other supported ratio)
             * --negative <negative_prompt> - to avoid generating images similar to negative_prompt
             * --seed <seed> - to set seed for generation
+            * --horizontal - for horizontal image (16:9 ratio)
+            * --vertical - for vertical image (9:16 ratio)
         '''
         # check if image generation is not rate limited
         if await self.image_rate_limit_check(id) == False:
