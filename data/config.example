@@ -6,7 +6,7 @@ GeneralRateLimit = 60
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ChatModel = gpt-3.5-turbo
+ChatModel = gpt-3.5-turbo-0125
 ChatModelPromptPrice = 0.0015
 ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
@@ -20,15 +20,27 @@ EndUserID = True
 Moderation = False
 Vision = False
 ImageSize = 512
-ImageGeneration = False
-ImageGenModel = dall-e-3
-ImageGenerationSize = 1024x1024
-ImageGenerationStyle = vivid
-ImageGenerationPrice = 0.04
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 FunctionCalling = False
 SummarizeTooLong = False
+
+[ImageGeneration]
+Engine = dalle
+APIKey = ******
+Model = dall-e-3
+RateLimitCount = 16
+RateLimitTime = 3600
+BasePrice = 0.04
+
+[Web]
+SearchEngine = google
+APIKey = ******
+CSEID = ******
+SearchResults = 5
+UrlOpen = True
+URLSummary = True
+TrimLength = 3000
 
 [Files]
 Enabled = True

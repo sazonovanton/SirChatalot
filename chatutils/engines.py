@@ -54,14 +54,6 @@ class OpenAIEngine:
             "MinLengthTokens": 100,
             "Vision": False,
             "ImageSize": 512,
-            "ImageGeneration": False,
-            "ImageGenModel": "dall-e-3",
-            "ImageGenerationSize": "1024x1024",
-            "ImageGenerationStyle": "vivid",
-            "ImageGenerationQuality": "standard",
-            "ImageGenerationPrice": 0,
-            "ImageRateLimitCount": 0,
-            "ImageRateLimitTime": 0,
             "FunctionCalling": False,
             "SummarizeTooLong": False,
             })
@@ -107,17 +99,7 @@ class OpenAIEngine:
 
         self.vision = self.config.getboolean("OpenAI", "Vision")
         self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
-        self.image_generation = self.config.getboolean("OpenAI", "ImageGeneration") 
         self.function_calling = self.config.getboolean("OpenAI", "FunctionCalling") 
-        if self.image_generation:
-            self.image_generation_size = self.config.get("OpenAI", "ImageGenerationSize")
-            self.image_model = self.config.get("OpenAI", "ImageGenModel")
-            self.image_generation_style = self.config.get("OpenAI", "ImageGenerationStyle") 
-            self.image_generation_quality = self.config.get("OpenAI", "ImageGenerationQuality")
-            self.image_generation_price = float(self.config.get("OpenAI", "ImageGenerationPrice"))
-            self.image_rate_limit_count = int(self.config.get("OpenAI", "ImageRateLimitCount"))
-            self.image_rate_limit_time = int(self.config.get("OpenAI", "ImageRateLimitTime"))
-            self.image_rate_limit = {}
         if self.vision:
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
@@ -138,12 +120,6 @@ class OpenAIEngine:
             print('Vision is enabled')
             print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
             print('-- Learn more: https://platform.openai.com/docs/guides/vision/overview\n')
-        if self.image_generation:
-            print('Image generation via DALL-E is enabled')
-            print('-- Image generation is used to create images from text. It can be changed in the self.config file.')
-            if self.image_rate_limit_count > 0 and self.image_rate_limit_time > 0:
-                print(f'-- Image generation is rate limited (only {self.image_rate_limit_count} images per {self.image_rate_limit_time} seconds are allowed).')
-            print('-- Learn more: https://platform.openai.com/docs/guides/images/usage\n')
         if self.function_calling:
             print('Function calling is enabled')
             print('-- Function calling is used to call functions from OpenAI API. It can be changed in the self.config file.')
@@ -188,38 +164,6 @@ class OpenAIEngine:
             return 'Service is getting rate limited. Please try again later.'
         except Exception as e:
             logger.exception('Could not convert speech to text')
-            return None
-        
-    async def generate_image(self, prompt, image_orientation=None, image_style=None):
-        '''
-        Generate image from text prompt
-        Input:
-            * prompt - text prompt
-            * orientation - orientation of image (landscape, portrait, default is None - square)
-            * style - style of image (natural or vivid, default is None - vivid)
-        '''
-        try:
-            logger.debug(f'Generating image from prompt: {prompt}, orientation: {image_orientation}, style: {image_style}')
-            if self.image_generation == False:
-                return None, None
-            if prompt is None:
-                return None, None
-            
-            size="1024x1024"
-            style="vivid"
-            if image_orientation is not None:
-                if image_orientation == 'landscape':
-                    size = '1792x1024'
-                if image_orientation == 'portrait':
-                    size = '1024x1792'
-            if image_style is not None:
-                if image_style == 'natural':
-                    style = 'natural'
-
-            b64_image, revised_prompt = await self.imagine(prompt, id='function', size=size, style=style, n=1, quality="standard", revision=True)
-            return (b64_image, revised_prompt)
-        except Exception as e:
-            logger.exception('Could not generate image')
             return None
         
     async def detect_function_called(self, response):
@@ -367,116 +311,6 @@ class OpenAIEngine:
             # if chat is too long, return response and advice to delete session
             response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
         return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
-
-    async def image_rate_limit_check(self, id):
-        '''
-        Check if image generation is not rate limited
-        Return True if not rate limited, False if rate limited
-        '''
-        try:
-            if self.image_rate_limit_count <= 0 or self.image_rate_limit_time <= 0:
-                return True
-            if id not in self.image_rate_limit:
-                self.image_rate_limit[id] = []
-            # add current time to the list
-            current_time = time.time()
-            self.image_rate_limit[id].append(current_time)
-            # remove old times
-            self.image_rate_limit[id] = [t for t in self.image_rate_limit[id] if current_time - t < self.image_rate_limit_time]
-            # check if count is not exceeded
-            if len(self.image_rate_limit[id]) > self.image_rate_limit_count:
-                return False
-            return True
-        except Exception as e:
-            logger.error(f'Could not check image rate limit due to an error: {e}')
-            return True
-
-    async def imagine(self, prompt, id=0, size="1024x1024", style="vivid", n=1, revision=False, quality="standard"):
-        '''
-        Create image from text prompt
-        Input:
-            * prompt - text prompt
-            * id - id of user
-            * size - size of image (1024x1024, 1792x1024, or 1024x1792 for dall-e-3)
-            * style - style of image (natural or vivid)
-            * n - number of images to generate (only 1 for dall-e-3)
-            * revision - if True, returns revised prompt
-            * quality - quality of image (standard or hd - only for dall-e-3)
-            
-        See https://platform.openai.com/docs/api-reference/images/create for more details
-
-        You can use the following keywords in prompt:
-            * --natural - for natural style
-            * --vivid - for vivid style
-            * --sd - for standard quality
-            * --hd - for hd quality
-            * --horizontal - for horizontal image
-            * --vertical - for vertical image
-        '''
-        if self.image_generation == False:
-            return None, None
-        # check if image generation is not rate limited
-        if self.image_generation:
-            if await self.image_rate_limit_check(id) == False:
-                return None, f'Image generation is rate limited (only {self.image_rate_limit_count} images per {round(self.image_rate_limit_time/60)} minutes are allowed). Please try again later.'
-        try:
-            prompt = prompt.replace('—', '--')
-            # extract arguments from prompt (if any)
-            if '--natural' in prompt:
-                style = 'natural'
-                prompt = prompt.replace('--natural', '')
-            if '--vivid' in prompt:
-                style = 'vivid'
-                prompt = prompt.replace('--vivid', '')
-            if '--sd' in prompt:
-                quality = 'standard'
-                prompt = prompt.replace('--sd', '')
-            if '--hd' in prompt:
-                quality = 'hd'
-                prompt = prompt.replace('--hd', '')
-            if '--horizontal' in prompt:
-                if self.image_model == 'dall-e-3':
-                    size = '1792x1024'
-                prompt = prompt.replace('--horizontal', '')
-            if '--vertical' in prompt:
-                if self.image_model == 'dall-e-3':
-                    size = '1024x1792'
-                prompt = prompt.replace('--vertical', '')
-            prompt = prompt.strip()
-            if prompt == '':
-                return None, 'No text prompt was given. Please try again.'
-            revised_prompt, b64_image = None, None
-            user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
-            response = await self.client.images.generate(
-                        model=self.image_model,
-                        prompt=prompt,
-                        size=size,
-                        quality=quality,
-                        n=n,
-                        response_format="b64_json",
-                        style=style,
-                        user=str(user_id)
-                    )
-            if response.data[0].b64_json:
-                b64_image = response.data[0].b64_json
-            if revision:
-                try:
-                    revised_prompt = response.data[0].revised_prompt
-                except Exception as e:
-                    logger.warning(f'Could not get revised prompt: {e}')
-                    revised_prompt = None
-            return b64_image, revised_prompt
-        except self.openai.BadRequestError as e:
-            logger.error('OpenAI BadRequestError: ' + str(e))
-            if 'content_policy_violation' in str(e):
-                return None, 'Your request was rejected because it may violate content policy. Please review it and try again.'
-            return None, 'Your request was rejected. Please review it and try again.'
-        except self.openai.RateLimitError as e:
-            logger.error(f'OpenAI RateLimitError: {e}')
-            return None, 'Service is getting rate limited. Please try again later.'
-        except Exception as e:
-            logger.exception('Could not imagine image from text')
-            return None, None
 
     async def summary(self, text, size=420):
         '''
@@ -755,7 +589,6 @@ class YandexEngine:
         self.summarize_too_long = self.config.getboolean("YandexGPT", "SummarizeTooLong") 
 
         self.vision = False # Not supported yet
-        self.image_generation = False # Not supported yet
         self.function_calling = False # Not supported yet
 
     def speech_init(self):
@@ -998,7 +831,6 @@ class AnthropicEngine:
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
 
-        self.image_generation = False
         self.function_calling = False
 
         logger.info('Anthropic Engine was initialized')

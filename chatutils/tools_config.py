@@ -5,7 +5,7 @@ class OpenAIConfig:
                     "type": "function",
                     "function": {
                         "name": "generate_image",
-                        "description": "Generate image from text prompt using DALL-E",
+                        "description": "Generate image from text prompt",
                         "parameters": {
                             "type": "object",
                             "properties": {
