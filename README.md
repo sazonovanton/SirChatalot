@@ -1,11 +1,20 @@
 # SirChatalot
 
 This is a Telegram bot that can use various services to generate responses to messages.  
-As for now it can use OpenAI [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API), [Yandex GPT API](https://cloud.yandex.ru/docs/yandexgpt/) or [Claude API](https://docs.anthropic.com/claude/docs/text-generation) to generate responses to text messages. OpenAI's [GPT-4 models](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) or Anthropic's [Claude 3 models](https://docs.anthropic.com/claude/docs/models-overview) can have vision capabilities.  
-If you use OpenAI's API, you can also generate images with [DALL-E](https://platform.openai.com/docs/guides/images).
 
-This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition is done using the OpenAI [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.  
-This bot is also support working with files, see [Files](#files) section for more details.
+For text generation, the bot can use:
+* OpenAI's [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API). Vision capabilities can be used with [GPT-4](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) models. Function calling can be used with [Function calling](https://platform.openai.com/docs/guides/function-calling).
+* Anthropic's [Claude API](https://docs.anthropic.com/claude/docs/text-generation). Vision capabilities can be used with [Claude 3](https://docs.anthropic.com/claude/docs/models-overview) models.
+* [YandexGPT API](https://cloud.yandex.ru/docs/yandexgpt/)
+
+Bot can also generate images with:
+* OpenAI's [DALL-E](https://platform.openai.com/docs/guides/images)
+* [Stability AI](https://platform.stability.ai/)
+
+This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition can be done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.  
+This bot is also support working with files, see [Files](#files) section for more details.  
+
+If function calling is enabled, bot can generate images and [search the web](#web-search) (limited).
 
 ## Navigation
 * [Getting Started](#getting-started)
@@ -14,6 +23,7 @@ This bot is also support working with files, see [Files](#files) section for mor
 * [Using YandexGPT](#using-yandexgpt)
 * [Vision](#vision)
 * [Image generation](#image-generation)
+* [Web Search](#web-search)
 * [Function calling](#function-calling)
 * [Using OpenAI compatible APIs](#using-openai-compatible-apis)
 * [Styles](#styles)
@@ -63,7 +73,7 @@ LogChats = False
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ChatModel = gpt-3.5-turbo
+ChatModel = gpt-3.5-turbo-0125
 ChatModelPromptPrice = 0.0015
 ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
@@ -269,10 +279,15 @@ Beware that function calling is working only with some models and don't work wit
 Learn more about function calling [here](https://platform.openai.com/docs/guides/function-calling).
 
 ## Image generation
-You can generate images. Right now only [DALL-E](https://platform.openai.com/docs/guides/images) is supported.
-<details>
-<summary> WIP - unsupported </summary>
-To use this functionality you should make some changes in configuration file. Example:  
+You can generate images. Right now only [DALL-E](https://platform.openai.com/docs/guides/images) and [Stability AI](https://platform.stability.ai/) are supported.  
+
+To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
+Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Function calling](#function-calling)), you can generate images with function calling just by asking the bot to do it.  
+
+`RateLimitCount`, `RateLimitTime` and `ImageGenerationPrice` parameters are not required, default values for them are zero. So if not set rate limit will not be applied and price will be zero.  
+
+### OpenAI DALL-E
+To use this functionality with Dall-E you should make some changes in configuration file. Example:  
 ```ini
 ...
 [ImageGeneration]
@@ -281,13 +296,15 @@ APIKey = ******
 Model = dall-e-3
 RateLimitCount = 16
 RateLimitTime = 3600
-BasePrice = 0.04
+ImageGenerationPrice = 0.04
 ...
 ```  
-If you want to use OpenAI text engine and image generation you can omit `APIKey` field in the `ImageGeneration` section. Key will be taken from the `OpenAI` section.
-</details>
+If you want to use OpenAI text engine and image generation you can omit `APIKey` field in the `ImageGeneration` section. Key will be taken from the `OpenAI` section.  
+For OpenAI you can also set `BaseURL` field in the `ImageGeneration` section. If it was set in `OpenAI` section, it will be used instead, to override it you cat set `ImageGeneration.BaseURL` to `None`.  
+Parameters set in `ImageGeneration` have priority over `OpenAI` section for image generation.  
 
-You can set up DALL-E in OpenAI section of the `./data/.config` file (supported now):
+**Alternatively** you can set up DALL-E in OpenAI section of the `./data/.config` file (deprecated, support can be removed in the future).  
+If config has section `ImageGeneration` it will be used instead and this method will be ignored.  
 ```ini
 ...
 ImageGeneration = False
@@ -297,8 +314,20 @@ ImageGenerationStyle = vivid
 ImageGenerationPrice = 0.04
 ...
 ```
-To generate an image, send the bot a message with the `/imagine <text>` command. The bot will then generate an image based on the text prompt. Images are not stored on the server and processed as base64 strings.  
-Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Function calling](#function-calling)), you can generate images with function calling just by asking the bot to do it.
+### Stability AI
+To use this functionality with Stability AI you should make some changes in configuration file. Example:  
+```ini
+[ImageGeneration]
+Engine = stability
+ImageGenURL = https://api.stability.ai/v2beta/stable-image/generate/core
+APIKey = ******
+ImageGenerationRatio = 1:1
+RateLimitCount = 16
+RateLimitTime = 3600
+ImageGenerationPrice = 0.04
+```  
+You can also set `NegativePrompt` (str) and `Seed` (int) parameters in the `ImageGeneration` section if you want to use them.  
+`ImageGenURL` and `ImageGenerationRatio` are not required, default values (in example) are used if they are not set.  
 
 ## Web Search
 You can use web search capabilities with function calling.  

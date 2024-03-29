@@ -57,41 +57,22 @@ class ChatProc:
                 self.image_size = 512
             self.pending_images = {}
 
-        self.image_generation = self.text_engine.image_generation
+        self.image_generation = False
+        self.image_generation_engine_name = None
+        self.image_engine = None
+        if config.has_section("ImageGeneration"):
+            self.image_generation = True
+        if not self.image_generation and config.has_section("OpenAI"):
+            self.image_generation = config.getboolean("OpenAI", "ImageGeneration") if config.has_option("OpenAI", "ImageGeneration") else False
         if self.image_generation:
-            self.image_generation_size = self.text_engine.image_generation_size
-            self.image_generation_style = self.text_engine.image_generation_style
-            self.image_generation_quality = self.text_engine.image_generation_quality
-            self.image_generation_price = self.text_engine.image_generation_price
+            self.load_image_generation()
+            logger.debug(f'Image generation is enabled, price: ${self.image_generation_price}, size: {self.image_generation_size}, style: {self.image_generation_style}, quality: {self.image_generation_quality}')
 
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
-            from chatutils.web_engines import URLOpen, GoogleEngine
-            if text == "openai":
-                from chatutils.tools_config import OpenAIConfig as tools_config
-            self.webengine = None
-            self.urlopener = None
-            self.available_functions = {}
-            self.function_calling_tools = []
-            if self.image_generation:
-                self.available_functions["generate_image"] = self.text_engine.generate_image
-                self.function_calling_tools.append(tools_config.image_generation)
-            if 'Web' in config:
-                if config.has_option("Web", "SearchEngine"):
-                    if str(config.get("Web", "SearchEngine")).lower() == "google":
-                        self.webengine = GoogleEngine()
-                        logger.debug(f'Web search engine is set to Google')
-                        self.available_functions["web_search"] = self.webengine.search
-                        self.function_calling_tools.append(tools_config.web_search)
-                if config.has_option("Web", "UrlOpen"):
-                    if config.getboolean("Web", "UrlOpen"):
-                        self.urlopener = URLOpen()
-                        self.url_summary = config.getboolean("Web", "URLSummary") if config.has_option("Web", "URLSummary") else False
-                        logger.debug(f'URL opener is enabled, URL summary is set to {self.url_summary}')
-                        self.available_functions["url_opener"] = self.urlopener.open_url
-                        self.function_calling_tools.append(tools_config.url_opener)
-
+            self.load_function_calling(text)
             self.text_engine.function_calling_tools = self.function_calling_tools
+            logger.debug(f'Function calling is enabled')
 
         if self.speech_engine is not None:
             if speech == "openai":
@@ -120,6 +101,107 @@ class ChatProc:
 
         if self.log_chats:
             logger.info('* Chat history is logged *')
+
+    def load_function_calling(self, text):
+        '''
+        Load function calling tools
+        '''
+        if text == "openai":
+            from chatutils.tools_config import OpenAIConfig as tools_config
+        self.webengine = None
+        self.urlopener = None
+        self.available_functions = {}
+        self.function_calling_tools = []
+        if self.image_generation:
+            self.available_functions["generate_image"] = self.image_engine.generate_image
+            self.function_calling_tools.append(tools_config.image_generation)
+        if 'Web' in config:
+            if config.has_option("Web", "SearchEngine"):
+                if str(config.get("Web", "SearchEngine")).lower() == "google":
+                    from chatutils.web_engines import GoogleEngine
+                    self.webengine = GoogleEngine()
+                    logger.debug(f'Web search engine is set to Google')
+                    self.available_functions["web_search"] = self.webengine.search
+                    self.function_calling_tools.append(tools_config.web_search)
+            if config.has_option("Web", "UrlOpen"):
+                if config.getboolean("Web", "UrlOpen"):
+                    from chatutils.web_engines import URLOpen
+                    self.urlopener = URLOpen()
+                    self.url_summary = config.getboolean("Web", "URLSummary") if config.has_option("Web", "URLSummary") else False
+                    logger.debug(f'URL opener is enabled, URL summary is set to {self.url_summary}')
+                    self.available_functions["url_opener"] = self.urlopener.open_url
+                    self.function_calling_tools.append(tools_config.url_opener)
+
+    def load_image_generation(self):
+        '''
+        Load image generation engine
+        '''
+        if config.has_section("ImageGeneration"):
+            if config.has_option("ImageGeneration", "Engine"):
+                if config.get("ImageGeneration", "Engine").lower() in ["openai", "dall-e", "dalle"]:
+                    # OpenAI DALL-E
+                    from chatutils.image_engines import DalleEngine
+                    self.image_generation_engine_name = "dalle"
+                    if config.has_option("ImageGeneration", "APIKey"):
+                        api_key = config.get("ImageGeneration", "APIKey")
+                    elif config.has_option("OpenAI", "SecretKey"):
+                        api_key = config.get("OpenAI", "SecretKey")
+                    else:
+                        logger.error("No API key provided for image generation")
+                        raise Exception("No API key provided for image generation")
+                    if config.has_option("ImageGeneration", "BaseURL"):
+                        base_url = config.get("ImageGeneration", "BaseURL")
+                    elif config.has_option("OpenAI", "BaseURL"):
+                        base_url = config.get("OpenAI", "BaseURL")
+                    else:
+                        base_url = None
+                    if base_url == 'None':
+                        base_url = None
+                    self.image_engine = DalleEngine(api_key, base_url)
+                elif config.get("ImageGeneration", "Engine").lower() in ["stability"]:
+                    # OpenAI Stability
+                    from chatutils.image_engines import StabilityEngine
+                    self.image_generation_engine_name = "stability"
+                    if config.has_option("ImageGeneration", "APIKey"):
+                        api_key = config.get("ImageGeneration", "APIKey")
+                    else:
+                        logger.error("No API key provided for image generation")
+                        raise Exception("No API key provided for image generation")
+                    self.image_engine = StabilityEngine(api_key)
+                else:
+                    logger.error(f"Unknown image generation engine {config.get('ImageGeneration', 'Engine')}")
+                    raise Exception(f"Unknown image generation engine {config.get('ImageGeneration', 'Engine')}")
+            else:
+                logger.error("No image generation engine provided")
+                raise Exception("No image generation engine provided")
+        elif config.has_section("OpenAI"):
+            if config.has_option("OpenAI", "ImageGeneration"):
+                if config.getboolean("OpenAI", "ImageGeneration"):
+                    # OpenAI DALL-E
+                    from chatutils.image_engines import DalleEngine
+                    if config.has_option("OpenAI", "SecretKey"):
+                        api_key = config.get("OpenAI", "SecretKey")
+                    else:
+                        logger.error("No API key provided for image generation (deprecated)")
+                        raise Exception("No API key provided for image generation (deprecated)")
+                    if config.has_option("OpenAI", "BaseURL"):
+                        base_url = config.get("OpenAI", "BaseURL")
+                    else:
+                        base_url = None
+                    if base_url == 'None':
+                        base_url = None
+                    self.image_engine = DalleEngine(api_key, base_url)
+                else:
+                    logger.debug("Image generation is disabled (deprecated) - Parameter is set to False")
+            else:
+                logger.debug("Image generation is disabled (deprecated) - No parameter provided")
+        else:
+            logger.debug("Image generation is disabled (deprecated) - No config provided")
+
+        self.image_generation_size = self.image_engine.settings["ImageGenerationSize"]
+        self.image_generation_style = self.image_engine.settings["ImageGenerationStyle"]
+        self.image_generation_quality = self.image_engine.settings["ImageGenerationQuality"]
+        self.image_generation_price = self.image_engine.settings["ImageGenerationPrice"]
 
     async def speech_to_text(self, audio_file):
         '''
@@ -544,7 +626,7 @@ class ChatProc:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
         
-    async def imagine(self, id=0, prompt=None, size=None, style=None, quality=None, add_to_chat=True):
+    async def imagine(self, id=0, prompt=None, add_to_chat=True):
         '''
         Generate image from text
         Input: 
@@ -562,18 +644,12 @@ class ChatProc:
             if prompt is None:
                 logger.error('No prompt provided for image generation')
                 return 'Sorry, I could not generate an image without a prompt.'
-            if size is None:
-                size = self.image_generation_size
-            if style is None:
-                style = self.image_generation_style
-            if quality is None:
-                quality = self.image_generation_quality
             # generate image    
             revision = False        
             if '--revision' in prompt:
                 prompt = prompt.replace('--revision', '')
                 revision = True
-            image, text = await self.text_engine.imagine(prompt=prompt, size=size, style=style, quality=quality, revision=True)
+            image, text = await self.image_engine.imagine(prompt=prompt, id=0, revision=True)
             if image is not None:
                 # add statistics
                 await self.add_stats(id=id, images_generated=1)

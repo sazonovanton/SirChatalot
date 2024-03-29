@@ -453,9 +453,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "Bot will answer to your voice messages if you send them.\n" if speech_engine is not None else ""
     if IMAGE_GENERATION:
         help_text += "\nFor image generation you can just ask the bot to make an image. It can do it by itself due to fucntion calling enabled. Example: `Draw a cat on a table for me.` or `Create a picture of a cat on a table.`\n" if gpt.function_calling else ""
-        help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
-        help_text += " `--natural` - for natural style\n `--vivid` - for vivid style\n `--revision` - for displaying a revised prompt\n `--horizontal` - for horizontal image\n `--vertical` - for vertical image\n"
-        help_text += "\nExample: `/imagine a cat on a table --natural --horizontal`\n"
+        if gpt.image_generation_engine_name == "dalle":
+            help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
+            help_text += " `--natural` - for natural style\n `--vivid` - for vivid style\n `--revision` - for displaying a revised prompt\n `--horizontal` - for horizontal image\n `--vertical` - for vertical image\n"
+            help_text += "\nExample: `/imagine a cat on a table --natural`\n"
+        elif gpt.image_generation_engine_name == "stability":
+            help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
+            help_text += " `--ratio 16:9` - for 16:9 aspect ratio (possible values: 1:1, 16:9, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21)\n `--negative <negative prompt>` - for negative prompt\n `--seed 0` - for seed value (postive integer, 0 for random)\n `--horizontal` - for horizontal image (16:9)\n `--vertical` - for vertical image (9:16)\n"
+            help_text += "\nExample: `/imagine a cat on a table --ratio 2:3 --seed 42`\n"
+        else:
+            pass
     await send_message(update, help_text, markdown=1)
 
 @is_authorized
