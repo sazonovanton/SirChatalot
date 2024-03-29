@@ -58,6 +58,7 @@ class ChatProc:
             self.pending_images = {}
 
         self.image_generation = False
+        self.image_generation_engine_name = None
         self.image_engine = None
         if config.has_section("ImageGeneration"):
             self.image_generation = True
@@ -140,6 +141,7 @@ class ChatProc:
                 if config.get("ImageGeneration", "Engine").lower() in ["openai", "dall-e", "dalle"]:
                     # OpenAI DALL-E
                     from chatutils.image_engines import DalleEngine
+                    self.image_generation_engine_name = "dalle"
                     if config.has_option("ImageGeneration", "APIKey"):
                         api_key = config.get("ImageGeneration", "APIKey")
                     elif config.has_option("OpenAI", "SecretKey"):
@@ -159,6 +161,7 @@ class ChatProc:
                 elif config.get("ImageGeneration", "Engine").lower() in ["stability"]:
                     # OpenAI Stability
                     from chatutils.image_engines import StabilityEngine
+                    self.image_generation_engine_name = "stability"
                     if config.has_option("ImageGeneration", "APIKey"):
                         api_key = config.get("ImageGeneration", "APIKey")
                     else:
