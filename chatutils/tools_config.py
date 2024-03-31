@@ -11,7 +11,7 @@ class OpenAIConfig:
                             "properties": {
                                 "prompt": {
                                     "type": "string",
-                                    "description": "Text prompt for image generation"
+                                    "description": "Text prompt for image generation (in english)"
                                 },
                                 "image_orientation": {
                                     "type": "string",
