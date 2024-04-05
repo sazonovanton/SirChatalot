@@ -618,7 +618,7 @@ class YandexEngine:
         self.max_chat_length = self.chat_vars['MaxSessionLength']        
         self.max_file_length = int(self.config.get("YandexGPT", "MaxFileLength"))
         self.min_length_tokens = int(self.config.get("YandexGPT", "MinLengthTokens")) 
-        # self.end_user_id = self.chat_vars['EndUserID']
+        self.end_user_id = self.chat_vars['EndUserID']
 
         self.vision = False # Not supported yet
         self.function_calling = False # Not supported yet
@@ -901,6 +901,8 @@ class AnthropicEngine:
         self.chat_deletion = self.config.getboolean("Anthropic", "ChatDeletion")
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
         self.summarize_too_long = self.config.getboolean("Anthropic", "SummarizeTooLong") 
+        self.model_completion_price = float(self.config.get("Anthropic", "ChatModelCompletionPrice")) 
+        self.model_prompt_price = float(self.config.get("Anthropic", "ChatModelPromptPrice")) 
 
         self.vision = self.config.getboolean("Anthropic", "Vision")
         if self.vision:
