@@ -20,7 +20,7 @@ import io
 # import configuration
 import configparser
 config = configparser.ConfigParser()
-config.read('./data/.config')
+config.read('./data/.config', encoding='utf-8')
 LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
 TOKEN = config.get("Telegram", "Token")
 ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
@@ -219,7 +219,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
                 answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
                 if answer is None:
                     answer = "Sorry, something went wrong. Please try again later."
-                    logger.error('Could not get answer to start message: ' + update.message.text)
+                    logger.error('Could not get answer to start message')
                 await update.message.reply_text(answer)
                 return None
         await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
@@ -300,15 +300,17 @@ async def ratelimiter(user_id, check=False):
     try:
         # open the pickle file with the dict if exists
         try:
-            with open('./data/tech/ratelimit.pickle', 'rb') as f:
-                rate = pickle.load(f)
-        # if file does not exist, create an empty dict
+            if os.path.exists('./data/tech/ratelimit.pickle'):
+                with open('./data/tech/ratelimit.pickle', 'rb') as f:
+                    rate = pickle.load(f)
+            else:
+                logger.info('No ratelimit.pickle file found. Creating a new one.')
+                rate = {}
+                with open('./data/tech/ratelimit.pickle', 'wb') as f:
+                    pickle.dump(rate, f)
         except Exception as e:
-            logger.warning(f'Error while opening ratelimit.pickle. Creating and saving an empty dict. Exception: {e}')
+            logger.error(f'Error while opening ratelimit.pickle. Error: {e}')
             rate = {}
-            # save the dict to a pickle file
-            with open('./data/tech/ratelimit.pickle', 'wb') as f:
-                pickle.dump(rate, f)
         
         # create a function to check if user is in the dict
         if user_id not in rate:
@@ -429,7 +431,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
         if answer is None:
             answer = "Sorry, something went wrong. Please try again later."
-            logger.error('Could not get answer to start message: ' + update.message.text)
+            logger.error('Could not get answer to start message')
         await send_message(update, answer)
     else:
         logger.info("Restricted access to: " + str(user))

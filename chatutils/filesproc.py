@@ -4,7 +4,7 @@ Class for converting PDF, DOC, DOCX, PPT, PPTX, TXT files to just a plain text.
 '''
 import configparser
 config = configparser.ConfigParser()
-config.read('./data/.config')
+config.read('./data/.config', encoding='utf-8')
 LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
 
 import logging
@@ -15,7 +15,8 @@ logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
                                        when="D",
                                        interval=1,
-                                       backupCount=7)
+                                       backupCount=7,
+                                       encoding='utf-8')
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 

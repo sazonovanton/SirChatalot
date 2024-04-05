@@ -2,7 +2,7 @@
 
 import configparser
 config = configparser.ConfigParser()
-config.read('./data/.config')
+config.read('./data/.config', encoding='utf-8')
 LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
 
 # logging
@@ -14,7 +14,8 @@ logger.setLevel(LogLevel)
 handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
                                        when="D",
                                        interval=1,
-                                       backupCount=7)
+                                       backupCount=7,
+                                       encoding='utf-8')
 handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
 logger.addHandler(handler)
 
@@ -57,7 +58,7 @@ class OpenAIEngine:
             "FunctionCalling": False,
             "SummarizeTooLong": False,
             })
-        self.config.read('./data/.config')   
+        self.config.read('./data/.config', encoding='utf-8')  
         # check if alternative API base is used
         self.base_url = None
         if self.config.has_option("OpenAI", "APIBase"):
@@ -98,9 +99,9 @@ class OpenAIEngine:
         self.summarize_too_long = self.config.getboolean("OpenAI", "SummarizeTooLong") 
 
         self.vision = self.config.getboolean("OpenAI", "Vision")
-        self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
         self.function_calling = self.config.getboolean("OpenAI", "FunctionCalling") 
         if self.vision:
+            self.image_size = int(self.config.get("OpenAI", "ImageSize")) 
             self.delete_image_after_chat = self.config.getboolean("OpenAI", "DeleteImageAfterAnswer") if self.config.has_option("OpenAI", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("OpenAI", "ImageDescriptionOnDelete") if self.config.has_option("OpenAI", "ImageDescriptionOnDelete") else False
         if self.function_calling:
@@ -275,7 +276,6 @@ class OpenAIEngine:
                 messages, token_usage = await self.delete_images(messages)
                 prompt_tokens += int(token_usage['prompt'])
                 completion_tokens += int(token_usage['completion'])
-
         # if ratelimit is reached
         except self.openai.RateLimitError as e:
             logger.error(f'OpenAI RateLimitError: {e}')
@@ -552,44 +552,90 @@ class YandexEngine:
         self.text_init() if self.text_initiation else None
         self.speech_init() if self.speech_initiation else None
 
+        self.headers = {
+                'Content-Type': 'application/json',
+                'Authorization': f"Api-Key {self.chat_vars['SecretKey']}",
+                'x-folder-id': self.chat_vars['CatalogID'],
+            }
+        if self.chat_vars['RequestLogging'] == False:
+            self.headers['x-data-logging-enabled'] = 'false'
+        
+        logger.info('Yandex Engine was initialized')
+
     def text_init(self):
         '''
         Initialize Yandex API for text generation
         '''
         import configparser
         self.config = configparser.SafeConfigParser({
-            "ChatEndpoint": "https://llm.api.cloud.yandex.net/llm/v1alpha/chat",
-            "InstructEndpoint": "https://llm.api.cloud.yandex.net/llm/v1alpha/instruct",
-            "ChatModel": "general",
+            "Endpoint": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
+            "ChatModel": "yandexgpt-lite/latest",
+            "SummarisationModel": "summarization/latest",
+            "ChatModelCompletionPrice": 0,
+            "ChatModelPromptPrice": 0,
             "PartialResults": False,
             "Temperature": 0.7,
             "MaxTokens": 1500,
-            "instructionText": "You are a helpful chatbot assistant named Sir Chatalot.",
+            "SystemMessage": "You are a helpful chatbot assistant named Sir Chatalot.",
             "SummarizeTooLong": False,
+            "ChatDeletion": False,
+            "ImageSize": 512,            
+            "MaxFileLength": 10000,
+            "MinLengthTokens": 100,
+            "EndUserID": False,
+            "RequestLogging": False,
             })
-        self.config.read('./data/.config') 
+        self.config.read('./data/.config', encoding='utf-8')
         self.chat_vars = {} 
-        self.chat_vars['KeyID'] = self.config.get("YandexGPT", "KeyID")  
         self.chat_vars['SecretKey'] = self.config.get("YandexGPT", "SecretKey")   
         self.chat_vars['CatalogID'] = self.config.get("YandexGPT", "CatalogID")
-        self.chat_vars['Endpoint'] = self.config.get("YandexGPT", "ChatEndpoint")
-        self.chat_vars['InstructEndpoint'] = self.config.get("YandexGPT", "InstructEndpoint")
+        self.chat_vars['Endpoint'] = self.config.get("YandexGPT", "Endpoint")
         self.chat_vars['Model'] = self.config.get("YandexGPT", "ChatModel")
-        self.model = self.chat_vars['Model']
-        self.chat_vars['PartialResults'] = self.config.getboolean("YandexGPT", "PartialResults")
+        self.chat_vars['SummarisationModel'] = self.config.get("YandexGPT", "SummarisationModel")
         self.chat_vars['Temperature'] = self.config.getfloat("YandexGPT", "Temperature")
         self.chat_vars['MaxTokens'] = self.config.getint("YandexGPT", "MaxTokens")
-        self.chat_vars['instructionText'] = self.config.get("YandexGPT", "instructionText")
-        self.chat_deletion = self.config.getboolean("YandexGPT", "ChatDeletion") if self.config.has_option("YandexGPT", "ChatDeletion") else True
+        self.chat_vars['SystemMessage'] = self.config.get("YandexGPT", "SystemMessage")
+        self.chat_vars['MaxSessionLength'] = self.config.getint("YandexGPT", "MaxSessionLength") if self.config.has_option("YandexGPT", "MaxSessionLength") else None
+        self.chat_vars['MaxSummaryTokens'] = self.config.getint("YandexGPT", "MaxSummaryTokens") if self.config.has_option("YandexGPT", "MaxSummaryTokens") else (self.chat_vars['MaxTokens'] // 2)
+        self.chat_vars['RequestLogging'] = self.config.getboolean("YandexGPT", "RequestLogging")
+        self.chat_vars['EndUserID'] = self.config.getboolean("YandexGPT", "EndUserID")
+        self.chat_deletion = self.config.getboolean("YandexGPT", "ChatDeletion") 
         self.log_chats = self.config.getboolean("Logging", "LogChats") if self.config.has_option("Logging", "LogChats") else False
-        self.system_message = self.chat_vars['instructionText']
+        
+        if self.chat_vars['Model'].startswith('gpt://') or self.chat_vars['Model'].startswith('ds://'):
+            # if model is already in correct format (gpt://<folder_ID>/yandexgpt/latest)
+            pass
+        else:
+            # if model is not in correct format, add gpt://<folder_ID>/ to the beginning
+            self.chat_vars['Model'] = f"gpt://{self.chat_vars['CatalogID']}/{self.chat_vars['Model']}"
+
+        self.model = self.chat_vars['Model']
+        self.system_message = self.chat_vars['SystemMessage']
         self.max_tokens = self.chat_vars['MaxTokens']
-        self.model_prompt_price = 0
-        self.model_completion_price = 0
+        self.model_completion_price = float(self.config.get("YandexGPT", "ChatModelCompletionPrice")) 
+        self.model_prompt_price = float(self.config.get("YandexGPT", "ChatModelPromptPrice")) 
         self.summarize_too_long = self.config.getboolean("YandexGPT", "SummarizeTooLong") 
+        self.max_chat_length = self.chat_vars['MaxSessionLength']        
+        self.max_file_length = int(self.config.get("YandexGPT", "MaxFileLength"))
+        self.min_length_tokens = int(self.config.get("YandexGPT", "MinLengthTokens")) 
+        # self.end_user_id = self.chat_vars['EndUserID']
 
         self.vision = False # Not supported yet
         self.function_calling = False # Not supported yet
+        if self.vision:
+            self.image_size = int(self.config.get("YandexGPT", "ImageSize")) 
+            self.delete_image_after_chat = self.config.getboolean("YandexGPT", "DeleteImageAfterAnswer") if self.config.has_option("YandexGPT", "DeleteImageAfterAnswer") else False
+            self.image_description = self.config.getboolean("YandexGPT", "ImageDescriptionOnDelete") if self.config.has_option("YandexGPT", "ImageDescriptionOnDelete") else False
+        if self.max_chat_length is not None:
+            print('Max chat length:', self.max_chat_length)
+            print('-- Max chat length is states a length of chat session. It can be changed in the self.config file.\n')
+        if self.chat_deletion:
+            print('Chat deletion is enabled')
+            print('-- Chat deletion is used to force delete old chat sessions. Without it long sessions should be summaried. It can be changed in the self.config file.\n')
+        if self.vision:
+            print('Vision is enabled')
+            print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
+            print('-- Learn more: https://docs.anthropic.com/claude/docs/vision\n')
 
     def speech_init(self):
         '''
@@ -598,94 +644,102 @@ class YandexEngine:
         # TODO: implement speech to text with Yandex API
         pass
 
-    async def chat(self, messages, id=0, attempt=0):
+    async def chat(self, id=0, messages=None, attempt=0):
         '''
         Chat with Yandex GPT
         Input id of user and message
         Input:
           * id - id of user
           * messages = [
+                {"role": "system", "content": "You are a helpful assistant named Sir Chat-a-lot."},
                 {"role": "user", "content": "Hello, how are you?"},
                 {"role": "assistant", "content": "I am fine, how are you?"},
                 ...]
           * attempt - attempt to send message
         Output:
-            * response - response from GPT (just text of last reply)
-            * messages - messages from GPT (all messages - list of dictionaries with last message at the end)
+            * response - response from Yandex GPT (just text of last reply)
+            * messages - messages from Yandex GPT (all messages - list of dictionaries with last message at the end)
             * tokens - number of tokens used in response (dict - {"prompt": int, "completion": int})
             If not successful returns None
+        If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
         '''
+        if self.text_initiation == False:
+            return None, None, None
+        if messages is None:
+            return None, None, None
+        prompt_tokens, completion_tokens = 0, 0
+        # get response from Claude
         try:
-            completion_tokens = 0
-            # count tokens in messages
-            tokens = await self.count_tokens(messages)
-            if tokens is not None:
-                tokens = self.chat_vars['MaxTokens'] - tokens
-                tokens = max(tokens, 30)
-            else:
-                tokens = self.chat_vars['MaxTokens'] // 2
-            # make post request to Yandex API
-            headers = {
-                'Content-Type': 'application/json',
-                'Authorization': f"Api-Key {self.chat_vars['SecretKey']}",
-                'x-folder-id': self.chat_vars['CatalogID']
-            }
+            messages_tokens = await self.count_tokens(messages)
+            if messages_tokens is None:
+                messages_tokens = 0
+
+            requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
+            requested_tokens = max(requested_tokens, 50)
+            new_messages = await self.revise_messages(messages)
+            
+            # POST request to Yandex API
             payload = {
-                "model": self.chat_vars['Model'],
-                "generationOptions": {
-                    "partialResults": self.chat_vars['PartialResults'],
+                "modelUri": self.chat_vars['Model'],
+                "completionOptions": {
+                    "stream": False,
                     "temperature": self.chat_vars['Temperature'],
-                    "maxTokens": tokens
+                    "maxTokens": requested_tokens,
                 },
-                "messages": await self.format_messages(messages),
-                "instructionText": self.chat_vars['instructionText']
+                "messages": new_messages
             }
-            logger.debug(f'Payload to Yandex API: {payload}')
-            response = self.requests.post(self.chat_vars['Endpoint'], json=payload, headers=headers)
-            logger.debug(f'Response from Yandex API. Code: {response.status_code}, text: {response.text}')
-            # check if response is successful
-            if response.status_code != 200:
-                if response.status_code == 400 and attempt == 0:
-                    if response.json()['error']['message'].startswith('Error in session'):
-                        if self.chat_deletion:
-                            logger.warning(f'Session is too long for user {id}, deleting and starting new session')
-                            messages = [{"role": "system", "content": self.system_message}]
-                            user_message = 'Sorry, apparently your session is too long so I have to delete it. Please start again.'
-                            return user_message, messages, None
-                        else:
-                            logger.warning(f'Session is too long for user {id}, summarrizing and sending last message')
-                            attempt += 1
+            response = self.requests.post(self.chat_vars['Endpoint'], json=payload, headers=self.headers)
+            
+            if response.status_code == 200:
+                logger.debug(f'Yandex GPT response: {response.text}')
+                response = self.json.loads(response.text)
+                prompt_tokens = int(response['result']['usage']['inputTextTokens'])
+                completion_tokens = int(response['result']['usage']['completionTokens'])
+                response = str(response['result']['alternatives'][0]['message']['text'])
+            elif response.status_code == 500:
+                logger.error(f'Yandex GPT InternalServerError: {response.text} (code: {response.status_code})')
+                return 'Yandex API service is having troubles. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            elif response.status_code == 400:
+                logger.error(f'Yandex GPT BadRequestError: {response.text} (code: {response.status_code})')
+                return 'Yandex API service received a bad request. Please try again later or try to /delete session.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            elif response.status_code == 401:
+                logger.error(f'Yandex GPT UnauthorizedError: {response.text} (code: {response.status_code})')
+                return 'Yandex API service is not authorized. Please contact the administrator.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            elif response.status_code == 429:
+                logger.error(f'Yandex GPT RateLimitError: {response.text} (code: {response.status_code})')
+                return 'Service is getting rate limited. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            # TODO: Chat is too long - check 
+            elif response.status_code == 413:
+                logger.error(f'Yandex GPT PayloadTooLarge: {response.text} (code: {response.status_code})')
+                if self.chat_deletion or attempt > 0:
+                    logger.debug(f'Chat session for user {id} was deleted due to an error')
+                    messages = messages[0]
+                    return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
                 else:
-                    logger.error(f'Could not send message to Yandex API, response status code: {response.status_code}, response: {response.json()}')
-                    user_message = 'Sorry, something went wrong. Please try to /delete and /start again.'
-                    return user_message, messages, None
-            if attempt == 1:
-                logger.warning(f'Session is too long for user {id}, summarrizing and sending last message')
-                # summary messages
-                style = messages[0]['content'] + '\n Your previous conversation summary: '
-                style += await self.chat_summary(messages[:-1])
-                response, messages, token_usage = await self.chat(id=id, messages=[{"role": "system", "content": style}, {"role": "user", "content": message}], attempt=attempt+1)
-                completion_tokens += int(token_usage['completion']) if token_usage['completion'] else None
-            # get response from Yandex API (example: {'result': {'message': {'role': 'Ассистент', 'text': 'The current temperature in your area right now (as of 10/23) would be approximately **75°F**.'}, 'num_tokens': '94'}})
-            response = response.json()
-            # lines = response.text.splitlines()
-            # json_objects = [self.json.loads(line) for line in lines]
-            # # Parse only the last line into JSON
-            # response = json_objects[-1]
-
-            response = response['result']
-            completion_tokens += int(response['num_tokens']) if response['num_tokens'] else None
-            response = str(response['message']['text']) if response['message']['text'] else None
-
-            # log to logger file fact of message being received
-            logger.debug('Message from user ' + str(id) + ' was received from Yandex API')
-            messages.append({"role": "assistant", "content": response})
-            return response, messages, {"prompt": 0, "completion": completion_tokens}
+                    return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+            else:
+                logger.error(f'Yandex GPT Error: {response.text} (code: {response.status_code})')
+                return "Something went wrong with Yandex GPT. Please try again later.", messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        except self.requests.exceptions.ConnectionError as e:
+            logger.error(f'Connection error to Yandex API: {e}')
+            return 'Yandex API service is not available. Please try again later.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         except Exception as e:
-            logger.exception('Could not send message to Yandex API')
-            return None, messages, None
-
-    async def format_messages(self, messages):
+            logger.error(f'Something went wrong with attempt to get response from Yandex GPT: {e}')
+            return None, messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+        # add response to chat history
+        messages.append({"role": "assistant", "content": str(response)})
+        # save chat history to file
+        if self.max_chat_length is not None:
+            if self.chat_deletion:
+                l = len([i for i in messages if i['role'] == 'user'])
+                if self.max_chat_length - l <= 3:
+                    response += '\n*System*: You are close to the session limit. Messages left: ' + str(self.max_chat_length - l) + '.'
+        if attempt == 1:
+            # if chat is too long, return response and advice to delete session
+            response += '\nIt seems like you reached length limit of chat session. You can continue, but I advice you to /delete session.'
+        return response, messages, {"prompt": prompt_tokens, "completion": completion_tokens}
+    
+    async def revise_messages(self, messages):
         '''
         Format messages for Yandex API
         From: [{"role": "string", "content": "string"}, ...]
@@ -693,56 +747,52 @@ class YandexEngine:
         Also delete message with role "system"
         '''
         try:
-            formatted_messages = []
+            revised_messages = []
             for message in messages:
-                if message['role'] == 'system':
-                    continue
-                role = "Ассистент" if message['role'] == 'assistant' else message['role']
-                formatted_messages.append({"role": role, "text": message['content']})
-            return formatted_messages
+                revised_messages.append({"role": message['role'], "text": message['content']})
+            return revised_messages
         except Exception as e:
-            logger.exception('Could not format messages for Yandex API')
-            raise Exception('Could not format messages for YandexGPT API')
-        
-    async def summary(self, text, size=240):
+            logger.exception('Could not revise messages for Yandex API')
+            raise Exception('Could not revise messages for YandexGPT API')
+
+    async def summary(self, text, size=420):
         '''
         Make summary of text
         Input text and size of summary (in tokens)
         '''
-        # Get a summary prompt
-        instructionText =  f'You are very great at summarizing text to fit in {size//30} sentenses. Answer with summary only.'
-        requestText = 'Make a summary:\n' + str(text)
-        # make post request to Yandex API
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f"Api-Key {self.chat_vars['SecretKey']}",
-            'x-folder-id': self.chat_vars['CatalogID']
-        }
-        payload = {
-            "model": self.chat_vars['Model'],
-            "generationOptions": {
-                "partialResults": self.chat_vars['PartialResults'],
-                "temperature": self.chat_vars['Temperature'],
-                "maxTokens": size
-            },
-            "instructionText": instructionText,
-            "requestText": requestText
-        }
-        response = self.requests.post(self.chat_vars['InstructEndpoint'] , json=payload, headers=headers)
-        # log to logger file fact of message being sent
-        logger.debug('Summary request was sent to Yandex API')
-        # check if response is successful
-        if response.status_code != 200:
-            logger.error('Could not send summary request to Yandex API')
-            return None, None
-        # get response from Yandex API
-        response = response.json()
-        completion_tokens = int(response['alternatives']['numTokens']) if response['alternatives']['numTokens'] else None
-        prompt_tokens = int(response['numPromptTokens']) if response['numPromptTokens'] else None
-        response = str(response['alternatives']['text']) if response['alternatives']['text'] else None
-        # log to logger file fact of message being received
-        logger.debug('Summary request was received from Yandex API')
-        return response, {"prompt": prompt_tokens, "completion": completion_tokens}
+        try:
+            # Get a summary prompt
+            # Get the response from the API
+            requested_tokens = min(size, self.max_tokens)
+            # POST request to Yandex API
+            payload = {
+                "modelUri": f"gpt://{self.chat_vars['CatalogID']}/{self.chat_vars['SummarisationModel']}",
+                "completionOptions": {
+                    "stream": False,
+                    "temperature": self.chat_vars['Temperature'],
+                    "maxTokens": requested_tokens,
+                },
+                "messages": [
+                    {"role": "user", "text": str(text)}
+                ]
+            }
+            
+            response = self.requests.post(self.chat_vars['Endpoint'], json=payload, headers=self.headers)
+            
+            if response.status_code == 200:
+                logger.debug(f'Yandex GPT response: {response.text}')
+                response = self.json.loads(response.text)
+                prompt_tokens = int(response['result']['usage']['inputTextTokens'])
+                completion_tokens = int(response['result']['usage']['completionTokens'])
+                response = str(response['result']['alternatives'][0]['message']['text'])
+            else:
+                logger.error(f'Yandex GPT Error: {response.text} (code: {response.status_code})')
+                return None, {"prompt": 0, "completion": 0}
+            # Return the response
+            return response, {"prompt": prompt_tokens, "completion": completion_tokens}
+        except Exception as e:
+            logger.exception('Could not summarize text')
+            return None, {"prompt": 0, "completion": 0}
     
     async def chat_summary(self, messages, short=False):
         '''
@@ -811,7 +861,7 @@ class AnthropicEngine:
             "ImageSize": 512,
             "SummarizeTooLong": False,
             })
-        self.config.read('./data/.config')   
+        self.config.read('./data/.config', encoding='utf-8')   
         # check if alternative API base is used
         self.base_url = None
         if self.config.has_option("Anthropic", "APIBase"):
@@ -840,8 +890,6 @@ class AnthropicEngine:
         Initialize text generation
         '''
         self.model = self.config.get("Anthropic", "ChatModel")
-        self.model_completion_price = float(self.config.get("Anthropic", "ChatModelCompletionPrice")) 
-        self.model_prompt_price = float(self.config.get("Anthropic", "ChatModelPromptPrice")) 
         self.temperature = float(self.config.get("Anthropic", "Temperature"))
         self.max_tokens = int(self.config.get("Anthropic", "MaxTokens"))
         self.end_user_id = self.config.getboolean("Anthropic", "EndUserID") 
@@ -855,8 +903,8 @@ class AnthropicEngine:
         self.summarize_too_long = self.config.getboolean("Anthropic", "SummarizeTooLong") 
 
         self.vision = self.config.getboolean("Anthropic", "Vision")
-        self.image_size = int(self.config.get("Anthropic", "ImageSize")) 
         if self.vision:
+            self.image_size = int(self.config.get("Anthropic", "ImageSize")) 
             self.delete_image_after_chat = self.config.getboolean("Anthropic", "DeleteImageAfterAnswer") if self.config.has_option("Anthropic", "DeleteImageAfterAnswer") else False
             self.image_description = self.config.getboolean("Anthropic", "ImageDescriptionOnDelete") if self.config.has_option("Anthropic", "ImageDescriptionOnDelete") else False
 
@@ -1221,8 +1269,8 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     # engine = OpenAIEngine(text=True)
-    # engine = YandexEngine(text=True)
-    engine = AnthropicEngine(text=True)
+    engine = YandexEngine(text=True)
+    # engine = AnthropicEngine(text=True)
 
     messages = [
         {"role": "system", "content": "Your name is Sir Chatalot, you are assisting the user with a task."},

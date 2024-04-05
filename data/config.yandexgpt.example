@@ -1,0 +1,15 @@
+[Telegram]
+Token = 123456789:ABCDEFGHKLMNOPQRSTUVWXYZ
+AccessCodes = myaccesscode
+GeneralRateLimit = 60
+RateLimitTime = 3600
+TextEngine = YandexGPT
+
+[YandexGPT]
+SecretKey=<secretkey>
+CatalogID=<catalogid>
+ChatModel=yandexgpt-lite/latest
+Temperature=0.7
+MaxTokens=1500
+SystemMessage=You are a smart AI assistant named Sir Chat-a-lot, who communicates with users through the Telegram messenger.
+SummarizeTooLong = False

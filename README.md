@@ -5,7 +5,7 @@ This is a Telegram bot that can use various services to generate responses to me
 For text generation, the bot can use:
 * OpenAI's [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API). Vision capabilities can be used with [GPT-4](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) models. Function calling can be used with [Function calling](https://platform.openai.com/docs/guides/function-calling).
 * Anthropic's [Claude API](https://docs.anthropic.com/claude/docs/text-generation). Vision capabilities can be used with [Claude 3](https://docs.anthropic.com/claude/docs/models-overview) models.
-* [YandexGPT API](https://cloud.yandex.ru/docs/yandexgpt/)
+* [YandexGPT API](https://yandex.cloud/ru/docs/yandexgpt/)
 
 Bot can also generate images with:
 * OpenAI's [DALL-E](https://platform.openai.com/docs/guides/images)
@@ -196,8 +196,8 @@ Example of configuration for using Claude API is in the `./data/config.claude.ex
 
 ## Using YandexGPT
 YandexGPT is in Preview, you should request access to it.  
-You should have a service account Yandex Cloud account to use YandexGPT (https://cloud.yandex.ru/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API.  
-To use YandexGPT, you need to change the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file and replace the `OpenAI` section with `YandexGPT` section:
+You should have a service account Yandex Cloud account to use YandexGPT (https://yandex.cloud/en/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API and role `ai.languageModels.user` or higher.    
+To use YandexGPT, you need to set the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file:
 ```ini
 [Telegram]
 Token = 111111111:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -205,27 +205,32 @@ AccessCodes = 123456789
 TextEngine = YandexGPT
 
 [YandexGPT]
-KeyID=aaaaaaaaaaaaaaaaaaa
-SecretKey=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
-CatalogID=bbbbbbbbbbbbbbbbbbbbbbbbb
-ChatModel=general
+SecretKey=******
+CatalogID=******
+ChatModel=gpt://<CatalogID>/yandexgpt/latest
 Temperature=700
 MaxTokens=1500
-instructionText=You are a helpful assistant named Sir Chatalot.
-```
-
-* YandexGPT.KeyID: The key ID for the Yandex Cloud.
+SystemMessage=You are a helpful assistant named Sir Chatalot.
+SummarizeTooLong = True
+RequestLogging = False
+```  
 * YandexGPT.SecretKey: The secret key for the Yandex Cloud.
 * YandexGPT.CatalogID: The catalog ID for the Yandex Cloud.
-* YandexGPT.ChatEndpoint: The endpoint for the Yandex Cloud chat API.
-* YandexGPT.InstructEndpoint: The endpoint for the Yandex Cloud instruct API.
-* YandexGPT.ChatModel: The model to use for generating responses (`general`).
-* YandexGPT.PartialResults: Whether to use partial results. Optional. Default: `False`. Does not change anything for now in the current implementation.
+* YandexGPT.Endpoint: The endpoint for the Yandex GPT API. Optional, default is `https://llm.api.cloud.yandex.net/foundationModels/v1/completion`.
+* YandexGPT.ChatModel: The model to use for generating responses (learn more [here](https://yandex.cloud/en/docs/yandexgpt/concepts/models)). You can use `gpt://<CatalogID>/yandexgpt-lite/latest` or just `yandexgpt-lite/latest` (default) for the latest model in the default catalog.
+* YandexGPT.ChatModelCompletionPrice: The price of the model to use for generating responses (per 1000 tokens, in USD).
+* YandexGPT.ChatModelPromptPrice: The price of the model to use for generating responses (per 1000 tokens, in USD).
+* YandexGPT.SummarisationModel: The model to use for summarisation. Optional, default is `summarization/latest`.
 * YandexGPT.Temperature: The temperature to use for generating responses.
 * YandexGPT.MaxTokens: The maximum number of tokens to use for generating responses.
-* YandexGPT.instructionText: The message that will shape your bot's personality.  
+* YandexGPT.SystemMessage: The message that will shape your bot's personality.
+* YandexGPT.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
+* YandexGPT.RequestLogging: Whether to disable logging of API requests by the Yandex Cloud (learn more [here](https://yandex.cloud/en/docs/yandexgpt/operations/disable-logging)). Default: `False`.
 
-YandexGPT support is experimental and can be unstable, please submit an issue if you find a problem.  
+YandexGPT support is experimental, please submit an issue if you find a problem. It was rewritten to use YandexGPT v1 instead of v1alpha due to v1alpha [deprecation](https://yandex.cloud/en/docs/yandexgpt/api-ref/migration-to-v1).
+
+> [!WARNING]
+> There were some changes for YandexGPT. If you have an old configuration file, please update it to the new format. 
 
 ## Vision
 Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
