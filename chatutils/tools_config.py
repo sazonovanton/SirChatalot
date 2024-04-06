@@ -64,3 +64,59 @@ class OpenAIConfig:
                             }
                         }
                     }
+    
+class AnthropicConfig:
+    image_generation = {   
+                "name": "generate_image",
+                "description": "Generate image from text prompt",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "prompt": {
+                            "type": "string",
+                            "description": "Text prompt for image generation (in english)"
+                        },
+                        "image_orientation": {
+                            "type": "string",
+                            "enum": ["landscape", "portrait"],
+                            "description": "Orientation of image, if not specified, square image is generated (preffered)"
+                        },
+                        "image_style": {
+                            "type": "string",
+                            "enum": ["natural", "vivid"],
+                            "description": "Style of image, if not specified, vivid image is generated (preffered)"
+                        }
+                    },
+                    "required": ["prompt"],
+                }
+            }
+    
+    web_search = {
+                "name": "web_search",
+                "description": "Search the web using Search Engine API",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {
+                            "type": "string",
+                            "description": "Query for web search"
+                        }
+                    },
+                    "required": ["query"],
+                }
+            }
+    
+    url_opener = {
+                "name": "url_opener",
+                "description": "Open URL and get the content",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "url": {
+                            "type": "string",
+                            "description": "URL to open"
+                        }
+                    },
+                    "required": ["url"],
+                }
+            }
