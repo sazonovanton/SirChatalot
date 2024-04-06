@@ -168,6 +168,7 @@ ImageSize = 768
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 SummarizeTooLong = True
+FunctionCalling = False
 ```
 
 * Anthropic.SecretKey: The secret key for the Anthropic API.
@@ -182,6 +183,7 @@ SummarizeTooLong = True
 * Anthropic.DeleteImageAfterAnswer: Whether to delete image after it was seen by model. Enable it to keep cost of API usage low. Default: `False`.
 * Anthropic.ImageDescriptionOnDelete: Whether to replace image with it description after it was deleted (see `OpenAI.DeleteImageAfterAnswer`). Default: `False`.
 * Anthropic.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
+* Anthropic.FunctionCalling: Whether to use function calling capabilities (see section [Function calling](#function-calling)). Default: `False`.
 
 You can find Claude models [here](https://docs.anthropic.com/claude/docs/models-overview).
 
