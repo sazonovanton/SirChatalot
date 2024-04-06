@@ -293,7 +293,7 @@ class OpenAIEngine:
                 messages = messages[0]
                 return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
             else:
-                return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+                return 'Something went wrong. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if something else
         except Exception as e:
             logger.exception('Could not get response from GPT')
@@ -717,7 +717,7 @@ class YandexEngine:
                     messages = messages[0]
                     return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
                 else:
-                    return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+                    return 'Something went wrong. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
             else:
                 logger.error(f'Yandex GPT Error: {response.text} (code: {response.status_code})')
                 return "Something went wrong with Yandex GPT. Please try again later.", messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
@@ -959,6 +959,26 @@ class AnthropicEngine:
                 current_role = 'assistant' if message['role'] == 'assistant' else 'user'
                 current_content = message['content']
 
+                # check if there is images in message
+                if self.vision and type(current_content) == list:
+                    tmp = []
+                    for i in range(len(current_content)):
+                        if 'type' in current_content[i]:
+                            if current_content[i]['type'] == 'image':
+                                tmp.append({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": current_content[i]['image_url']['url'].split(';base64,')[0].split(':')[1],
+                                        "data": current_content[i]['image_url']['url'].split(';base64,')[1]
+                                    }
+                                })
+                            else:
+                                tmp.append(current_content[i])
+                        else:
+                            tmp.append(current_content[i])
+                    current_content = tmp
+
                 if type(current_content) == str:
                     current_content = [{"type": "text", "text": current_content}]
 
@@ -1102,7 +1122,7 @@ class AnthropicEngine:
                 messages = messages[0]
                 return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
             else:
-                return 'It seems that chat session is too long or something else happened. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
+                return 'Something went wrong. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if something else
         except Exception as e:
             logger.error(f'Could not get response from Claude: {e}')

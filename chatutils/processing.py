@@ -354,7 +354,10 @@ class ChatProc:
                 style = self.system_message
             # if vision is enabled, then add information about it
             if self.vision:
-                style += '\n# You have vision capabilities enabled, it means that you can see images in chat'
+                style += '\n# You have vision capabilities enabled'
+            # if function calling is enabled, then add information about it
+            if self.function_calling:
+                style += '\n# You have function calling (tools) enabled'
             # get messages if chat exists
             if id in self.chats:
                 messages = self.chats[id]
