@@ -4,7 +4,7 @@ This is a Telegram bot that can use various services to generate responses to me
 
 For text generation, the bot can use:
 * OpenAI's [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API). Vision capabilities can be used with [GPT-4](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) models. Function calling can be used with [Function calling](https://platform.openai.com/docs/guides/function-calling).
-* Anthropic's [Claude API](https://docs.anthropic.com/claude/docs/text-generation). Vision capabilities can be used with [Claude 3](https://docs.anthropic.com/claude/docs/models-overview) models.
+* Anthropic's [Claude API](https://docs.anthropic.com/claude/docs/text-generation). Vision capabilities can be used with [Claude 3](https://docs.anthropic.com/claude/docs/models-overview) models. Function calling can be used with [tool use](https://docs.anthropic.com/claude/docs/tool-use).
 * [YandexGPT API](https://yandex.cloud/ru/docs/yandexgpt/)
 
 Bot can also generate images with:
@@ -256,9 +256,10 @@ Claude 3 models and prices can be found [here](https://docs.anthropic.com/claude
 Beware that right now functionalty for calculating cost of usage is not working for images, so you should pay attenion to that.   
 
 ## Function calling
-You can use function calling capabilities with OpenAI. This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
-Right now only image generation is supported via function calls.  
-To use this functionality you should make some changes in configuration file. Example:  
+You can use function calling capabilities with some [OpenAI](https://platform.openai.com/docs/guides/function-calling) or [Claude](https://docs.anthropic.com/claude/docs/tool-use) models.   
+This way model will decide what function to call by itself. For example, you can ask the bot to generate an image and it will do it.  
+Right now image generation and some web tools are supported.  
+To use this functionality you should make some changes in configuration file. Example (OpenAI, for Claude change OpenAI to Anthropic):    
 ```ini
 ...
 [OpenAI]
@@ -266,8 +267,7 @@ FunctionCalling = True
 ...
 ```
 Don't forget to enable Image generation (see [Image generation](#image-generation)).  
-Beware that function calling is working only with some models and don't work with models that support vision.   
-Learn more about function calling [here](https://platform.openai.com/docs/guides/function-calling).
+This feature is experimental, please submit an issue if you find a problem.  
 
 ## Image generation
 You can generate images. Right now only [DALL-E](https://platform.openai.com/docs/guides/images) and [Stability AI](https://platform.stability.ai/) are supported.  

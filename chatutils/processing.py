@@ -86,7 +86,7 @@ class ChatProc:
         
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
-        print('-- System message is used to set personality to the bot. It can be changed in the self.config file.\n')
+        print('-- System message is used to set personality to the bot. It can be changed in the self.config file.')
         if self.summarize_too_long:
             print('-- Summarize too long is set to True. It means that if the text is too long, then it will be summarized instead of trimmed.\n')
 
@@ -108,7 +108,11 @@ class ChatProc:
         Load function calling tools
         '''
         if text == "openai":
-            from chatutils.tools_config import OpenAIConfig as tools_config
+            from chatutils.tools_config import OpenAIConfig
+            tools_config = OpenAIConfig()
+        if text in ["claude", "anthropic"]:
+            from chatutils.tools_config import AnthropicConfig 
+            tools_config = AnthropicConfig()
         self.webengine = None
         self.urlopener = None
         self.available_functions = {}
@@ -502,7 +506,6 @@ class ChatProc:
                 messages = self.chats[id]
             else:
                 # Add message to the chat
-                # messages.append({"role": "user", "content": message})
                 await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
             # Trim or summarize messages if they are too long
             messages_tokens = await self.count_tokens(messages)
@@ -530,7 +533,8 @@ class ChatProc:
                 if type(response) == tuple:
                     if response[0] == 'function':
                         function_name, function_args = response[1], response[2]
-                        logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}"')
+                        corresponding_text, tool_id = response[4], response[5]
+                        logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}". Corresponding text: "{corresponding_text}". Tool ID: {tool_id}')
                         if response[1] == 'generate_image':
                             # call function to generate image
                             function_to_call = self.available_functions[function_name]
@@ -542,19 +546,34 @@ class ChatProc:
                             image, text = function_response[0], function_response[1]
                             if image is not None:
                                 # add to chat history
-                                await self.add_to_chat_history(
-                                    id=id, 
-                                    message={"role": "function", "name": function_name, "content": str(text)}
-                                    )
+                                if type(self.text_engine) == AnthropicEngine:
+                                    # https://docs.anthropic.com/claude/docs/tool-use-examples
+                                    # assistant:
+                                    message_content = []
+                                    if corresponding_text is not None:
+                                        if len(corresponding_text) > 0:
+                                            message_content.append({"type": "text", "text": corresponding_text})
+                                    message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
+                                    await self.add_to_chat_history(id=id, 
+                                        message={"role": "assistant", "content": message_content})
+                                    # user (function response)
+                                    message_content = [{
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_id,
+                                        "content": f"Image was generated from the prompt: {function_args.get('prompt')} (Revised prompt: {text})",
+                                    }]
+                                    await self.add_to_chat_history(id=id, 
+                                        message={"role": "user", "content": message_content})  
+                                else:
+                                    await self.add_to_chat_history(id=id, 
+                                        message={"role": "function", "name": function_name, "content": str(text)})
                                 # add statistics
                                 await self.add_stats(id=id, images_generated=1)
                                 response = ('image', image, text)
                             elif image is None and text is not None:
                                 response = f'Image was not generated. {text}'
-                                await self.add_to_chat_history(
-                                    id=id, 
-                                    message={"role": "assistant", "content": response}
-                                    )
+                                await self.add_to_chat_history(id=id, 
+                                    message={"role": "assistant", "content": response})
                             else:
                                 response = 'Sorry, something went wrong.'
                                 logger.error(f'Function was called, but image was not generated: {response}')
@@ -566,13 +585,31 @@ class ChatProc:
                             )
                             if function_response is None:
                                 function_response = 'Error while searching the web'
-                            await self.add_to_chat_history(
-                                id=id, 
-                                message={"role": "function", "name": function_name, "content": str(function_response)}
-                                )
+                            if type(self.text_engine) == AnthropicEngine:
+                                # https://docs.anthropic.com/claude/docs/tool-use-examples
+                                # assistant:
+                                message_content = []
+                                if corresponding_text is not None:
+                                    if len(corresponding_text) > 0:
+                                        message_content.append({"type": "text", "text": corresponding_text})
+                                message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
+                                await self.add_to_chat_history(id=id, 
+                                    message={"role": "assistant", "content": message_content})
+                                # user (function response)
+                                message_content = [{
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": f"Web search results for: {function_args.get('query')}: {function_response}",
+                                }]
+                                await self.add_to_chat_history(id=id,
+                                    message={"role": "user", "content": message_content})
+                            else:
+                                await self.add_to_chat_history(id=id, 
+                                    message={"role": "function", "name": function_name, "content": str(function_response)})
                             # Push response to LLM again
                             messages = self.chats[id]
-                            logger.debug(f'Pushing response to LLM again: {function_response}')
+                            logger.debug(f'Pushing response to LLM again')
+                            logger.debug(f'messages: {messages}')
                             response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
                             # add statistics
                             if token_usage is not None:
@@ -601,10 +638,29 @@ class ChatProc:
                                     completion_tokens += int(token_usage['completion'])
                             else:
                                 pass
-                            await self.add_to_chat_history(
-                                id=id, 
-                                message={"role": "function", "name": function_name, "content": f"URL content: {function_response}"}
-                                )
+                            if type(self.text_engine) == AnthropicEngine:
+                                # https://docs.anthropic.com/claude/docs/tool-use-examples
+                                # assistant:
+                                message_content = []
+                                if corresponding_text is not None:
+                                    if len(corresponding_text) > 0:
+                                        message_content.append({"type": "text", "text": corresponding_text})
+                                message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
+                                await self.add_to_chat_history(id=id, 
+                                    message={"role": "assistant", "content": message_content})
+                                # user (function response)
+                                message_content = [{
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": f"URL ({function_args.get('url')}) opened. Content: {function_response}",
+                                }]
+                                await self.add_to_chat_history(id=id,
+                                    message={"role": "user", "content": message_content})
+                            else:
+                                await self.add_to_chat_history(
+                                    id=id, 
+                                    message={"role": "function", "name": function_name, "content": f"URL content: {function_response}"}
+                                    )
                             # Push response to LLM again
                             messages = self.chats[id]
                             logger.debug(f'Pushing response of URL opener to LLM again: {function_response}')

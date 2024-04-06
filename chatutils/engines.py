@@ -169,7 +169,7 @@ class OpenAIEngine:
         
     async def detect_function_called(self, response):
         '''
-        TODO: Function calling is in highly experimental stage
+        TODO: Function calling is in experimental stage
 
         Detect if function was called in response
         Learn more: https://platform.openai.com/docs/guides/function-calling
@@ -179,6 +179,8 @@ class OpenAIEngine:
             * response - response from GPT (None if function was not detected or there was an error)
         '''
         response_message = None
+        text = None
+        tool_id = None
         try:
             logger.debug(f'Detecting function called in response: "{response}"')
             if response is None:
@@ -195,12 +197,12 @@ class OpenAIEngine:
                 return response
             function_name = tool_calls[0].function.name
             function_args = json.loads(tool_calls[0].function.arguments)
+            # tool_id = tool_calls[0].tool_id
             tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
             }
-            # return ('function', function_name, function_response, tokens)
-            return ('function', function_name, function_args, tokens)
+            return ('function', function_name, function_args, tokens, text, tool_id)
         except Exception as e:
             logger.error(f'Could not detect function called: {e}. Response: {response_message}')
             return response
@@ -243,7 +245,6 @@ class OpenAIEngine:
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
             if self.function_calling:
-                # TODO: working with function calling - now it is for testing only
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
@@ -421,7 +422,7 @@ class OpenAIEngine:
                 # Check if there is images in message and leave only text
                 if self.vision:
                     message, trimmed = await self.leave_only_text(message)
-                text = message['role'] + ': ' + message['content']
+                text = f"{message['role']}: {message['content']}"
                 tokens += len(encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
@@ -827,7 +828,7 @@ class YandexEngine:
             # Count the number of tokens
             tokens = 0
             for message in messages:
-                text = message['role'] + ': ' + message['content']
+                text = f"{message['role']}: {message['content']}"
                 tokens += len(encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
@@ -879,10 +880,10 @@ class AnthropicEngine:
             proxies=proxy,
         )
         self.text_initiation, self.speech_initiation = text, speech
-        self.text_init() if self.text_initiation else None
-
         self.function_calling = False
-
+        self.text_init() if self.text_initiation else None        
+        if self.function_calling:
+            self.function_calling_tools = None
         logger.info('Anthropic Engine was initialized')
 
     def text_init(self):
@@ -905,6 +906,7 @@ class AnthropicEngine:
         self.model_prompt_price = float(self.config.get("Anthropic", "ChatModelPromptPrice")) 
 
         self.vision = self.config.getboolean("Anthropic", "Vision")
+        self.function_calling = self.config.getboolean("Anthropic", "FunctionCalling") 
         if self.vision:
             self.image_size = int(self.config.get("Anthropic", "ImageSize")) 
             self.delete_image_after_chat = self.config.getboolean("Anthropic", "DeleteImageAfterAnswer") if self.config.has_option("Anthropic", "DeleteImageAfterAnswer") else False
@@ -920,6 +922,10 @@ class AnthropicEngine:
             print('Vision is enabled')
             print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
             print('-- Learn more: https://docs.anthropic.com/claude/docs/vision\n')
+        if self.function_calling:
+            print('Function calling (tool use) is enabled')
+            print('-- Function calling is used to call functions from chat. It can be changed in the self.config file.')
+            print('-- Learn more: https://docs.anthropic.com/claude/docs/tool-use\n')
 
     async def revise_messages(self, messages):
         '''
@@ -931,62 +937,87 @@ class AnthropicEngine:
             * new_messages - list of dictionaries with revised messages
         '''
         try:
-            new_messages = []
+            new_messages = [{"role": "user", "content": []}]
             system_prompt = ""
             if messages is None:
                 return system_prompt, None
             logger.debug(f'Messages to revise for Anthropic: {len(messages)}')
-            # first message must use the "user" role
-            # roles must alternate between "user" and "assistant", but found multiple "assistant" roles in a row
+            # roles must alternate between "user" and "assistant"
             # itterate over messages
             i = 0
+            last_role = 'user'
             for i in range(len(messages)):
                 message = messages[i]
                 if message['role'] == 'system':
                     system_prompt += f"{message['content']}\n"
                     continue
                 
-                # TODO: optimize this part
-                if len(new_messages) == 0 and message['role'] != 'user':
-                    new_messages.append({"role": "user", "content": "<start>"})
-                last_role = new_messages[-1]['role'] if len(new_messages) > 0 else 'None'
-                if message['role'] == last_role and type(message['content']) == str:
-                    new_messages[-1]['content'] += '\n' + message['content']
-                    continue
+                # first message must use the "user" role and text should not be empty
+                if i == 0 and message['role'] != 'user':
+                    new_messages[-1]['content'].extend([{"type": "text", "text": "<start>"}])
+                
+                current_role = 'assistant' if message['role'] == 'assistant' else 'user'
+                current_content = message['content']
 
-                if message['role'] == 'user' and self.vision:
-                    if type(message['content']) == list:
-                        if last_role == 'user' and type(new_messages[-1]['content']) == list:
-                            pass
-                        else:
-                            new_messages.append({
-                                "role": "user",
-                                "content": []
-                            })
-                        for item in message['content']:
-                            if item['type'] == 'text':
-                                new_messages[-1]['content'].append({
-                                    "type": "text",
-                                    "text": item['text'],
-                                })
-                            elif item['type'] == 'image':
-                                image_url = str(item['image_url']['url']).replace('data:image/jpeg;base64,', '')
-                                new_messages[-1]['content'].append({
-                                    "type": "image",
-                                    "source": {
-                                        "type": "base64",
-                                        "media_type": "image/jpeg",
-                                        "data": image_url,
-                                    }
-                                })
-                        logger.debug(f'Image was added to message for Anthropic')
-                        continue
-                new_messages.append(message)
+                if type(current_content) == str:
+                    current_content = [{"type": "text", "text": current_content}]
+
+                if last_role == current_role:
+                    # extend the last message
+                    new_messages[-1]['content'].extend(current_content)
+                else:
+                    new_messages.append({"role": current_role, "content": current_content})
+
+                last_role = current_role
             return system_prompt, new_messages
         except Exception as e:
             logger.error(f'Could not revise messages for Anthropic: {e}')
             return "", None
         
+    async def detect_function_called(self, response):
+        '''
+        Detect function called in response
+        Input:
+            * response - response from Anthropic API
+        Output:
+            * response - revised response if function was called, otherwise the same response
+        '''
+        response_message = None
+        function_name = None
+        function_args = None
+        text = None
+        tool_id = None
+        try:
+            logger.debug(f'Detecting function called in response: "{response}"')
+            if response is None:
+                return response
+            if not self.function_calling:
+                return response
+            if self.function_calling_tools is None:
+                return response
+            if len(self.function_calling_tools) == 0:
+                return response
+            
+            text = None
+            if response.stop_reason == 'tool_use':
+                logger.debug(f'Function was called in response')
+                for content in response.content:
+                    if type(content) == self.anthropic.types.TextBlock:
+                        text = content.text
+                    if type(content) == self.anthropic.types.beta.tools.ToolUseBlock:
+                        function_name = content.name
+                        function_args = content.input
+                        tool_id = content.id
+                tokens = {
+                    "prompt": response.usage.input_tokens,
+                    "completion": response.usage.output_tokens
+                }
+                return ('function', function_name, function_args, tokens, text, tool_id)
+            return response
+        except Exception as e:
+            logger.error(f'Could not detect function called: {e}. Response: {response_message}')
+            return response
+
     async def chat(self, id=0, messages=None, attempt=0):
         '''
         Chat with Claude
@@ -1021,13 +1052,29 @@ class AnthropicEngine:
             requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
             requested_tokens = max(requested_tokens, 50)
             system_prompt, new_messages = await self.revise_messages(messages)
-            response = await self.client.messages.create(
-                    model=self.model,
-                    temperature=self.temperature, 
-                    max_tokens=requested_tokens,
-                    system=system_prompt,
-                    messages=new_messages
-            )
+            if self.function_calling:
+                response = await self.client.beta.tools.messages.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=requested_tokens,
+                        system=system_prompt,
+                        messages=new_messages,
+                        tools=self.function_calling_tools,
+                )
+                response = await self.detect_function_called(response)
+                if response is not None:
+                    if type(response) == tuple:
+                        if response[0] == 'function':
+                            logger.info(f'Function {response[1]} was called by user {id}')
+                            return response, messages, response[3]
+            else:
+                response = await self.client.messages.create(
+                        model=self.model,
+                        temperature=self.temperature, 
+                        max_tokens=requested_tokens,
+                        system=system_prompt,
+                        messages=new_messages
+                )
             prompt_tokens = int(response.usage.input_tokens)
             completion_tokens = int(response.usage.output_tokens)
             # Delete images from chat history
@@ -1148,7 +1195,7 @@ class AnthropicEngine:
                 # Check if there is images in message and leave only text
                 if self.vision:
                     message, trimmed = await self.leave_only_text(message)
-                text = message['role'] + ': ' + message['content']
+                text = f"{message['role']}: {message['content']}"
                 tokens += len(encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
