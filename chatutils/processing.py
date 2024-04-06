@@ -108,9 +108,11 @@ class ChatProc:
         Load function calling tools
         '''
         if text == "openai":
-            from chatutils.tools_config import OpenAIConfig as tools_config
+            from chatutils.tools_config import OpenAIConfig
+            tools_config = OpenAIConfig()
         if text in ["claude", "anthropic"]:
-            from chatutils.tools_config import AnthropicConfig as tools_config
+            from chatutils.tools_config import AnthropicConfig 
+            tools_config = AnthropicConfig()
         self.webengine = None
         self.urlopener = None
         self.available_functions = {}
