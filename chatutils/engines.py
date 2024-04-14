@@ -585,6 +585,7 @@ class YandexEngine:
             "MinLengthTokens": 100,
             "EndUserID": False,
             "RequestLogging": False,
+            "FunctionCalling": False,
             })
         self.config.read('./data/.config', encoding='utf-8')
         self.chat_vars = {} 
@@ -861,6 +862,7 @@ class AnthropicEngine:
             "Vision": False,
             "ImageSize": 512,
             "SummarizeTooLong": False,
+            "FunctionCalling": False,
             })
         self.config.read('./data/.config', encoding='utf-8')   
         # check if alternative API base is used

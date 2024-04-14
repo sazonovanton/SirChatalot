@@ -75,7 +75,7 @@ class ChatProc:
             self.text_engine.function_calling_tools = self.function_calling_tools
             logger.debug(f'Function calling is enabled')
 
-        if self.speech_engine is not None:
+        if speech is not None:
             if speech == "openai":
                 self.speech_engine = OpenAIEngine(speech=True)
                 self.audio_format = self.speech_engine.audio_format
