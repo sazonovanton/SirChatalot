@@ -156,9 +156,12 @@ class OpenAIEngine:
                 return None
             audio_file = await self.convert_ogg(audio_file)
             audio = open(audio_file, "rb")
-            transcript = await self.client.audio.transcriptions.create(self.s2t_model, audio)
+            transcript = await self.client.audio.transcriptions.create(
+                model=self.s2t_model,
+                file=audio,
+            )
             audio.close()
-            transcript = transcript['text']
+            transcript = transcript.text
             return transcript
         except self.openai.RateLimitError as e:
             logger.error(f'OpenAI RateLimitError: {e}')
