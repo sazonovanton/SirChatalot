@@ -241,6 +241,8 @@ class StabilityEngine:
         '''
         Initialize Stability Engine
         '''
+        from random import randint
+        self.randint = randint
         import requests
         self.requests = requests
         import configparser
@@ -329,14 +331,18 @@ class StabilityEngine:
             if self.settings["ImageGenerationSize"] is not None:
                 data["aspect_ratio"] = self.settings["ImageGenerationSize"]
             if self.settings["Seed"] is not None:
-                data["seed"] = self.settings["Seed"]
+                seed = self.settings["Seed"]
 
             if negative_prompt is not None:
                 if "negative_prompt" in data:
                     data["negative_prompt"] += f"; {negative_prompt}"
                 else:
                     data["negative_prompt"] = negative_prompt
-            if seed > 0:
+                    
+            if seed == -1:
+                seed = self.randint(0, 1000000)
+                data["seed"] = seed
+            else:
                 data["seed"] = seed
             if ratio != "1:1":
                 data["aspect_ratio"] = ratio
@@ -389,7 +395,8 @@ class StabilityEngine:
                     return None, f'Could not generate image. Please try again.'
             elif response.status_code == 400:
                 logger.error(f'Stability BadRequestError: {response.text}')
-                return None, 'Your request was rejected (BadRequest).'
+                logger.debug(f'Stability request data: {response.request.body}')
+                return None, 'Your request was rejected for some reason. Please try later or contact support.'
             elif response.status_code == 403:
                 logger.error(f'Stability ContentModerationError: {response.text}')
                 return None, 'Your request was flagged by content moderation. Please review it and try again.'
