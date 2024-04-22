@@ -10,6 +10,7 @@ For text generation, the bot can use:
 Bot can also generate images with:
 * OpenAI's [DALL-E](https://platform.openai.com/docs/guides/images)
 * [Stability AI](https://platform.stability.ai/)
+* [Yandex ART](https://yandex.cloud/ru/docs/foundation-models/quickstart/yandexart)
 
 This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition can be done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.  
 This bot is also support working with files, see [Files](#files) section for more details.  
@@ -198,7 +199,7 @@ Example of configuration for using Claude API is in the `./data/config.claude.ex
 
 ## Using YandexGPT
 YandexGPT is in Preview, you should request access to it.  
-You should have a service account Yandex Cloud account to use YandexGPT (https://yandex.cloud/en/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API and role `ai.languageModels.user` or higher.    
+You should have a service Yandex Cloud account to use YandexGPT (https://yandex.cloud/en/docs/yandexgpt/quickstart). Service account should have access to the YandexGPT API and role `ai.languageModels.user` or higher.    
 To use YandexGPT, you need to set the `Telegram.TextEngine` field to `YandexGPT` in the `./data/.config` file:
 ```ini
 [Telegram]
@@ -321,6 +322,23 @@ ImageGenerationPrice = 0.04
 ```  
 You can also set `NegativePrompt` (str) and `Seed` (int) parameters in the `ImageGeneration` section if you want to use them.  
 `ImageGenURL` and `ImageGenerationRatio` are not required, default values (in example) are used if they are not set.  
+
+### Yandex ART
+To use this functionality with Yandex ART you should add a section in the configuration file. Example:  
+```ini
+[ImageGeneration]
+Engine = yandex
+APIKey = ******
+ImageGenModel = yandex-art/latest
+CatalogID = ******
+RateLimitCount = 5
+RateLimitTime = 3600    
+```
+`ImageGenModel` can also have a value `art://<CatalogID>/yandex-art/latest`.  
+You can also set `ImageGenerationPrice` (float) parameter in the `ImageGeneration` section if you want to use it. Also you can fix seed for image generation by setting `Seed` (int) parameter.  
+Service Yandex Foundation Models is on Preview, stage so it can be unstable.  
+YandexART API demands IAM token for requests. Service account should have access to the Yandex ART API and role `ai.imageGeneration.user` or higher.  
+Learn more about Yandex ART [here](https://yandex.cloud/ru/docs/foundation-models/quickstart/yandexart) (ru).
 
 ## Web Search
 You can use web search capabilities with function calling.  

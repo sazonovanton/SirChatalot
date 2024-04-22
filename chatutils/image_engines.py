@@ -212,6 +212,9 @@ class DalleEngine:
         Return True if not rate limited, False if rate limited
         '''
         try:
+            if id == 'function':
+                # function is not rate limited
+                return True
             if self.settings["ImageRateLimitCount"] <= 0 or self.settings["ImageRateLimitTime"] <= 0:
                 return True
             if id not in self.image_rate_limit:
@@ -248,7 +251,7 @@ class StabilityEngine:
             "ImageRateLimitCount": 0,
             "ImageRateLimitTime": 0,
             "NegativePrompt": "None",
-            "Seed": 0,
+            "Seed": -1,
         })
         self.config.read('./data/.config', encoding='utf-8')
         self.settings = self.load_image_generation_settings()
@@ -291,7 +294,7 @@ class StabilityEngine:
             logger.error(f'Could not load image generation settings due: {e}')
             return None
 
-    async def imagine(self, prompt, id=0, ratio="1:1", negative_prompt=None, seed=0, output_format='jpeg', revision=False):
+    async def imagine(self, prompt, id=0, ratio="1:1", negative_prompt=None, seed=-1, output_format='jpeg', revision=False):
         '''
         Create image from text prompt
         Input:
@@ -431,6 +434,9 @@ class StabilityEngine:
         Return True if not rate limited, False if rate limited
         '''
         try:
+            if id == 'function':
+                # function is not rate limited
+                return True
             if self.settings["ImageRateLimitCount"] <= 0 or self.settings["ImageRateLimitTime"] <= 0:
                 return True
             if id not in self.image_rate_limit:
@@ -447,3 +453,235 @@ class StabilityEngine:
         except Exception as e:
             logger.error(f'Could not check image rate limit due to an error: {e}')
             return True
+
+
+######## Yandex ART Engine ########
+
+class YandexEngine:
+    def __init__(self, api_key):
+        '''
+        Initialize Stability Engine
+        '''
+        from random import randint
+        self.randint = randint
+        import requests
+        self.requests = requests
+        import configparser
+        self.config = configparser.SafeConfigParser({
+            "ImageGenModel": "yandex-art/latest",
+            "ImageGenURL": "https://llm.api.cloud.yandex.net/foundationModels/v1/imageGenerationAsync",
+            "ImageCheckURL": "https://llm.api.cloud.yandex.net:443/operations",
+            "ImageGenerationPrice": 0,
+            "ImageRateLimitCount": 0,
+            "ImageRateLimitTime": 0,
+            "Seed": 0,
+            "RequestLogging": False,
+        })
+        self.config.read('./data/.config', encoding='utf-8')
+        self.settings = self.load_image_generation_settings()
+        if self.settings is None:
+            raise Exception('Could not load image generation settings')
+
+        self.headers = {
+            # "Authorization": f"Bearer {api_key}",
+            'Authorization': f"Api-Key {api_key}",
+            'x-folder-id': self.settings['CatalogID'],
+        }
+        if self.settings['RequestLogging'] == False:
+            self.headers['x-data-logging-enabled'] = 'false'
+
+        if self.settings['ImageGenModel'].startswith('art://'):
+            # if model is already in correct format (art://<folder_ID>/yandex-art/latest)
+            pass
+        else:
+            # if model is not in correct format, add art://<folder_ID>/...
+            self.settings['ImageGenModel'] = f"art://{self.settings['CatalogID']}/{self.settings['ImageGenModel']}"
+
+        print('Image generation via YandexART is enabled')
+        print('-- Image generation is used to create images from text. It can be changed in the config file.')
+        if self.settings["ImageRateLimitCount"] > 0 and self.settings["ImageRateLimitTime"] > 0:
+            self.image_rate_limit = {}
+            print(f'-- Image generation is rate limited (only {self.settings["ImageRateLimitCount"]} images per {self.settings["ImageRateLimitTime"]} seconds are allowed).')
+        if self.settings["ImageGenerationPrice"] > 0:
+            print(f'-- Image generation cost is {self.settings["ImageGenerationPrice"]} per image.')
+        print('-- Learn more: https://ya.ru/ai/art\n')
+
+    def load_image_generation_settings(self):
+        '''
+        Load image generation settings from config file
+        '''
+        try:
+            settings = {}
+            settings["ImageGenURL"] = self.config.get("ImageGeneration", "ImageGenURL")
+            settings["ImageCheckURL"] = self.config.get("ImageGeneration", "ImageCheckURL")
+            settings["ImageGenerationPrice"] = float(self.config.get("ImageGeneration", "ImageGenerationPrice"))
+            settings["ImageRateLimitCount"] = int(self.config.get("ImageGeneration", "ImageRateLimitCount"))
+            settings["ImageRateLimitTime"] = int(self.config.get("ImageGeneration", "ImageRateLimitTime"))
+            settings["Seed"] = int(self.config.get("ImageGeneration", "Seed"))
+            settings["RequestLogging"] = self.config.getboolean("ImageGeneration", "RequestLogging") 
+            settings["CatalogID"] = self.config.get("ImageGeneration", "CatalogID")
+            settings["ImageGenModel"] = self.config.get("ImageGeneration", "ImageGenModel")
+            settings["ImageGenerationStyle"] = "standard" # not supported by Yandex ART
+            settings["ImageGenerationQuality"] = "standard" # not supported by Yandex ART
+            settings["ImageGenerationSize"] = "1:1" # not supported by Yandex ART
+            return settings
+        except Exception as e:
+            logger.error(f'Could not load image generation settings due: {e}')
+            return None
+
+    async def check_image_generation(self, operation_id, delay=3, iterations=10):
+        '''
+        Generation takes some time, so we need to check if image was generated every <delay> seconds
+        Input:
+            * operation_id - id of operation
+            * delay - delay between checks
+            * iterations - number of iterations to check - if image is not generated after that, return None
+        '''
+        check_generation = True
+        i = 0
+        while check_generation:
+            response = self.requests.get(
+                f'{self.settings["ImageCheckURL"]}/{operation_id}',
+                headers=self.headers,
+            )
+            if response.status_code == 200:
+                response_data = response.json()
+                if "response" in response_data:
+                    if "image" in response_data["response"]:
+                        return response_data["response"]["image"]
+                elif "done" in response_data:
+                    if response_data["done"] == False:
+                        if i >= iterations:
+                            logger.error(f'YandexART: Image generation took too long. Iterations: {i}. Delay: {delay}.')
+                            return None
+                        logger.debug(f'YandexART: Image is not ready yet. Iteration: {i}/{iterations}.')
+                        i += 1
+                        await asyncio.sleep(delay)
+                else:
+                    logger.error(f'YandexART Error: Could not check image generation. Response: {response_data}')
+                    return None                    
+            else:
+                logger.error(f'YandexART Error: Could not check image generation (status code: {response.status_code}). Response: {response.text}')
+                return None
+        
+    async def imagine(self, prompt, id=0, seed=-1, revision=False):
+        '''
+        Create image from text prompt
+        Input:
+            * prompt - text prompt
+            * id - id of user
+            * seed - seed for generation (-1 for random seed)
+        '''
+
+        # check if image generation is not rate limited
+        if await self.image_rate_limit_check(id) == False:
+            return None, f'Image generation is rate limited (only {self.settings["ImageRateLimitCount"]} images per {round(self.settings["ImageRateLimitTime"]/60)} minutes are allowed). Please try again later.'
+        try:
+            if prompt is None:
+                return None, 'No text prompt was given. Please try again.'
+            if prompt == '':
+                return None, 'Text prompt is empty. Please try again.'
+            prompt = prompt.replace('—', '--')
+            prompt = prompt.replace('  ', ' ')
+            data = {
+                "modelUri": self.settings["ImageGenModel"],
+                "messages": [
+                    {
+                        "text": prompt,
+                        "weight": 1
+                    }
+                ],
+                "generationOptions": {
+                    "mimeType": "image/jpeg",
+                }
+            }
+            if seed == -1:
+                seed = self.randint(0, 1000000)
+                data["generationOptions"]["seed"] = str(seed)
+            else:
+                data["generationOptions"]["seed"] = str(seed)
+
+            logger.debug(f'YandexART request. Prompt: {prompt}. Seed: {seed}.')
+            response = self.requests.post(
+                self.settings["ImageGenURL"],
+                headers=self.headers,
+                json=data,
+            )
+
+            if response.status_code == 200:
+                # we should check API if image was done
+                response_data = response.json()
+                logger.debug(f'YandexART response: {response_data}')
+                if "id" in response_data:
+                    operation_id = response_data["id"]
+                    # check if image was generated
+                    image = await self.check_image_generation(operation_id) # returns base64 image or None
+                    if image is None:
+                        logger.error(f'YandexART Error: Could not retrieve image.')
+                        return None, 'Could not retrieve image. Please try again.'
+                revised_prompt = f"Prompt: {prompt}. Seed: {seed}." if revision else None
+                logger.info(f'YandexART generated image.')
+                return image, revised_prompt
+            elif response.status_code == 400:
+                logger.error(f'YandexART BadRequestError: {response.text}')
+                logger.debug(f'YandexART request data: {response.request.body}')
+                return None, 'Request was rejected. Please try later or contact support.'
+            elif response.status_code == 403:
+                logger.error(f'YandexART ContentModerationError: {response.text}')
+                return None, 'Your request was flagged by content moderation. Please review it and try again.'
+            elif response.status_code == 500:
+                logger.error(f'YandexART InternalServerError: {response.text}')
+                return None, 'Service is down. Please try again later.'
+            else:
+                logger.error(f'YandexART Error: {response.text}. Code: {response.status_code}')
+                return None, 'Could not generate image. Please try again later or contact support.'
+        except Exception as e:
+            logger.exception(f'Could not imagine image from text with Yandex ART: {e}')
+            return None, None
+    
+    async def generate_image(self, prompt, image_orientation=None, image_style=None):
+        '''
+        Generate image from text prompt
+        Input:
+            * prompt - text prompt
+            * orientation - orientation of image (landscape, portrait, default is None - square)
+            * style - style of image (natural or vivid, default is None - vivid)
+        '''
+        try:
+            logger.debug(f'Generating image from prompt: {prompt}, orientation: {image_orientation}, style: {image_style}')
+            if prompt is None:
+                return None, None
+            seed = self.settings["Seed"]
+            b64_image, revised_prompt = await self.imagine(prompt, id='function', seed=seed)
+            return (b64_image, revised_prompt)
+        except Exception as e:
+            logger.exception('Could not generate image with Yandex ART')
+            return None
+        
+    async def image_rate_limit_check(self, id):
+        '''
+        Check if image generation is not rate limited
+        Return True if not rate limited, False if rate limited
+        '''
+        try:
+            if id == 'function':
+                # function is not rate limited
+                return True
+            if self.settings["ImageRateLimitCount"] <= 0 or self.settings["ImageRateLimitTime"] <= 0:
+                return True
+            if id not in self.image_rate_limit:
+                self.image_rate_limit[id] = []
+            # add current time to the list
+            current_time = time.time()
+            self.image_rate_limit[id].append(current_time)
+            # remove old times
+            self.image_rate_limit[id] = [t for t in self.image_rate_limit[id] if current_time - t < self.settings["ImageRateLimitTime"]]
+            # check if count is not exceeded
+            if len(self.image_rate_limit[id]) > self.settings["ImageRateLimitCount"]:
+                return False
+            return True
+        except Exception as e:
+            logger.error(f'Could not check image rate limit due to an error: {e}')
+            return True
+        
+    

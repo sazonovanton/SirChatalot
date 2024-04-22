@@ -13,3 +13,11 @@ Temperature=0.7
 MaxTokens=1500
 SystemMessage=You are a smart AI assistant named Sir Chat-a-lot, who communicates with users through the Telegram messenger.
 SummarizeTooLong = False
+
+[ImageGeneration]
+Engine = yandex
+APIKey = <secretkey>
+ImageGenModel = yandex-art/latest
+CatalogID=<catalogid>
+RateLimitCount = 5
+RateLimitTime = 3600

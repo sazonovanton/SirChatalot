@@ -83,10 +83,10 @@ else:
     print("No rate limits.")
 
 # check if file functionality is enabled
-if config.has_option("Files", "Enabled"):
-    files_enabled = config.getboolean('Files', 'Enabled')   
-else:
+if config.has_section('Files'):
     files_enabled = True
+else:
+    files_enabled = False
 if files_enabled:
     print('File functionality enabled.')
 
@@ -470,8 +470,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             help_text += "\nIf you want to control how the image is generated, you can use the following options in the prompt:\n"
             help_text += " `--ratio 16:9` - for 16:9 aspect ratio (possible values: 1:1, 16:9, 21:9, 2:3, 3:2, 4:5, 5:4, 9:16, 9:21)\n `--negative <negative prompt>` - for negative prompt\n `--seed 0` - for seed value (postive integer, 0 for random)\n `--horizontal` - for horizontal image (16:9)\n `--vertical` - for vertical image (9:16)\n"
             help_text += "\nExample: `/imagine a cat on a table --ratio 2:3`\n"
+        elif gpt.image_generation_engine_name == "yandex":
+            help_text += "\nYou are using Yandex ART for image generation. For better results, you can follow YandexART [prompt library](https://yandex.cloud/ru/docs/foundation-models/prompts/yandexart/). You can fix seed with `-- seed 42` (or any other number).\n"
+            help_text += "\nExample: `/imagine a cat laying on the table, hd full wallpaper, sharp details, high quality, lots of details`\n"
         else:
-            pass
+            help_text += "\nExample: `/imagine a cat on a table`\n"
     await send_message(update, help_text, markdown=1)
 
 @is_authorized

@@ -173,6 +173,16 @@ class ChatProc:
                         logger.error("No API key provided for image generation")
                         raise Exception("No API key provided for image generation")
                     self.image_engine = StabilityEngine(api_key)
+                elif config.get("ImageGeneration", "Engine").lower() in ["yandex", "yandexart"]:
+                    # Yandex Art
+                    from chatutils.image_engines import YandexEngine
+                    self.image_generation_engine_name = "yandex"
+                    if config.has_option("ImageGeneration", "APIKey"):
+                        api_key = config.get("ImageGeneration", "APIKey")
+                    else:
+                        logger.error("No API key provided for image generation")
+                        raise Exception("No API key provided for image generation")
+                    self.image_engine = YandexEngine(api_key)
                 else:
                     logger.error(f"Unknown image generation engine {config.get('ImageGeneration', 'Engine')}")
                     raise Exception(f"Unknown image generation engine {config.get('ImageGeneration', 'Engine')}")
