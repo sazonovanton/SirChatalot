@@ -275,9 +275,6 @@ Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Fu
 
 `RateLimitCount`, `RateLimitTime` and `ImageGenerationPrice` parameters are not required, default values for them are zero. So if not set rate limit will not be applied and price will be zero.  
 
-> [!WARNING]
-> There can be some changes in the way Yandex ART API works, so it can be unstable.
-
 ### OpenAI DALL-E
 To use this functionality with Dall-E you should make some changes in configuration file. Example:  
 ```ini
@@ -338,6 +335,9 @@ Service Yandex Foundation Models is on Preview, stage so it can be unstable.
 YandexART API demands IAM token for requests. Service account should have access to the Yandex ART API and role `ai.imageGeneration.user` or higher.  
 Learn more about Yandex ART [here](https://yandex.cloud/ru/docs/foundation-models/quickstart/yandexart) (ru).
 
+> [!WARNING]
+> There can be some changes in the way Yandex ART API works, so it can be unstable.
+
 ## Web Search
 You can use web search capabilities with function calling.  
 Right now only Google search is supported (via [Google Search API](https://developers.google.com/custom-search/v1/overview)).  
@@ -381,7 +381,7 @@ Tested with [LocalAI](https://github.com/mudler/LocalAI). Vision is still untest
 Bot supports different styles that can be triggered with `/style` command.  
 You can add your own style in the `./data/chat_modes.ini` file or change the existing ones. Styles are stored in the INI file format.  
 Example:
-```
+```ini
 [Alice]
 Description = Empathetic and friendly
 SystemMessage = You are a empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty.
