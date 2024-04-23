@@ -1,6 +1,5 @@
 # SirChatalot
-
-This is a Telegram bot that can use various services to generate responses to messages.  
+A Telegram bot that proves you don't need a body to have a personality. It can use various text and image generation APIs to generate responses to user messages.
 
 For text generation, the bot can use:
 * OpenAI's [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API). Vision capabilities can be used with [GPT-4](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) models. Function calling can be used with [Function calling](https://platform.openai.com/docs/guides/function-calling).
@@ -45,14 +44,12 @@ If function calling is enabled, bot can generate images and [search the web](#we
 * Clone the repository.
 * Install the required packages by running the command `pip install -r requirements.txt`.
 * Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.
-* If you use Linux - install `catdoc` for `.doc` and `.ppt` files support and test it calling `catdoc` in the terminal. `.doc` and `.ppt` files support won't work without it.  
-If you use Windows - install `comtypes` for `.doc` and `.ppt` files support with `pip install comtypes`.
-* Create a `.config` file in the `data` directory using the `config.example` file in that directory as a template.
+* Create a `.config` file in the `data` directory using the example file in that directory as a template.
 * Run the bot by running the command `python3 main.py`.
 
 `Whitelist.txt`, `banlist.txt`, `.config`, `chat_modes.ini`, are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
-Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (SystemMessage).
+Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (`SystemMessage`).
 
 There are also some additional styles that you can choose from: Alice, Bob, Charlie and Diana. You can change style from chat by sending a message with `/style` command, but your current session will be dropped. 
 Styles can be set up in the `./data/chat_modes.ini` file. You can add your own styles there or change the existing ones.
@@ -230,10 +227,8 @@ RequestLogging = False
 * YandexGPT.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
 * YandexGPT.RequestLogging: Whether to disable logging of API requests by the Yandex Cloud (learn more [here](https://yandex.cloud/en/docs/yandexgpt/operations/disable-logging)). Default: `False`.
 
-YandexGPT support is experimental, please submit an issue if you find a problem. It was rewritten to use YandexGPT v1 instead of v1alpha due to v1alpha [deprecation](https://yandex.cloud/en/docs/yandexgpt/api-ref/migration-to-v1).
-
 > [!WARNING]
-> There were some changes for YandexGPT. If you have an old configuration file, please update it to the new format. 
+> There can be some changes in the way Yandex GPT API works, so it can be unstable.
 
 ## Vision
 Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
@@ -279,6 +274,9 @@ To generate an image, send the bot a message with the `/imagine <text>` command.
 Also if `FunctionCalling` is set to `True` in the `./data/.config` file (see [Function calling](#function-calling)), you can generate images with function calling just by asking the bot to do it.  
 
 `RateLimitCount`, `RateLimitTime` and `ImageGenerationPrice` parameters are not required, default values for them are zero. So if not set rate limit will not be applied and price will be zero.  
+
+> [!WARNING]
+> There can be some changes in the way Yandex ART API works, so it can be unstable.
 
 ### OpenAI DALL-E
 To use this functionality with Dall-E you should make some changes in configuration file. Example:  
@@ -399,16 +397,33 @@ Here is a list of the fields in this example:
 * SystemMessage: The message that will shape your bot's personality. You will need some prompt engineering to make it work properly.
 
 ## Files
-Bot supports working with files. You can send a file to the bot and it will send back a response based on the file's extracted text.  
-It can work quite poorly with some files, create an issue if you find a problem.  
-Files temporarily stored in the `./data/files` directory. After successful processing, they are deleted if other behavior is not specified in the `./data/.config` file.  
+Bot supports working with files (limited). You can send a file to the bot and it will send back a response based on the file's extracted text.  
+To use this functionality you should make some changes in configuration file. Example:  
+```ini
+...
+[Files]
+Enabled = True
+MaxFileSizeMB = 10
+MaxSummaryTokens = 1000
+MaxFileLength = 10000
+DeleteAfterProcessing = True
+...
+```
+
 Currently supported file types: `.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf`, `.txt`.  
+If you use Linux - install `catdoc` for `.doc` and `.ppt` files support and test it calling `catdoc` in the terminal. `.doc` and `.ppt` files support won't work without it.  
+If you use Windows - install `comtypes` for `.doc` and `.ppt` files support with `pip install comtypes`.  
+
+Files temporarily stored in the `./data/files` directory. After successful processing, they are deleted if other behavior is not specified in the `./data/.config` file.  
 Maximum file size to work with is 20 MB (`python-telegram-bot` limitation), you can set your own limit in the `./data/.config` file (in MB), but it will be limited by the `python-telegram-bot` limit.  
 If file is too large, the bot will attempt to summarize it to the length of MaxTokens/2. You can set your own limit in the `./data/.config` file (in tokens - one token is ~4 characters).    
 You can also limit max file lenght (in characters) by setting the `Files.MaxFileLength` field in the `./data/.config` file (in tokens). It can be set because sumarization is made with API requests and it can be expensive.  
-Summarisation will happen by chunks of size `Files.MaxSummaryTokens` until the whole file is processed. Summary for chunks will be combined into one summary (maximum 3 itterations, then text is just cut).      
+Summarisation will happen by chunks of size `Files.MaxSummaryTokens` until the whole file is processed. Summary for chunks will be combined into one summary (maximum 3 itterations, then text is just cut).  
 
-You can disable files support in the `./data/.config` file by setting `Files.Enabled` to `False`.
+By default this functionality is disabled.
+
+> [!WARNING]
+> Files support will be changed in the future. Current implementation will be removed.
 
 ## Running the Bot
 To run the bot, simply run the command `python3 main.py`. The bot will start and will wait for messages. 
