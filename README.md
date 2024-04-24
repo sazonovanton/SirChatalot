@@ -71,7 +71,7 @@ LogChats = False
 
 [OpenAI]
 SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ChatModel = gpt-3.5-turbo-0125
+ChatModel = gpt-3.5-turbo
 ChatModelPromptPrice = 0.0015
 ChatModelCompletionPrice = 0.002
 WhisperModel = whisper-1
@@ -110,7 +110,7 @@ Telegram:
 
 OpenAI:
 * OpenAI.SecretKey: The secret key for the OpenAI API.
-* OpenAI.ChatModel: The model to use for generating responses (`gpt-3.5-turbo`, `gpt-3.5-turbo-16k` are available for [GPT-3.5](https://platform.openai.com/docs/models/gpt-3-5), `gpt-4`, `gpt-4-32k` are available for [GPT-4](https://platform.openai.com/docs/models/gpt-4)).
+* OpenAI.ChatModel: The model to use for generating responses (learn more about OpenAI models [here](https://platform.openai.com/docs/models/)). 
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
 * OpenAI.WhisperModel: The model to use for speech recognition (Speect-to-text can be powered by `whisper-1` for now).
 * OpenAI.WhisperModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
