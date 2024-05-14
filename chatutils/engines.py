@@ -296,6 +296,7 @@ class OpenAIEngine:
                 messages = messages[0]
                 return 'We had to reset your chat session due to an error. Please try again.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}  
             else:
+                # logger.debug(messages)
                 return 'Something went wrong. You can try to /delete session and start a new one.', messages[:-1], {"prompt": prompt_tokens, "completion": completion_tokens}
         # if something else
         except Exception as e:
@@ -471,7 +472,7 @@ class OpenAIEngine:
                 # Describe image
                 success = False
                 for i in range(len(message_copy['content'])):
-                    if message_copy['content'][i]['type'] == 'image':
+                    if message_copy['content'][i]['type'] == 'image_url':
                         image_url = message_copy['content'][i]['image_url']
                         success = True
                         break
@@ -969,7 +970,7 @@ class AnthropicEngine:
                     tmp = []
                     for i in range(len(current_content)):
                         if 'type' in current_content[i]:
-                            if current_content[i]['type'] == 'image':
+                            if current_content[i]['type'] == 'image_url':
                                 tmp.append({
                                     "type": "image",
                                     "source": {
@@ -1266,7 +1267,7 @@ class AnthropicEngine:
                 # Describe image
                 success = False
                 for i in range(len(message_copy['content'])):
-                    if message_copy['content'][i]['type'] == 'image':
+                    if message_copy['content'][i]['type'] == 'image_url':
                         image_url = message_copy['content'][i]['image_url']
                         success = True
                         break
