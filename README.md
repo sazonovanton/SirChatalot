@@ -4,17 +4,17 @@ A Telegram bot that proves you don't need a body to have a personality. It can u
 For text generation, the bot can use:
 * OpenAI's [ChatGPT API](https://platform.openai.com/docs/guides/chat) (or other compatible API). Vision capabilities can be used with [GPT-4](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo) models. Function calling can be used with [Function calling](https://platform.openai.com/docs/guides/function-calling).
 * Anthropic's [Claude API](https://docs.anthropic.com/claude/docs/text-generation). Vision capabilities can be used with [Claude 3](https://docs.anthropic.com/claude/docs/models-overview) models. Function calling can be used with [tool use](https://docs.anthropic.com/claude/docs/tool-use).
-* [YandexGPT API](https://yandex.cloud/ru/docs/yandexgpt/)
+* [YandexGPT API](https://yandex.cloud/ru/docs/yandexgpt/).
+* Any other [OpenAI compatible API](#using-openai-compatible-apis).
 
 Bot can also generate images with:
 * OpenAI's [DALL-E](https://platform.openai.com/docs/guides/images)
 * [Stability AI](https://platform.stability.ai/)
 * [Yandex ART](https://yandex.cloud/ru/docs/foundation-models/quickstart/yandexart)
 
-This bot can also be used to generate responses to voice messages. Bot will convert the voice message to text and will then generate a response. Speech recognition can be done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library. Voice message support won't work without it.  
-This bot is also support working with files, see [Files](#files) section for more details.  
+This bot can also be used to generate responses to voice messages. Bot will convert voice message to text and then it will generate a response. Speech recognition is done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.  
 
-If function calling is enabled, bot can generate images and [search the web](#web-search) (limited).
+If function calling is enabled, bot can [generate images](#image-generation) and [search the web](#web-search) by itself.  
 
 ## Navigation
 * [Getting Started](#getting-started)
@@ -40,19 +40,19 @@ If function calling is enabled, bot can generate images and [search the web](#we
 * [Acknowledgements](#acknowledgements)
 
 ## Getting Started
-* Create a bot using the [BotFather](https://t.me/botfather).
+* Create a bot using the [BotFather](https://t.me/botfather) and get the token.
 * Clone the repository.
 * Install the required packages by running the command `pip install -r requirements.txt`.
-* Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. Voice message support won't work without it.
-* Create a `.config` file in the `data` directory using the example file in that directory as a template.
-* Run the bot by running the command `python3 main.py`.
+* Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. 
+* Create a `.config` file in the `data` directory using the example files (`config.example.*`) there as a template. Don't forget to set access codes if you want to restrict access to the bot (you will be added to whitelist when you use one of them ([learn more](#whitelisting-users))).
+* You can run the bot by running the command `python3 main.py` or by using Docker with `docker compose up -d` (learn more [here](#using-docker)).
 
-`Whitelist.txt`, `banlist.txt`, `.config`, `chat_modes.ini`, are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
 Bot is designed to talk to you in a style of a knight in the middle ages by default. You can change that in the `./data/.config` file (`SystemMessage`).
-
 There are also some additional styles that you can choose from: Alice, Bob, Charlie and Diana. You can change style from chat by sending a message with `/style` command, but your current session will be dropped. 
+
 Styles can be set up in the `./data/chat_modes.ini` file. You can add your own styles there or change the existing ones.
+`whitelist.txt`, `banlist.txt`, `.config`, `chat_modes.ini`, are stored in the `./data` directory. Logs rotate every day and are stored in the `./logs` directory.
 
 ## Configuration
 The bot requires a configuration file to run. The configuration file should be in [INI file format](https://en.wikipedia.org/wiki/INI_file). Example configuration file is in the `./data` directory.  
@@ -227,9 +227,6 @@ RequestLogging = False
 * YandexGPT.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
 * YandexGPT.RequestLogging: Whether to disable logging of API requests by the Yandex Cloud (learn more [here](https://yandex.cloud/en/docs/yandexgpt/operations/disable-logging)). Default: `False`.
 
-> [!WARNING]
-> There can be some changes in the way Yandex GPT API works, so it can be unstable.
-
 ## Vision
 Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
 To use this functionality you should make some changes in configuration file  (change OpenAI to Anthropic if you use Claude).    
@@ -365,17 +362,18 @@ You can use APIs compatible with OpenAI's API. To do that, you need to set endpo
 ```ini
 [OpenAI]
 ...
-APIBase = https://xxxxxxxxxxxxxxx.proxy.runpod.net/
-SecretKey = myapikey
-ChatModel = gpt-3.5-turbo
+APIBase = https://openrouter.ai/api/v1
+SecretKey = sk-or-v1-***
+ChatModel = openai/gpt-3.5-turbo-0125
 Temperature = 0.7
 Moderation = False
 ...
 ```
-Also it is possible to set `APIType` and `APIVersion` fields in the `./data/.config` file.  
-All this values are optional. Do not set them if you don't know what they are.  
-Library [openai-python](https://github.com/openai/openai-python) is used for API requests.  
-Tested with [LocalAI](https://github.com/mudler/LocalAI). Vision is still untested for alternative APIs.  
+Also it is possible to set `APIType` and `APIVersion`.  
+All this values are optional. 
+
+> [!NOTE]  
+> Tested with [LocalAI](https://github.com/mudler/LocalAI) and [OpenRouter](https://openrouter.ai/), also should be possible to use with [Ollama](https://ollama.com/) and [LM Studio](https://lmstudio.ai/).
 
 ## Styles
 Bot supports different styles that can be triggered with `/style` command.  
@@ -438,23 +436,35 @@ The bot has the following commands:
 * Any other message (including voice message) will generate a response from the bot.
 
 Users need to be whitelisted to use the bot. To whitelist yourself, send an access code to the bot using the `/start` command. The bot will then add you to the whitelist and will send a message to you confirming that you have been added to the whitelist.
-Access code should be changed in the `./data/.config` file (see *Configuration*).
+Access code should be changed in the `./data/.config` file (see [Configuration](#configuration)).
 Codes are shown in terminal when the bot is started.
 
 ## Whitelisting users
-To add yourself to the whitelist, send the bot a message with one of the access codes (see *Configuration*). The bot will then add you to the whitelist and will send a message to you confirming that.
-Alternatively, you can add users to the whitelist manually. To do that, add the user's Telegram ID to the `./data/whitelist.txt` file. 
-If no access codes are provided, anyone who not in the banlist will be able to use the bot.
+To restrict access to the bot, you should provide an access code (or multiple codes) in the `./data/.config` file.  
+If no access codes are provided, anyone who not in the banlist will be able to use the bot.  
+
+Bot is doing authorization by Telegram ID that is stored in the `./data/whitelist.txt` file.  
+To add yourself to the whitelist, send the bot a message with one of the access codes (see [Configuration](#configuration)). You will be added to the whitelist authomatically.  
+Alternatively, you can add users to the whitelist manually. To do that, add the user's Telegram ID to the `./data/whitelist.txt` file (each ID should be on a separate line). Example:
+```txt
+132456
+789123
+```
 
 ## Banning Users
-To ban a user you should add their Telegram ID to the `./data/banlist.txt` file. Each ID should be on a separate line. 
-Banlist has a higher priority than the whitelist. If a user is on the banlist, they will not be able to use the bot and the will see a message saying that they have been banned.
+To ban a user you should add their Telegram ID to the `./data/banlist.txt` file. Each ID should be on a separate line. Example:
+```txt
+123456
+789123
+```
+Banlist has a higher priority than the whitelist.   
+If a user is on the banlist, they will not be able to use the bot and the will see a message saying that they have been banned. 
 
 ## Safety practices
 To prevent the bot from being used for purposes that violate the OpenAI's usage policy, you can use:
-* Moderation: Moderation will filter out messages that can violate the OpenAI's usage policy with free OpenAI's [Moderation API](https://platform.openai.com/docs/guides/moderation). In this case, message is sent to the Moderation API and if it is flagged, it is not sent to the OpenAI's API. If you want to use it, set `OpenAI.Moderation` to `true` in the `./data/.config` file (see *Configuration*). User will be notified if their message is flagged.
-* End-user IDs: End-user IDs will be added to the API request if `OpenAI.EndUserID` is set to `true` in the `./data/.config` file (see *Configuration*). Sending end-user IDs in your requests can be a useful tool to help OpenAI monitor and detect abuse. This allows OpenAI to provide your team with more actionable feedback in the event of bot abuse. End-user ID is a hashed Telegram ID of the user.
-* Rate limiting: Rate limiting will limit the number of messages a user can send to the bot. If you want to use it, set `Telegram.GeneralRateLimit` to a number of messages a user can send to the bot in a time period in the `./data/.config` file (see *Configuration*). 
+* Moderation: Moderation will filter out messages that can violate the OpenAI's usage policy with free OpenAI's [Moderation API](https://platform.openai.com/docs/guides/moderation). In this case, message is sent to the Moderation API and if it is flagged, it is not sent to the OpenAI's API. If you want to use it, set `OpenAI.Moderation` to `true` in the `./data/.config` file (see [Configuration](#configuration)). User will be notified if their message is flagged.
+* End-user IDs: End-user IDs will be added to the API request if `OpenAI.EndUserID` is set to `true` in the `./data/.config` file (see [Configuration](#configuration)). Sending end-user IDs in your requests can be a useful tool to help OpenAI monitor and detect abuse. This allows OpenAI to provide your team with more actionable feedback in the event of bot abuse. End-user ID is a hashed Telegram ID of the user.
+* Rate limiting: Rate limiting will limit the number of messages a user can send to the bot. If you want to use it, set `Telegram.GeneralRateLimit` to a number of messages a user can send to the bot in a time period in the `./data/.config` file (see [Configuration](#configuration)). 
 * Banlist: Banlist will prevent users from using the bot. If you want to use it, add user's Telegram ID to the `./data/banlist.txt` file (see *Banning Users*).
 * Whitelist: Whitelist will allow only whitelisted users to use the bot. If you want to use it, add user's Telegram ID to the `./data/whitelist.txt` file (see *Whitelisting Users*).
 
@@ -467,27 +477,47 @@ Example:
 111111,0
 ```
 Rate limit is a number of messages a user can send to the bot in a time period. In example user with ID 123456789 has 10 and user 987654321 has 500 messages limit. User 111111 has no limit (overriding `GeneralRateLimit`).  
-Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see *Configuration*). If no time period is provided, limit is not applied.  
-General rate limit can be set in the `./data/.config` file in `GeneralRateLimit` variable in `Telegram` section (see *Configuration*). If no general rate limit is provided, limit is not applied for users who are not in the `rates.txt` file. To override general rate limit for a user, set their limit to 0 in the `rates.txt` file.  
-Users can check their limit by sending the bot a message with the `/limit` command. 
+Time period (in seconds) can be set in the `./data/.config` file in `RateLimitTime` variable in `Telegram` section (see [Configuration](#configuration)). If no time period is provided, limit is not applied.  
+General rate limit can be set in the `./data/.config` file in `GeneralRateLimit` variable in `Telegram` section (see [Configuration](#configuration)). To override general rate limit for a user, set their limit in the `rates.txt` file.  
+Users can check your limit by sending the bot a message with the `/limit` command. 
 
 ## Using Docker
-You can use Docker to run the bot. You need to build the image first. To do that, run the following command in the root directory of the project after configuring the bot (see *Configuration*):
+You can use Docker to run the bot.  
+
+First, you need to install Docker.  
+You can do it with [installation script](https://get.docker.com/).  
+```bash
+curl -fsSL https://get.docker.com -o get-docker.sh
+sh get-docker.sh
+```
+[Set it up](https://docs.docker.com/engine/install/linux-postinstall/) to start on boot and add your user to the `docker` group so you can run Docker commands without `sudo`:
+```bash
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+```
+
+Then, you need to build the bot image.  
+Run the following command in the root directory of the project after configuring the bot (see [Configuration](#configuration)):
 ```bash
 docker compose up -d
 ```
-This will build the image and run the container. You can then use the bot as described above.  
+This will build the image and run the container. 
+
 To rebuild the image add `--build` flag to the command:
 ```bash
 docker compose up -d --build
 ```
-If you are using custo docker-compose file, you can use it like this:
+To stop the container, run the following command:
+```bash
+docker compose down 
+```
+If you are using custom docker-compose file, you can specify it with `-f` flag:
 ```bash
 docker compose -f docker-compose.yml up -d --build
 ```
-To stop the container, run the following command:
+To stop the container:
 ```bash
-docker compose down
+docker compose -f docker-compose.yml down
 ```
 
 ## Read messages
@@ -498,19 +528,17 @@ python3 read_messages.py
 ```  
 
 ## Warinings
-* The bot stores the whitelist in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
-* The bot stores chat history in as a pickle file. The file is not encrypted and can be accessed by anyone with access to the server.
-* Configurations are stored in plain text. The file is not encrypted and can be accessed by anyone with access to the server.
-* The bot can store messages in a log file in a event of an error. The file is not encrypted and can be accessed by anyone with access to the server.
-* The bot temporarily stores voice messages in `./data/voice` directory. The files are deleted after processing (successful or not), but can remain on the server if the event of an error. The files are not encrypted and can be accessed by anyone with access to the server.
-* The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept and for ChatGPT API testing purposes.
-* The bot will try to continue conversation in the event of reaching maximum number of tokens by trimming the conversation history or summarazing it (`SummarizeTooLong`). If the conversation is long enough to cause errors, it will be deleted if `ChatDeletion` set to `True` in the `./data/.config` file (see *Configuration*).
-* The bot is using a lot of read and write operations with pickle files right now. This can lead to a poor performance on some servers if the bot is used by a lot of users. Immediate fix for that is mounting the `./data/tech` directory as a RAM disk, but in a event of a server shutdown, all data will be lost.
-* The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see *Configuration*), the file will be stored in `./data/files` directory. The files are not encrypted and can be accessed by anyone with access to the server.
-* If message is flagged by the OpenAI Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. The file is not encrypted and can be accessed by anyone with access to the server.
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
-* Functionalty for calculating cost of usage is not working for images for now, so you should pay attenion to that.   
-* /delete command will delete conversation history on the server. It will not affect the conversation history in the Telegram chat. 
+* The bot stores the whitelist in plain text. 
+* The bot stores chat history in as a pickle file. 
+* Configurations are stored in plain text. 
+* The bot can store messages in a log file in a event of an error or if logger level set to `DEBUG`.
+* The bot will store messages if `Logging.LogChats` set to `True` in the `./data/.config` file.
+* The bot temporarily stores voice messages in `./data/voice` directory. 
+* The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept.
+* The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see [Configuration](#configuration)), the file will be stored in `./data/files` directory.
+* If message is flagged by the OpenAI Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. 
+* Functionalty for calculating cost of usage can be inaccurate for images with Dall-E.  
 
 ## License
 This project is licensed under [GPLv3](https://www.gnu.org/licenses/gpl-3.0.en.html). See the `LICENSE` file for more details.

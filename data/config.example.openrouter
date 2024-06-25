@@ -5,16 +5,14 @@ RateLimitTime = 3600
 GeneralRateLimit = 60
 
 [OpenAI]
-SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-ChatModel = gpt-3.5-turbo-0125
+APIBase = https://openrouter.ai/api/v1
+SecretKey = sk-or-v1-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ChatModel = openai/gpt-3.5-turbo-0125
 ChatModelPromptPrice = 0.0015
 ChatModelCompletionPrice = 0.002
-WhisperModel = whisper-1
-WhisperModelPrice = 0.006
 Temperature = 0.7
 MaxTokens = 3997
 MinLengthTokens = 100
-AudioFormat = wav
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 EndUserID = True
 Moderation = False
@@ -27,7 +25,7 @@ SummarizeTooLong = False
 
 [ImageGeneration]
 Engine = dalle
-APIKey = ******
+APIKey = sk-******
 Model = dall-e-3
 RateLimitCount = 16
 RateLimitTime = 3600
