@@ -1030,7 +1030,7 @@ class AnthropicEngine:
                 for content in response.content:
                     if type(content) == self.anthropic.types.TextBlock:
                         text = content.text
-                    if type(content) == self.anthropic.types.beta.tools.ToolUseBlock:
+                    if type(content) == self.anthropic.types.ToolUseBlock:
                         function_name = content.name
                         function_args = content.input
                         tool_id = content.id
@@ -1079,7 +1079,7 @@ class AnthropicEngine:
             requested_tokens = max(requested_tokens, 50)
             system_prompt, new_messages = await self.revise_messages(messages)
             if self.function_calling:
-                response = await self.client.beta.tools.messages.create(
+                response = await self.client.messages.create(
                         model=self.model,
                         temperature=self.temperature, 
                         max_tokens=requested_tokens,
