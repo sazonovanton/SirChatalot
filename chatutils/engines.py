@@ -25,6 +25,7 @@ import tiktoken
 import asyncio
 import json
 import time
+from pydub import AudioSegment
 
 ######## OpenAI Engine ########
 
@@ -131,22 +132,24 @@ class OpenAIEngine:
         Initialize speech2text
         '''  
         self.s2t_model = self.config.get("OpenAI", "WhisperModel")
-        self.s2t_model_price = float(self.config.get("OpenAI", "WhisperModelPrice")) 
+        self.s2t_model_price = float(self.config.get("OpenAI", "WhisperModelPrice"))
+        self.transcribe_only = self.config.getboolean("OpenAI", "TranscribeOnly") if self.config.has_option("OpenAI", "TranscribeOnly") else False
         self.audio_format = '.' + self.config.get("OpenAI", "AudioFormat") 
 
-    async def convert_ogg(self, audio_file):
+    async def convert_audio(self, audio_file):
         '''
-        Convert ogg file to wav
-        Input file with ogg
+        Convert audio file to the configured format
+        Input file can be of any format supported by pydub
         '''
         try:
-            converted_file = audio_file.replace('.ogg', self.audio_format)
-            os.system('ffmpeg -i ' + audio_file + ' ' + converted_file)
+            converted_file = audio_file + self.audio_format
+            audio = AudioSegment.from_file(audio_file)
+            audio.export(converted_file, format=self.audio_format.lstrip('.'))
             return converted_file
         except Exception as e:
-            logger.exception(f'Could not convert ogg to {self.audio_format}')
+            logger.exception(f'Could not convert audio to {self.audio_format}')
             return None
-        
+
     async def speech_to_text(self, audio_file):
         '''
         Convert speech to text using OpenAI API
@@ -154,15 +157,18 @@ class OpenAIEngine:
         try:
             if self.speech_initiation == False:
                 return None
-            audio_file = await self.convert_ogg(audio_file)
-            audio = open(audio_file, "rb")
-            transcript = await self.client.audio.transcriptions.create(
-                model=self.s2t_model,
-                file=audio,
-            )
-            audio.close()
-            transcript = transcript.text
-            return transcript
+            converted_file = await self.convert_audio(audio_file)
+            if converted_file is None:
+                return None
+            
+            with open(converted_file, "rb") as audio:
+                transcript = await self.client.audio.transcriptions.create(
+                    model=self.s2t_model,
+                    file=audio,
+                )
+            
+            os.remove(converted_file)
+            return transcript.text
         except self.openai.RateLimitError as e:
             logger.error(f'OpenAI RateLimitError: {e}')
             return 'Service is getting rate limited. Please try again later.'

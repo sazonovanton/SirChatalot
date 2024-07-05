@@ -395,25 +395,25 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
         parts = [text[i:i+max_length] for i in range(0, len(text), max_length)]
         logger.debug(f'>> Text length: {len(text)}. Split into {len(parts)} parts (markdown={markdown}).')
         # send each part
-        for part in parts:
+        for index, part in enumerate(parts):
             if markdown == 0:
-                await update.message.reply_text(part)
+                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
             elif markdown == 1:
                 try:
-                    await update.message.reply_markdown(part)
+                    await update.message.reply_markdown(part, reply_to_message_id=update.message.message_id if index == 0 else None)
                 except Exception as e:
                     logger.debug(f'(!) Error sending message (mk1 - {e}): {part}')
                     await send_message(update, part, markdown=2)
             elif markdown == 2:
                 try:
                     esc_part = await escaping(part)
-                    await update.message.reply_markdown_v2(esc_part)
+                    await update.message.reply_markdown_v2(esc_part, reply_to_message_id=update.message.message_id if index == 0 else None)
                 except Exception as e:
                     logger.debug(f'(!) Error sending message (mk2 - {e}): {part}')
-                    await update.message.reply_text(part)
+                    await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
             else:
                 # if markdown is not 0, 1 or 2, send message without markdown
-                await update.message.reply_text(part)
+                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
     except Exception as e:
         logger.exception('Could not send message to user: ' + str(update.effective_user.id))
 
@@ -544,29 +544,43 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await send_message(update, answer, markdown=1)
 
 @is_authorized
-async def answer_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    '''
-    Answer to user voice message
-    '''
+async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     global application
-    # send typing action
     await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
 
-    voice_file = await application.bot.get_file(update.message.voice.file_id)
-    voice_file_path = './data/voice/' + str(update.message.voice.file_id) + '.ogg'
-    voice_message = await voice_file.download_to_drive(custom_path=voice_file_path)
-    answer = await gpt.chat_voice(id=update.effective_user.id, audio_file=voice_file_path)
-    # add stats
-    await gpt.add_stats(id=update.effective_user.id, voice_messages_sent=1)
+    if update.message.voice:
+        file = update.message.voice
+    elif update.message.video:
+        file = update.message.video
+    elif update.message.video_note:
+        file = update.message.video_note
+    else:
+        await update.message.reply_text("Unsupported file type.")
+        return
+
+    file_id = file.file_id
+    tg_file = await context.bot.get_file(file_id)
+    file_extension = os.path.splitext(tg_file.file_path)[1]
+    if not file_extension:
+        file_extension = '.ogg' if isinstance(file, Voice) else '.mp4'
+    
+    file_path = f'./data/voice/{file_id}{file_extension}'
+    await tg_file.download_to_drive(custom_path=file_path)
+
     try:
-        os.remove(voice_file_path)
-        logger.info('Audio file ' + voice_file_path + ' was deleted (original)')
+        answer = await gpt.process_audio_video(id=update.effective_user.id, file_path=file_path)
+    
+        # Clean up file
+        os.remove(file_path)
+        logger.info(f'Audio/video file {file_path} was deleted')
     except Exception as e:
-        logger.exception('Could not delete original audio file ' + voice_file_path)
-    # send message with a result
+        logger.exception(f'Error processing audio/video file: {e}')
+        answer = "Sorry, there was an error processing your audio/video file."
+
     if answer is None:
         answer = "Sorry, something went wrong. You can try later or /delete your session."
-        logger.error('Could not get answer to voice message for user: ' + str(update.effective_user.id))
+        logger.error(f'Could not get answer to voice/video message for user: {update.effective_user.id}')
+    
     await send_message(update, answer, markdown=1)
 
 @is_authorized
@@ -869,7 +883,7 @@ def main() -> None:
 
     # on non command i.e message - answer the message on Telegram
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, answer))
-    application.add_handler(MessageHandler(filters.VOICE, answer_voice))
+    application.add_handler(MessageHandler(filters.VOICE | filters.VIDEO | filters.VIDEO_NOTE, answer_voice_or_video))
 
     # recieve and process images
     application.add_handler(MessageHandler(filters.PHOTO, process_image))

@@ -15,6 +15,7 @@ Temperature = 0.7
 MaxTokens = 3997
 MinLengthTokens = 100
 AudioFormat = wav
+TranscribeOnly = False
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 EndUserID = True
 Moderation = False

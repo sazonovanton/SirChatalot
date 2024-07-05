@@ -75,11 +75,13 @@ class ChatProc:
             self.text_engine.function_calling_tools = self.function_calling_tools
             logger.debug(f'Function calling is enabled')
 
+        self.transcribe_only = False
         if speech is not None:
             if speech == "openai":
                 self.speech_engine = OpenAIEngine(speech=True)
                 self.audio_format = self.speech_engine.audio_format
                 self.s2t_model_price = self.speech_engine.s2t_model_price
+                self.transcribe_only = self.speech_engine.transcribe_only
             else:
                 logger.error("Unknown speech2text engine: {}".format(speech))
                 raise Exception("Unknown speech2text engine: {}".format(speech))
@@ -218,36 +220,49 @@ class ChatProc:
         self.image_generation_quality = self.image_engine.settings["ImageGenerationQuality"]
         self.image_generation_price = self.image_engine.settings["ImageGenerationPrice"]
 
-    async def speech_to_text(self, audio_file):
-        '''
-        Convert speech to text
-        Input file with speech
-        '''
-        if self.speech_engine is None:
+    async def speech_to_text(self, file_path):
+        try:
+            if self.speech_engine is None:
+                return None
+            
+            converted_file = await self.speech_engine.convert_audio(file_path)
+            if converted_file is None:
+                return None
+            
+            transcript = await self.speech_engine.speech_to_text(converted_file)
+            
+            os.remove(converted_file)
+            return transcript
+        except Exception as e:
+            logger.exception('Could not convert speech to text')
             return None
+
+    async def process_audio_video(self, id=0, file_path=None):
         try:
-            transcript = await self.speech_engine.speech_to_text(audio_file)
-            transcript += ' (it was a voice message transcription)'
+            if self.speech_engine is None:
+                logger.error('No speech2text engine provided')
+                return 'Sorry, speech-to-text is not available.'
+
+            audio = AudioSegment.from_file(file_path)
+            audio_duration = len(audio) / 1000.0  # Duration in seconds
+
+            transcript = await self.speech_to_text(file_path)
+            if transcript is None:
+                logger.error('Could not convert audio/video to text')
+                return 'Sorry, I could not convert your audio/video to text.'
+
+            # Add statistics
+            await self.add_stats(id=id, speech2text_seconds=audio_duration)
+
+            if self.transcribe_only:
+                return f"Transcription: {transcript}"
+
+            response = await self.chat(id=id, message=transcript)
+            return f"Transcription: {transcript}\n\nResponse: {response}"
         except Exception as e:
-            logger.error('Could not convert voice to text')
-            transcript = None
-        if transcript is not None:
-            # add statistics
-            try:
-                audio = AudioSegment.from_wav(audio_file.replace('.ogg', self.audio_format))
-            except Exception as e:
-                logger.error('Could not get audio duration: ' + str(audio_file))
-                audio = None
-            self.add_stats(id=id, speech2text_seconds=audio.duration_seconds)
-        # delete audio file
-        try:
-            audio_file = str(audio_file)
-            os.remove(audio_file.replace('.ogg', self.audio_format))
-            logger.debug('Audio file ' + audio_file.replace('.ogg', self.audio_format) + ' was deleted (converted)')
-        except Exception as e:
-            logger.error('Could not delete converted audio file: ' + str(audio_file))
-        return transcript
-    
+            logger.exception('Could not process audio/video')
+            return None
+
     async def chat_voice(self, id=0, audio_file=None):
         '''
         Chat with GPT using voice

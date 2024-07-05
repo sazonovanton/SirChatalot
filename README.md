@@ -12,7 +12,7 @@ Bot can also generate images with:
 * [Stability AI](https://platform.stability.ai/)
 * [Yandex ART](https://yandex.cloud/ru/docs/foundation-models/quickstart/yandexart)
 
-This bot can also be used to generate responses to voice messages. Bot will convert voice message to text and then it will generate a response. Speech recognition is done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.  
+This bot can also be used to generate responses to voice and video messages. Bot will convert voice/video message to text and then it will generate a response. Optionally it can only generate audio/video transcript, without answering. Speech recognition is done using the OpenAI's [Whisper model](https://platform.openai.com/docs/guides/speech-to-text). To use this feature, you need to install the [ffmpeg](https://ffmpeg.org/) library.  
 
 If function calling is enabled, bot can [generate images](#image-generation) and [search the web](#web-search) by itself.  
 
@@ -43,7 +43,7 @@ If function calling is enabled, bot can [generate images](#image-generation) and
 * Create a bot using the [BotFather](https://t.me/botfather) and get the token.
 * Clone the repository.
 * Install the required packages by running the command `pip install -r requirements.txt`.
-* Install the [ffmpeg](https://ffmpeg.org/) library for voice message support (for converting .ogg files to other format) and test it calling `ffmpeg --version` in the terminal. 
+* Install the [ffmpeg](https://ffmpeg.org/) library for voice/video message support (for converting to supported format) and test it calling `ffmpeg --version` in the terminal. 
 * Create a `.config` file in the `data` directory using the example files (`config.example.*`) there as a template. Don't forget to set access codes if you want to restrict access to the bot (you will be added to whitelist when you use one of them ([learn more](#whitelisting-users))).
 * You can run the bot by running the command `python3 main.py` or by using Docker with `docker compose up -d` (learn more [here](#using-docker)).
 
@@ -80,6 +80,7 @@ Temperature = 0.7
 MaxTokens = 3997
 MinLengthTokens = 100
 AudioFormat = wav
+TranscribeOnly = True
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
 ChatDeletion = False
@@ -118,6 +119,7 @@ OpenAI:
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 * OpenAI.MinLengthTokens: The minimum number of tokens to use for generating responses. Optional, default 100.
 * OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
+* OpenAI.TranscribeOnly: If set to True, will only provide Video/Audio transcript. If False, it will also answer the message.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
 * OpenAI.MaxSessionLength: The maximum number of user messages in a session (can be used to reduce tokens used). Optional.
 * OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
