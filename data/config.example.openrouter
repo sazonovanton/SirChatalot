@@ -31,6 +31,14 @@ RateLimitCount = 16
 RateLimitTime = 3600
 BasePrice = 0.04
 
+[AudioTranscript]
+Engine = whisper
+APIKey = *****
+AudioModel = whisper-1
+AudioModelPrice = 0.006
+AudioFormat = mp3
+TranscribeOnly = True
+
 [Web]
 SearchEngine = google
 APIKey = ******

@@ -141,7 +141,7 @@ print('-- If you want to learn more about limits please check description (READM
 
 from chatutils.processing import ChatProc
 text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
-speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else None
+speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else "OpenAI"
 gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation

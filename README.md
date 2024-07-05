@@ -21,6 +21,7 @@ If function calling is enabled, bot can [generate images](#image-generation) and
 * [Configuration](#configuration)
 * [Using Claude](#using-claude)
 * [Using YandexGPT](#using-yandexgpt)
+* [Voice](#voice)
 * [Vision](#vision)
 * [Image generation](#image-generation)
 * [Web Search](#web-search)
@@ -64,6 +65,7 @@ AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 100
 TextEngine = OpenAI
+SpeechEngine = OpenAI
 
 [Logging]
 LogLevel = WARNING
@@ -74,13 +76,9 @@ SecretKey = xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ChatModel = gpt-3.5-turbo
 ChatModelPromptPrice = 0.0015
 ChatModelCompletionPrice = 0.002
-WhisperModel = whisper-1
-WhisperModelPrice = 0.006
 Temperature = 0.7
 MaxTokens = 3997
 MinLengthTokens = 100
-AudioFormat = wav
-TranscribeOnly = True
 SystemMessage = You are a helpful assistant named Sir Chat-a-lot, who answers in a style of a knight in the middle ages.
 MaxSessionLength = 15
 ChatDeletion = False
@@ -92,6 +90,13 @@ FunctionCalling = False
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 SummarizeTooLong = False
+
+[AudioTranscript]
+Engine = whisper
+AudioModel = whisper-1
+AudioModelPrice = 0.006
+AudioFormat = mp3
+TranscribeOnly = True
 
 [Files]
 Enabled = True
@@ -106,6 +111,7 @@ Telegram:
 * Telegram.RateLimitTime: The time in seconds to calculate user rate-limit. Optional.
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
 * Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT` and `Claude`.
+* Telegram.SpeechEngine: The speech engine to use. Optional, default is `OpenAI`.
 * Logging.LogLevel: The logging level. Optional, default is `WARNING`.
 * Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
 
@@ -113,13 +119,9 @@ OpenAI:
 * OpenAI.SecretKey: The secret key for the OpenAI API.
 * OpenAI.ChatModel: The model to use for generating responses (learn more about OpenAI models [here](https://platform.openai.com/docs/models/)). 
 * OpenAI.ChatModelPrice: The [price of the model](https://openai.com/pricing) to use for generating responses (per 1000 tokens, in USD).
-* OpenAI.WhisperModel: The model to use for speech recognition (Speect-to-text can be powered by `whisper-1` for now).
-* OpenAI.WhisperModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
 * OpenAI.Temperature: The temperature to use for generating responses.
 * OpenAI.MaxTokens: The maximum number of tokens to use for generating responses.
 * OpenAI.MinLengthTokens: The minimum number of tokens to use for generating responses. Optional, default 100.
-* OpenAI.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
-* OpenAI.TranscribeOnly: If set to True, will only provide Video/Audio transcript. If False, it will also answer the message.
 * OpenAI.SystemMessage: The message that will shape your bot's personality.
 * OpenAI.MaxSessionLength: The maximum number of user messages in a session (can be used to reduce tokens used). Optional.
 * OpenAI.ChatDeletion: Whether to delete the user's history if conversation is too long. Optional.
@@ -228,6 +230,28 @@ RequestLogging = False
 * YandexGPT.SystemMessage: The message that will shape your bot's personality.
 * YandexGPT.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
 * YandexGPT.RequestLogging: Whether to disable logging of API requests by the Yandex Cloud (learn more [here](https://yandex.cloud/en/docs/yandexgpt/operations/disable-logging)). Default: `False`.
+
+## Voice
+Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
+To use this functionality you should make some changes in configuration file  (change OpenAI to Anthropic if you use Claude).    
+Example:  
+```ini
+...
+[AudioTranscript]
+Engine = whisper
+APIKey = ******
+AudioModel = whisper-1
+AudioModelPrice = 0.006
+AudioFormat = mp3
+TranscribeOnly = True
+...
+```  
+* AudioTranscript.Engine: The engine to use (currently only `whisper` is allowed).
+* AudioTranscript.SecretKey: The secret key for the audio model (OpenAI whisper only). If unset, takes value from `OpenAI.SecretKey`.
+* AudioTranscript.AudioModel: The model to use for speech recognition (Speech-to-text can be powered by `whisper-1` for now).
+* AudioTranscript.AudioModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
+* AudioTranscript.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
+* AudioTranscript.TranscribeOnly: If set to True, will only provide Video/Audio transcript. If False, it will also answer the message.
 
 ## Vision
 Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
@@ -529,14 +553,14 @@ Call it from projects `chatutils` directory with:
 python3 read_messages.py
 ```  
 
-## Warinings
+## Warnings
 * Use this bot at your own risk. I am not responsible for any damage caused by this bot.
 * The bot stores the whitelist in plain text. 
 * The bot stores chat history in as a pickle file. 
 * Configurations are stored in plain text. 
 * The bot can store messages in a log file in a event of an error or if logger level set to `DEBUG`.
 * The bot will store messages if `Logging.LogChats` set to `True` in the `./data/.config` file.
-* The bot temporarily stores voice messages in `./data/voice` directory. 
+* The bot temporarily stores voice/video messages in `./data/voice` directory. 
 * The bot is not designed to be used in production environments. It is not secure and was build as a proof of concept.
 * The bot can work with files. If file was not processed or `Files.DeleteAfterProcessing` is set to `False` in the `./data/.config` file (see [Configuration](#configuration)), the file will be stored in `./data/files` directory.
 * If message is flagged by the OpenAI Moderation API, it will not be sent to the OpenAI's API, but it will be stored in `./data/moderation.txt` file for manual review. 

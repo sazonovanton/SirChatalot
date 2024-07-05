@@ -23,12 +23,12 @@ import os
 from pydub import AudioSegment
 from datetime import datetime
 
+from chatutils.audio_engines import get_audio_engine
 # Support: OpenAI API, YandexGPT API, Claude API
 from chatutils.engines import OpenAIEngine, YandexEngine, AnthropicEngine
 
 class ChatProc:
     def __init__(self, text="OpenAI", speech="OpenAI") -> None:
-        self.speech_engine = None
         text = text.lower()
         speech = speech.lower() if speech is not None else None
         self.max_tokens = 2000
@@ -75,16 +75,17 @@ class ChatProc:
             self.text_engine.function_calling_tools = self.function_calling_tools
             logger.debug(f'Function calling is enabled')
 
-        self.transcribe_only = False
+        self.speech_engine = None
         if speech is not None:
-            if speech == "openai":
-                self.speech_engine = OpenAIEngine(speech=True)
-                self.audio_format = self.speech_engine.audio_format
-                self.s2t_model_price = self.speech_engine.s2t_model_price
-                self.transcribe_only = self.speech_engine.transcribe_only
-            else:
-                logger.error("Unknown speech2text engine: {}".format(speech))
-                raise Exception("Unknown speech2text engine: {}".format(speech))
+            try:
+                self.speech_engine = get_audio_engine(config.get("AudioTranscript", "Engine"))
+                self.audio_format = self.speech_engine.settings["AudioFormat"]
+                self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
+                self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
+                logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
+            except Exception as e:
+                logger.error(f"Failed to initialize audio engine: {e}")
+                raise
         
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
@@ -225,13 +226,8 @@ class ChatProc:
             if self.speech_engine is None:
                 return None
             
-            converted_file = await self.speech_engine.convert_audio(file_path)
-            if converted_file is None:
-                return None
-            
-            transcript = await self.speech_engine.speech_to_text(converted_file)
-            
-            os.remove(converted_file)
+            logger.debug(f"TranscribeOnly setting in speech_to_text: {self.speech_engine.settings['TranscribeOnly']}")
+            transcript = await self.speech_engine.transcribe(file_path)
             return transcript
         except Exception as e:
             logger.exception('Could not convert speech to text')
@@ -254,9 +250,13 @@ class ChatProc:
             # Add statistics
             await self.add_stats(id=id, speech2text_seconds=audio_duration)
 
-            if self.transcribe_only:
+            logger.debug(f"TranscribeOnly setting: {self.speech_engine.settings['TranscribeOnly']}")
+
+            if self.speech_engine.settings["TranscribeOnly"]:
+                logger.info("Returning transcription only due to TranscribeOnly setting")
                 return f"Transcription: {transcript}"
 
+            logger.info("Processing transcription through chat")
             response = await self.chat(id=id, message=transcript)
             return f"Transcription: {transcript}\n\nResponse: {response}"
         except Exception as e:
