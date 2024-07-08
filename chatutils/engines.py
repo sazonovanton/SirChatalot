@@ -24,7 +24,6 @@ import hashlib
 import tiktoken
 import asyncio
 import json
-import time
 
 ######## OpenAI Engine ########
 
@@ -42,11 +41,8 @@ class OpenAIEngine:
             "ChatModel": "gpt-3.5-turbo",
             "ChatModelCompletionPrice": 0,
             "ChatModelPromptPrice": 0,
-            "WhisperModel": "whisper-1",
-            "WhisperModelPrice": 0,
             "Temperature": 0.7,
             "MaxTokens": 3997,
-            "AudioFormat": "wav",
             "EndUserID": False,
             "Moderation": False,
             "ChatDeletion": False,
@@ -125,50 +121,6 @@ class OpenAIEngine:
             print('Function calling is enabled')
             print('-- Function calling is used to call functions from OpenAI API. It can be changed in the self.config file.')
             print('-- Learn more: https://platform.openai.com/docs/guides/function-calling\n')
-
-    def speech_init(self):
-        '''
-        Initialize speech2text
-        '''  
-        self.s2t_model = self.config.get("OpenAI", "WhisperModel")
-        self.s2t_model_price = float(self.config.get("OpenAI", "WhisperModelPrice")) 
-        self.audio_format = '.' + self.config.get("OpenAI", "AudioFormat") 
-
-    async def convert_ogg(self, audio_file):
-        '''
-        Convert ogg file to wav
-        Input file with ogg
-        '''
-        try:
-            converted_file = audio_file.replace('.ogg', self.audio_format)
-            os.system('ffmpeg -i ' + audio_file + ' ' + converted_file)
-            return converted_file
-        except Exception as e:
-            logger.exception(f'Could not convert ogg to {self.audio_format}')
-            return None
-        
-    async def speech_to_text(self, audio_file):
-        '''
-        Convert speech to text using OpenAI API
-        '''
-        try:
-            if self.speech_initiation == False:
-                return None
-            audio_file = await self.convert_ogg(audio_file)
-            audio = open(audio_file, "rb")
-            transcript = await self.client.audio.transcriptions.create(
-                model=self.s2t_model,
-                file=audio,
-            )
-            audio.close()
-            transcript = transcript.text
-            return transcript
-        except self.openai.RateLimitError as e:
-            logger.error(f'OpenAI RateLimitError: {e}')
-            return 'Service is getting rate limited. Please try again later.'
-        except Exception as e:
-            logger.exception('Could not convert speech to text')
-            return None
         
     async def detect_function_called(self, response):
         '''

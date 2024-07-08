@@ -4,6 +4,7 @@ AccessCodes = myaccesscode
 GeneralRateLimit = 60
 RateLimitTime = 3600
 TextEngine = Claude
+SpeechEngine = OpenAI
 
 [Anthropic]
 SecretKey = sk-ant-api-123456789
@@ -19,3 +20,11 @@ ImageSize = 768
 DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 SummarizeTooLong = False
+
+[AudioTranscript]
+Engine = whisper
+APIKey = *****
+AudioModel = whisper-1
+AudioModelPrice = 0.006
+AudioFormat = mp3
+TranscribeOnly = True

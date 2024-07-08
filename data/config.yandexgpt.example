@@ -4,6 +4,7 @@ AccessCodes = myaccesscode
 GeneralRateLimit = 60
 RateLimitTime = 3600
 TextEngine = YandexGPT
+SpeechEngine = OpenAI
 
 [YandexGPT]
 SecretKey=<secretkey>
@@ -21,3 +22,11 @@ ImageGenModel = yandex-art/latest
 CatalogID=<catalogid>
 RateLimitCount = 5
 RateLimitTime = 3600
+
+[AudioTranscript]
+Engine = whisper
+APIKey = *****
+AudioModel = whisper-1
+AudioModelPrice = 0.006
+AudioFormat = mp3
+TranscribeOnly = True
