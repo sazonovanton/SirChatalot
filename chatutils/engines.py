@@ -370,8 +370,15 @@ class OpenAIEngine:
         Count tokens in messages via tiktoken
         '''
         try:
+            # If messages empty
+            if messages is None:
+                logger.debug('Messages are empty')
+                return None
+            if len(messages) == 0:
+                return 0
+            model = self.model.split('/')[-1] # for "openai/gpt-3.5-turbo" cases
             # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(self.model)
+            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
@@ -780,6 +787,12 @@ class YandexEngine:
         Count tokens in messages via tiktoken
         '''
         try:
+            # If messages empty
+            if messages is None:
+                logger.debug('Messages are empty')
+                return None
+            if len(messages) == 0:
+                return 0
             # Get the encoding for the model
             encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
@@ -1165,6 +1178,12 @@ class AnthropicEngine:
         ! ALGORITHM IS NOT ACCURATE AND USED JUST FOR ESTIMATION !
         '''
         try:
+            # If messages empty
+            if messages is None:
+                logger.debug('Messages are empty')
+                return None
+            if len(messages) == 0:
+                return 0
             # Get the encoding for the model
             encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens

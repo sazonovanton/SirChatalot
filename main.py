@@ -244,7 +244,7 @@ def is_authorized(func):
     check_rate = True
     func_called = func.__name__
     if func_called in ['statistics_command', 'delete_command', 'limit_command']:
-        logger.info(f'Rate limit is not checked for function {func_called}')
+        logger.debug(f'Rate limit is not checked for function {func_called}')
         check_rate = False
     @wraps(func)
     async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
