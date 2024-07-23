@@ -562,7 +562,11 @@ async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TY
     tg_file = await context.bot.get_file(file_id)
     file_extension = os.path.splitext(tg_file.file_path)[1]
     if not file_extension:
-        file_extension = '.ogg' if isinstance(file, Voice) else '.mp4'
+        # if voice message, use ogg extension, else mp4
+        if update.message.voice:
+            file_extension = '.ogg'
+        else:
+            file_extension = '.mp4'
     
     file_path = f'./data/voice/{file_id}{file_extension}'
     await tg_file.download_to_drive(custom_path=file_path)

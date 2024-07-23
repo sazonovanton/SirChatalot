@@ -78,11 +78,19 @@ class ChatProc:
         self.speech_engine = None
         if speech is not None:
             try:
-                self.speech_engine = get_audio_engine(config.get("AudioTranscript", "Engine"))
-                self.audio_format = self.speech_engine.settings["AudioFormat"]
-                self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
-                self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
-                logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
+                if config.has_section("AudioTranscript"):
+                    self.speech_engine = get_audio_engine(config.get("AudioTranscript", "Engine"))
+                elif config.has_section("OpenAI") and config.has_option("OpenAI", "WhisperModel"):
+                    logger.info("Deprecated call of OpenAI Whisper model")
+                    self.speech_engine = get_audio_engine("whisper")
+                else:
+                    logger.info("No audio transcription engine provided")
+                    self.speech_engine = None
+                if self.speech_engine:
+                    self.audio_format = self.speech_engine.settings["AudioFormat"]
+                    self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
+                    self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
+                    logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
             except Exception as e:
                 logger.error(f"Failed to initialize audio engine: {e}")
                 raise
@@ -253,12 +261,13 @@ class ChatProc:
             logger.debug(f"TranscribeOnly setting: {self.speech_engine.settings['TranscribeOnly']}")
 
             if self.speech_engine.settings["TranscribeOnly"]:
-                logger.info("Returning transcription only due to TranscribeOnly setting")
+                logger.debug("Returning transcription only due to TranscribeOnly setting")
                 return f"Transcription: {transcript}"
 
             logger.info("Processing transcription through chat")
             response = await self.chat(id=id, message=transcript)
-            return f"Transcription: {transcript}\n\nResponse: {response}"
+            # Return response only, it is more natural
+            return response
         except Exception as e:
             logger.exception('Could not process audio/video')
             return None

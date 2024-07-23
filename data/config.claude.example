@@ -27,4 +27,4 @@ APIKey = *****
 AudioModel = whisper-1
 AudioModelPrice = 0.006
 AudioFormat = mp3
-TranscribeOnly = True
+TranscribeOnly = False

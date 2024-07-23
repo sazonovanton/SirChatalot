@@ -232,8 +232,7 @@ RequestLogging = False
 * YandexGPT.RequestLogging: Whether to disable logging of API requests by the Yandex Cloud (learn more [here](https://yandex.cloud/en/docs/yandexgpt/operations/disable-logging)). Default: `False`.
 
 ## Voice
-Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  
-To use this functionality you should make some changes in configuration file  (change OpenAI to Anthropic if you use Claude).    
+Bot can understand voice messages. To use this functionality you should make some changes in configuration file.
 Example:  
 ```ini
 ...
@@ -243,7 +242,7 @@ APIKey = ******
 AudioModel = whisper-1
 AudioModelPrice = 0.006
 AudioFormat = mp3
-TranscribeOnly = True
+TranscribeOnly = False
 ...
 ```  
 * AudioTranscript.Engine: The engine to use (currently only `whisper` is allowed).
@@ -251,7 +250,20 @@ TranscribeOnly = True
 * AudioTranscript.AudioModel: The model to use for speech recognition (Speech-to-text can be powered by `whisper-1` for now).
 * AudioTranscript.AudioModelPrice: The [price of the model](https://openai.com/pricing) to use for speech recognition (per minute, in USD).
 * AudioTranscript.AudioFormat: The audio format to convert voice messages (`ogg`) to (can be `wav`, `mp3` or other supported by Whisper). Stated whithout a dot.
-* AudioTranscript.TranscribeOnly: If set to True, will only provide Video/Audio transcript. If False, it will also answer the message.
+* AudioTranscript.TranscribeOnly: If set to True, will only respond with Video/Audio transcript. If False (default), it will answer the message.
+
+**Alternatively** you can set up Whisper in OpenAI section of the `./data/.config` file (deprecated, support can be removed in the future).  
+If config has section `AudioTranscript` it will be used instead and this method will be ignored.  
+```ini
+...
+WhisperModel = whisper-1
+WhisperModelPrice = 0.006
+AudioFormat = wav
+...
+```
+
+> [!NOTE] 
+> Audio conversion is done with [ffmpeg](https://www.ffmpeg.org/). You should have it installed.
 
 ## Vision
 Bot can understand images with [OpenAI GPT-4](https://platform.openai.com/docs/guides/vision) or [Claude 3](https://docs.anthropic.com/claude/docs/vision) models.  

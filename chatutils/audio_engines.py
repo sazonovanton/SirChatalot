@@ -32,13 +32,16 @@ class WhisperEngine:
         self.config = configparser.ConfigParser({
             "Engine": "whisper",
             "AudioModel": "whisper-1",
-            "AudioModelPrice": "0",
+            "AudioModelPrice": 0,
             "AudioFormat": "wav",
-            "TranscribeOnly": "False",
+            "TranscribeOnly": False,
         })
         self.config.read('./data/.config', encoding='utf-8')
 
-        self.settings = self.load_audio_transcription_settings()
+        if "AudioTranscript" in self.config.sections():
+            self.settings = self.load_audio_transcription_settings()
+        else:
+            self.settings = self.load_audio_transcription_settings(deprecated=True)
         if self.settings is None:
             raise Exception('Could not load audio transcription settings')
 
@@ -70,21 +73,32 @@ class WhisperEngine:
             print(f'-- Audio transcription cost is {self.settings["AudioModelPrice"]} per minute.')
         print('-- Learn more: https://platform.openai.com/docs/guides/speech-to-text\n')
 
-    def load_audio_transcription_settings(self):
+    def load_audio_transcription_settings(self, deprecated=False):
         '''
         Load audio transcription settings from config file
         '''
         try:
             settings = {}
-            settings["Engine"] = self.config.get("AudioTranscript", "Engine")
-            settings["AudioModel"] = self.config.get("AudioTranscript", "AudioModel")
-            settings["AudioModelPrice"] = float(self.config.get("AudioTranscript", "AudioModelPrice"))
-            settings["AudioFormat"] = self.config.get("AudioTranscript", "AudioFormat")
-            settings["TranscribeOnly"] = self.config.getboolean("AudioTranscript", "TranscribeOnly")
-            if self.config.has_option("AudioTranscript", "APIKey"):
-                settings["APIKey"] = self.config.get("AudioTranscript", "APIKey")
-            if self.config.has_option("AudioTranscript", "APIBase"):
-                settings["APIBase"] = self.config.get("AudioTranscript", "APIBase")
+            if not deprecated:
+                settings["Engine"] = self.config.get("AudioTranscript", "Engine")
+                settings["AudioModel"] = self.config.get("AudioTranscript", "AudioModel")
+                settings["AudioModelPrice"] = float(self.config.get("AudioTranscript", "AudioModelPrice"))
+                settings["AudioFormat"] = self.config.get("AudioTranscript", "AudioFormat")
+                settings["TranscribeOnly"] = self.config.getboolean("AudioTranscript", "TranscribeOnly")
+                if self.config.has_option("AudioTranscript", "APIKey"):
+                    settings["APIKey"] = self.config.get("AudioTranscript", "APIKey")
+                if self.config.has_option("AudioTranscript", "APIBase"):
+                    settings["APIBase"] = self.config.get("AudioTranscript", "APIBase")
+            else:
+                # OpenAI section
+                settings["Engine"] = "whisper"
+                settings["AudioModel"] = self.config.get("OpenAI", "WhisperModel", fallback="whisper-1")
+                settings["AudioModelPrice"] = self.config.getfloat("OpenAI", "WhisperModelPrice", fallback=0)
+                settings["AudioFormat"] = self.config.get("OpenAI", "AudioFormat", fallback="wav")
+                settings["TranscribeOnly"] = self.config.getboolean("OpenAI", "TranscribeOnly", fallback=False)
+                settings["APIKey"] = self.config.get("OpenAI", "SecretKey")
+                if self.config.has_option("OpenAI", "APIBase"):
+                    settings["APIBase"] = self.config.get("OpenAI", "APIBase")
             return settings
         except Exception as e:
             logger.error(f'Could not load audio transcription settings due to: {e}')
