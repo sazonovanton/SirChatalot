@@ -66,6 +66,7 @@ RateLimitTime = 3600
 GeneralRateLimit = 100
 TextEngine = OpenAI
 SpeechEngine = OpenAI
+ReplyToMessage = False
 
 [Logging]
 LogLevel = WARNING
@@ -112,6 +113,9 @@ Telegram:
 * Telegram.GeneralRateLimit: The maximum number of messages that can be sent by a user in the `Telegram.RateLimitTime` period. Applied to all users. Optional.
 * Telegram.TextEngine: The text engine to use. Optional, default is `OpenAI`. Other options are `YandexGPT` and `Claude`.
 * Telegram.SpeechEngine: The speech engine to use. Optional, default is `OpenAI`.
+* Telegram.ReplyToMessage: If set to `True`, bot will directly reply to the user's message. Optional, default is `False`.
+
+Logging:
 * Logging.LogLevel: The logging level. Optional, default is `WARNING`.
 * Logging.LogChats: If set to `True`, bot will log all chats. Optional, default is `False`.
 

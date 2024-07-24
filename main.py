@@ -82,6 +82,9 @@ if config.has_option("Telegram", "RateLimitTime"):
 else:
     print("No rate limits.")
 
+# Check if bot should reply to message
+message_reply = config.getboolean("Telegram", "ReplyToMessage", fallback=False)
+
 # check if file functionality is enabled
 if config.has_section('Files'):
     files_enabled = True
@@ -360,19 +363,6 @@ async def chat_modes_read(filepath='./data/chat_modes.ini'):
         logger.exception('Could not read chat modes from file: ' + filepath)
         return None
 
-# async def escaping(text):
-#     special_chars = "_*[]()~`>#+-=|{}.!"
-#     escaped_text = ""
-
-#     for char in text:
-#         if char in special_chars:
-#             escaped_text += "\\" + char
-#         else:
-#             escaped_text += char
-            
-#     escaped_text = escaped_text.replace('"', '\\"')
-#     return escaped_text
-
 async def escaping(text):
    '''
    Inside (...) part of inline link definition, all ')' and '\' must be escaped with a preceding '\' character.
@@ -397,23 +387,23 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
         # send each part
         for index, part in enumerate(parts):
             if markdown == 0:
-                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
+                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
             elif markdown == 1:
                 try:
-                    await update.message.reply_markdown(part, reply_to_message_id=update.message.message_id if index == 0 else None)
+                    await update.message.reply_markdown(part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
                 except Exception as e:
                     logger.debug(f'(!) Error sending message (mk1 - {e}): {part}')
                     await send_message(update, part, markdown=2)
             elif markdown == 2:
                 try:
                     esc_part = await escaping(part)
-                    await update.message.reply_markdown_v2(esc_part, reply_to_message_id=update.message.message_id if index == 0 else None)
+                    await update.message.reply_markdown_v2(esc_part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
                 except Exception as e:
                     logger.debug(f'(!) Error sending message (mk2 - {e}): {part}')
-                    await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
+                    await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
             else:
                 # if markdown is not 0, 1 or 2, send message without markdown
-                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 else None)
+                await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
     except Exception as e:
         logger.exception('Could not send message to user: ' + str(update.effective_user.id))
 

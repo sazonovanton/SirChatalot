@@ -5,6 +5,7 @@ GeneralRateLimit = 60
 RateLimitTime = 3600
 TextEngine = Claude
 SpeechEngine = OpenAI
+ReplyToMessage = False
 
 [Anthropic]
 SecretKey = sk-ant-api-123456789

@@ -3,6 +3,7 @@ Token = 0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 AccessCodes = firstwhitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 60
+ReplyToMessage = False
 
 [OpenAI]
 APIBase = https://openrouter.ai/api/v1
