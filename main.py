@@ -148,6 +148,7 @@ speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Tel
 gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation
+SPEECH = gpt.speech_engine
 from chatutils.filesproc import FilesProc
 fp = FilesProc()
 
@@ -442,7 +443,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "/imagine <prompt> - Generate an image\n" if IMAGE_GENERATION else ""
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
     help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
-    help_text += "Bot will answer to your voice messages if you send them.\n" if speech_engine is not None else ""
+    help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
     if gpt.function_calling:
         if gpt.webengine is not None:
             help_text += "\nYou can ask the bot to find something on the web. Just ask it to search for something. It will make request to a serach engine and will see a snippets of the first results. Example: `Find me a links to the best websites about cats.`\n"
