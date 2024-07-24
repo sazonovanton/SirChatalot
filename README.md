@@ -400,13 +400,16 @@ It can try to open only links provided (or from history), but will not walk thro
 `TrimLength` is used to limit the length of the parsed text (context can be lost).  
 
 ## Using OpenAI compatible APIs
-You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file:
+You can use APIs compatible with OpenAI's API. To do that, you need to set endpoint in the `OpenAI` section of the `./data/.config` file.  
+This example for running [Meta's Llama 3.1 405b via OpenRouter API](https://openrouter.ai/models/meta-llama/llama-3.1-405b-instruct):  
 ```ini
 [OpenAI]
 ...
 APIBase = https://openrouter.ai/api/v1
 SecretKey = sk-or-v1-***
-ChatModel = openai/gpt-3.5-turbo-0125
+ChatModel = meta-llama/llama-3.1-405b-instruct
+ChatModelPromptPrice = 0.003
+ChatModelCompletionPrice = 0.003
 Temperature = 0.7
 Moderation = False
 ...
