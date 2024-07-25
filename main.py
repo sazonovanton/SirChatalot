@@ -11,6 +11,7 @@ from telegram.constants import ChatAction
 import codecs
 import pickle
 from functools import wraps
+from datetime import datetime
 
 # For image processing
 from PIL import Image
@@ -514,7 +515,9 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # send typing action
     await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
 
-    answer = await gpt.chat(id=update.effective_user.id, message=update.message.text)
+    message = update.message.text
+    answer = await gpt.chat(id=update.effective_user.id, message=message)
+    
     # DEBUG
     logger.debug(f'>> Username: {update.effective_user.username}. Message: {update.message.text}')
     # add stats
@@ -530,6 +533,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image ({answer[2]}')
             image_bytes = base64.b64decode(answer[1])
             await update.message.reply_photo(photo=image_bytes)
+
             return None
     logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     await send_message(update, answer, markdown=1)

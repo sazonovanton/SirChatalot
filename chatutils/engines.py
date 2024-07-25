@@ -72,6 +72,15 @@ class OpenAIEngine:
         self.text_init() if self.text_initiation else None
         self.speech_init() if self.speech_initiation else None
 
+        # Get the encoding for the model
+        self.encoding = None
+        self.fallback_enc_base = 'cl100k_base'
+        try:
+            self.encoding = tiktoken.encoding_for_model(self.model.split('/')[-1])
+        except KeyError:
+            logger.warning(f"Could not get encoding for model `{self.model.split('/')[-1]}`, falling back to encoding for `{self.fallback_enc_base}`")
+            self.encoding = tiktoken.get_encoding(self.fallback_enc_base)
+
         logger.info('OpenAI Engine was initialized')
 
     def text_init(self):
@@ -376,9 +385,6 @@ class OpenAIEngine:
                 return None
             if len(messages) == 0:
                 return 0
-            model = self.model.split('/')[-1] # for "openai/gpt-3.5-turbo" cases
-            # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
@@ -386,7 +392,7 @@ class OpenAIEngine:
                 if self.vision:
                     message, trimmed = await self.leave_only_text(message)
                 text = f"{message['role']}: {message['content']}"
-                tokens += len(encoding.encode(text))
+                tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
