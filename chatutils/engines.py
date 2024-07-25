@@ -25,6 +25,7 @@ import tiktoken
 import asyncio
 import json
 
+
 ######## OpenAI Engine ########
 
 class OpenAIEngine:
@@ -529,6 +530,12 @@ class YandexEngine:
             }
         if self.chat_vars['RequestLogging'] == False:
             self.headers['x-data-logging-enabled'] = 'false'
+
+        # Get the encoding for the model
+        self.encoding = None
+        self.fallback_enc_base = 'cl100k_base'
+        logger.info(f"Loading encoding for `{self.fallback_enc_base}` for estimating token usage")
+        self.encoding = tiktoken.get_encoding(self.fallback_enc_base)
         
         logger.info('Yandex Engine was initialized')
 
@@ -788,7 +795,7 @@ class YandexEngine:
             logger.exception('Could not summarize chat history')
             return None
     
-    async def count_tokens(self, messages, model='gpt-3.5-turbo'):
+    async def count_tokens(self, messages):
         '''
         Count tokens in messages via tiktoken
         '''
@@ -799,19 +806,22 @@ class YandexEngine:
                 return None
             if len(messages) == 0:
                 return 0
-            # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
+                # Check if there is images in message and leave only text
+                if self.vision:
+                    message, trimmed = await self.leave_only_text(message)
                 text = f"{message['role']}: {message['content']}"
-                tokens += len(encoding.encode(text))
+                tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
             logger.exception('Could not count tokens in text')
             return None
-    
+        
+
+######## Anthropic Engine ########
     
 class AnthropicEngine:
     def __init__(self, text=False, speech=False):
@@ -861,6 +871,12 @@ class AnthropicEngine:
         self.text_init() if self.text_initiation else None        
         if self.function_calling:
             self.function_calling_tools = None
+
+        self.encoding = None
+        self.fallback_enc_base = 'cl100k_base'
+        logger.info(f"Loading encoding for `{self.fallback_enc_base}` for estimating token usage")
+        self.encoding = tiktoken.get_encoding(self.fallback_enc_base)
+
         logger.info('Anthropic Engine was initialized')
 
     def text_init(self):
@@ -1178,10 +1194,9 @@ class AnthropicEngine:
             logger.exception('Could not summarize chat history')
             return None, {"prompt": 0, "completion": 0}
 
-    async def count_tokens(self, messages, model='gpt-3.5-turbo'):
+    async def count_tokens(self, messages):
         '''
         Count tokens in messages via tiktoken
-        ! ALGORITHM IS NOT ACCURATE AND USED JUST FOR ESTIMATION !
         '''
         try:
             # If messages empty
@@ -1190,8 +1205,6 @@ class AnthropicEngine:
                 return None
             if len(messages) == 0:
                 return 0
-            # Get the encoding for the model
-            encoding = tiktoken.encoding_for_model(model)
             # Count the number of tokens
             tokens = 0
             for message in messages:
@@ -1199,7 +1212,7 @@ class AnthropicEngine:
                 if self.vision:
                     message, trimmed = await self.leave_only_text(message)
                 text = f"{message['role']}: {message['content']}"
-                tokens += len(encoding.encode(text))
+                tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
