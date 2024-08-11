@@ -1,23 +1,8 @@
 # Description: Chats processing class
 
-import configparser
-config = configparser.ConfigParser()
-config.read('./data/.config', encoding='utf-8')
-LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
-
-# logging
-import logging
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger("SirChatalot-Engines")
-LogLevel = getattr(logging, LogLevel.upper())
-logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
-                                       when="D",
-                                       interval=1,
-                                       backupCount=7,
-                                       encoding='utf-8')
-handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
-logger.addHandler(handler)
+from chatutils.misc import setup_logging, read_config
+config = read_config('./data/.config')
+logger = setup_logging(logger_name='SirChatalot-Engines', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
 import os
 import hashlib

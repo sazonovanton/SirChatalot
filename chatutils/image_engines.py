@@ -1,30 +1,12 @@
 # Description: Image Generation Engines for SirChatalot
 
-import configparser
-config = configparser.ConfigParser()
-config.read('./data/.config', encoding='utf-8')
-LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
+from chatutils.misc import setup_logging, read_config
+config = read_config('./data/.config')
+logger = setup_logging(logger_name='SirChatalot-ImageEngines', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
-# logging
-import logging
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger("SirChatalot-ImageEngines")
-LogLevel = getattr(logging, LogLevel.upper())
-logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
-                                       when="D",
-                                       interval=1,
-                                       backupCount=7,
-                                       encoding='utf-8')
-handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
-logger.addHandler(handler)
-
-import os
 import hashlib
 import asyncio
-import json
 import time
-
 
 ######## OpenAI Engine ########
 

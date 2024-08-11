@@ -1,8 +1,5 @@
 # Description: Main file for SirChatalot bot
 
-# main libraries
-import asyncio
-import sys
 import os
 import time
 from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
@@ -18,30 +15,14 @@ from PIL import Image
 import base64
 import io
 
-# import configuration
-import configparser
-config = configparser.ConfigParser()
-config.read('./data/.config', encoding='utf-8')
-LogLevel = config.get("Logging", "LogLevel") if config.has_option("Logging", "LogLevel") else "WARNING"
+from chatutils.misc import setup_logging, read_config
+config = read_config('./data/.config')
+logger = setup_logging(logger_name='SirChatalot-Main', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
+
 TOKEN = config.get("Telegram", "Token")
 ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
 ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
 banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
-
-# logging
-import logging
-from logging.handlers import TimedRotatingFileHandler
-logger = logging.getLogger("SirChatalot-main")
-LogLevel = getattr(logging, LogLevel.upper())
-logger.setLevel(LogLevel)
-handler = TimedRotatingFileHandler('./logs/sirchatalot.log',
-                                       when="D",
-                                       interval=1,
-                                       backupCount=7,
-                                       encoding='utf-8')
-handler.setFormatter(logging.Formatter('%(name)s - %(asctime)s - %(levelname)s - %(message)s',"%Y-%m-%d %H:%M:%S"))
-logger.addHandler(handler)
-
 
 logger.info('***** Starting chatbot... *****')
 print('***** Starting chatbot... *****')
