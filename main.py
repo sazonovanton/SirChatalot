@@ -87,7 +87,7 @@ if config.has_option("Files", "MaxFileSizeMB"):
         logger.warning(f"Max file size is not a number. Setting it to {max_file_size_limit}.")
 else:
     max_file_size = max_file_size_limit
-    logger.warning(f"Max file size is not set. Setting it to {max_file_size_limit}.")
+    logger.info(f"Max file size is not set. Setting it to {max_file_size_limit}.")
 
 def get_rates():
     '''
@@ -126,8 +126,7 @@ print('-- If you want to learn more about limits please check description (READM
 
 from chatutils.processing import ChatProc
 text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
-speech_engine = config.get("Telegram", "SpeechEngine") if config.has_option("Telegram", "SpeechEngine") else "OpenAI"
-gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if you don't want to use speech2text
+gpt = ChatProc(text=text_engine) # speech can be None if you don't want to use speech2text
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation
 SPEECH = gpt.speech_engine

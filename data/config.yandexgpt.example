@@ -4,7 +4,6 @@ AccessCodes = myaccesscode
 GeneralRateLimit = 60
 RateLimitTime = 3600
 TextEngine = YandexGPT
-SpeechEngine = OpenAI
 ReplyToMessage = False
 
 [YandexGPT]

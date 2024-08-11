@@ -14,9 +14,8 @@ from chatutils.audio_engines import get_audio_engine
 from chatutils.engines import OpenAIEngine, YandexEngine, AnthropicEngine
 
 class ChatProc:
-    def __init__(self, text="OpenAI", speech="OpenAI") -> None:
+    def __init__(self, text="OpenAI") -> None:
         text = text.lower()
-        speech = speech.lower() if speech is not None else None
         self.max_tokens = 2000
         self.summarize_too_long = False
         self.log_chats = config.getboolean("Logging", "LogChats") if config.has_option("Logging", "LogChats") else False
@@ -62,24 +61,23 @@ class ChatProc:
             logger.debug(f'Function calling is enabled')
 
         self.speech_engine = None
-        if speech is not None:
-            try:
-                if config.has_section("AudioTranscript"):
-                    self.speech_engine = get_audio_engine(config.get("AudioTranscript", "Engine"))
-                elif config.has_section("OpenAI") and config.has_option("OpenAI", "WhisperModel"):
-                    logger.info("Deprecated call of OpenAI Whisper model")
-                    self.speech_engine = get_audio_engine("whisper")
-                else:
-                    logger.info("No audio transcription engine provided")
-                    self.speech_engine = None
-                if self.speech_engine:
-                    self.audio_format = self.speech_engine.settings["AudioFormat"]
-                    self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
-                    self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
-                    logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
-            except Exception as e:
-                logger.error(f"Failed to initialize audio engine: {e}")
-                raise
+        try:
+            if config.has_section("AudioTranscript"):
+                self.speech_engine = get_audio_engine(config.get("AudioTranscript", "Engine"))
+            elif config.has_section("OpenAI") and config.has_option("OpenAI", "WhisperModel"):
+                logger.info("Deprecated call of OpenAI Whisper model")
+                self.speech_engine = get_audio_engine("whisper")
+            else:
+                logger.info("No audio transcription engine provided")
+                self.speech_engine = None
+            if self.speech_engine:
+                self.audio_format = self.speech_engine.settings["AudioFormat"]
+                self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
+                self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
+                logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
+        except Exception as e:
+            logger.error(f"Failed to initialize audio engine: {e}")
+            raise
         
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)

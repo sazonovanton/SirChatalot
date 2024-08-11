@@ -40,11 +40,11 @@ def setup_logging(log_file: str = './logs/sirchatalot.log',
     logger.addHandler(handler)
     return logger
 
-def read_config(config_file: str = './config.ini'):
+def read_config(config_file: str = './data/.config'):
     """
     Read configuration from a config file.
     Input:
-        config_file: str, path to config file, default './config.ini'
+        config_file: str, path to config file, default './data/.config'
     Output:
         config: dict, configuration parameters
     """
@@ -52,4 +52,28 @@ def read_config(config_file: str = './config.ini'):
     config.read(config_file,
                 encoding='utf-8')
     return config
-
+    
+async def leave_only_text(message, logger=None):
+    '''
+    Leave only text in message with images
+    '''
+    if message is None:
+        return None, False
+    try:
+        message_copy = message.copy()
+        # Check if there is images in message
+        trimmed = False
+        if 'content' in message_copy and type(message_copy['content']) == list:
+            # Leave only text in message
+            for i in range(len(message_copy['content'])):
+                if message_copy['content'][i]['type'] == 'text':
+                    message_copy['content'] = message_copy['content'][i]['text']
+                    trimmed = True
+                    break
+        return message_copy, trimmed
+    except Exception as e:
+        if logger:
+            logger.error(f'Could not leave only text in message: {e}')
+        else:
+            raise f'Could not leave only text in message: {e}'
+        return message, False

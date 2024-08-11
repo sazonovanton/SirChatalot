@@ -5,6 +5,7 @@ config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-AudioEngines', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
 import os
+import configparser
 
 class WhisperEngine:
     def __init__(self):

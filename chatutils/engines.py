@@ -1,28 +1,25 @@
 # Description: Chats processing class
 
-from chatutils.misc import setup_logging, read_config
+from chatutils.misc import setup_logging, read_config, leave_only_text
 config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Engines', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
-import os
 import hashlib
 import tiktoken
 import asyncio
 import json
-
+import configparser
 
 ######## OpenAI Engine ########
 
 class OpenAIEngine:
-    def __init__(self, text=False, speech=False):
+    def __init__(self, text=False):
         '''
         Initialize OpenAI API 
-        Available: text generation, speech2text
         '''
         from openai import AsyncOpenAI
         import openai 
         self.openai = openai
-        import configparser
         self.config = configparser.SafeConfigParser({
             "ChatModel": "gpt-3.5-turbo",
             "ChatModelCompletionPrice": 0,
@@ -54,9 +51,8 @@ class OpenAIEngine:
             api_key=self.config.get("OpenAI", "SecretKey"),
             base_url=self.base_url,
         )
-        self.text_initiation, self.speech_initiation = text, speech
+        self.text_initiation = text
         self.text_init() if self.text_initiation else None
-        self.speech_init() if self.speech_initiation else None
 
         # Get the encoding for the model
         self.encoding = None
@@ -332,7 +328,7 @@ class OpenAIEngine:
                 return None
             # check if there is image in message and leave only text
             if self.vision:
-                message, trimmed = await self.leave_only_text(message)
+                message, trimmed = await leave_only_text(message)
             response = await self.client.moderations.create(
                 input=[message['content']],
                 model='text-moderation-stable',
@@ -376,7 +372,7 @@ class OpenAIEngine:
             for message in messages:
                 # Check if there is images in message and leave only text
                 if self.vision:
-                    message, trimmed = await self.leave_only_text(message)
+                    message, trimmed = await leave_only_text(message, logger=logger)
                 text = f"{message['role']}: {message['content']}"
                 tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
@@ -384,28 +380,6 @@ class OpenAIEngine:
         except Exception as e:
             logger.exception('Could not count tokens in text')
             return None
-        
-    async def leave_only_text(self, message):
-        '''
-        Leave only text in message with images
-        '''
-        if message is None:
-            return None, False
-        try:
-            message_copy = message.copy()
-            # Check if there is images in message
-            trimmed = False
-            if 'content' in message_copy and type(message_copy['content']) == list:
-                # Leave only text in message
-                for i in range(len(message_copy['content'])):
-                    if message_copy['content'][i]['type'] == 'text':
-                        message_copy['content'] = message_copy['content'][i]['text']
-                        trimmed = True
-                        break
-            return message_copy, trimmed
-        except Exception as e:
-            logger.exception('Could not leave only text in message')
-            return message, False
         
     async def describe_image(self, message, user_id=None):
         '''
@@ -472,7 +446,7 @@ class OpenAIEngine:
             # Check if there is images in messages
             for i in range(len(messages)):
                 # Leave only text in message
-                text, trimmed = await self.leave_only_text(messages[i])
+                text, trimmed = await leave_only_text(messages[i], logger=logger)
                 if trimmed == False:
                     # no images in message
                     continue
@@ -495,18 +469,16 @@ class OpenAIEngine:
 ######## YandexGPT Engine ########
 
 class YandexEngine:
-    def __init__(self, text=False, speech=False) -> None:
+    def __init__(self, text=False) -> None:
         '''
         Initialize Yandex API for text generation
-        Available: text generation
         '''
         import requests 
         import json
         self.requests = requests
         self.json = json
-        self.text_initiation, self.speech_initiation = text, speech
+        self.text_initiation = text
         self.text_init() if self.text_initiation else None
-        self.speech_init() if self.speech_initiation else None
 
         self.headers = {
                 'Content-Type': 'application/json',
@@ -528,7 +500,6 @@ class YandexEngine:
         '''
         Initialize Yandex API for text generation
         '''
-        import configparser
         self.config = configparser.SafeConfigParser({
             "Endpoint": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
             "ChatModel": "yandexgpt-lite/latest",
@@ -599,13 +570,6 @@ class YandexEngine:
             print('Vision is enabled')
             print('-- Vision is used to describe images and delete them from chat history. It can be changed in the self.config file.')
             print('-- Learn more: https://docs.anthropic.com/claude/docs/vision\n')
-
-    def speech_init(self):
-        '''
-        Initialize Yandex API for speech synthesis
-        '''
-        # TODO: implement speech to text with Yandex API
-        pass
 
     async def chat(self, id=0, messages=None, attempt=0):
         '''
@@ -796,7 +760,7 @@ class YandexEngine:
             for message in messages:
                 # Check if there is images in message and leave only text
                 if self.vision:
-                    message, trimmed = await self.leave_only_text(message)
+                    message, trimmed = await leave_only_text(message, logger=logger)
                 text = f"{message['role']}: {message['content']}"
                 tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
@@ -809,15 +773,13 @@ class YandexEngine:
 ######## Anthropic Engine ########
     
 class AnthropicEngine:
-    def __init__(self, text=False, speech=False):
+    def __init__(self, text=False):
         '''
         Initialize Anthropic API for text generation
-        Available: text generation, speech2text
         '''
         from anthropic import AsyncAnthropic
         import anthropic 
         self.anthropic = anthropic
-        import configparser
         self.config = configparser.SafeConfigParser({
             "ChatModel": "claude-3-haiku-20240307",
             "ChatModelCompletionPrice": 0,
@@ -851,7 +813,7 @@ class AnthropicEngine:
             base_url=self.base_url,
             proxies=proxy,
         )
-        self.text_initiation, self.speech_initiation = text, speech
+        self.text_initiation = text
         self.function_calling = False
         self.text_init() if self.text_initiation else None        
         if self.function_calling:
@@ -1195,7 +1157,7 @@ class AnthropicEngine:
             for message in messages:
                 # Check if there is images in message and leave only text
                 if self.vision:
-                    message, trimmed = await self.leave_only_text(message)
+                    message, trimmed = await leave_only_text(message, logger=logger)
                 text = f"{message['role']}: {message['content']}"
                 tokens += len(self.encoding.encode(text))
             logger.debug(f'Messages were counted for tokens: {tokens}')
@@ -1203,28 +1165,6 @@ class AnthropicEngine:
         except Exception as e:
             logger.exception('Could not count tokens in text')
             return None
-        
-    async def leave_only_text(self, message):
-        '''
-        Leave only text in message with images
-        '''
-        if message is None:
-            return None, False
-        try:
-            message_copy = message.copy()
-            # Check if there is images in message
-            trimmed = False
-            if 'content' in message_copy and type(message_copy['content']) == list:
-                # Leave only text in message
-                for i in range(len(message_copy['content'])):
-                    if message_copy['content'][i]['type'] == 'text':
-                        message_copy['content'] = message_copy['content'][i]['text']
-                        trimmed = True
-                        break
-            return message_copy, trimmed
-        except Exception as e:
-            logger.exception('Could not leave only text in message')
-            return message, False
         
     async def describe_image(self, message, user_id=None):
         '''
@@ -1294,7 +1234,7 @@ class AnthropicEngine:
             # Check if there is images in messages
             for i in range(len(messages)):
                 # Leave only text in message
-                text, trimmed = await self.leave_only_text(messages[i])
+                text, trimmed = await leave_only_text(messages[i], logger=logger)
                 if trimmed == False:
                     # no images in message
                     continue
@@ -1316,8 +1256,6 @@ class AnthropicEngine:
 
 ####### TEST #######
 if __name__ == '__main__':
-    logger.setLevel(logging.DEBUG)
-
     # engine = OpenAIEngine(text=True)
     engine = YandexEngine(text=True)
     # engine = AnthropicEngine(text=True)

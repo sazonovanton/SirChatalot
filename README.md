@@ -65,7 +65,6 @@ AccessCodes = whitelistcode,secondwhitelistcode
 RateLimitTime = 3600
 GeneralRateLimit = 100
 TextEngine = OpenAI
-SpeechEngine = OpenAI
 ReplyToMessage = False
 
 [Logging]
