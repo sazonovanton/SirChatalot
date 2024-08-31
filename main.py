@@ -330,6 +330,7 @@ async def chat_modes_read(filepath='./data/chat_modes.ini'):
     '''
     try:
         # read chat modes from file
+        import configparser
         chat_modes = configparser.ConfigParser()
         chat_modes.read(filepath)
         # create a dict with chat modes
@@ -735,15 +736,7 @@ async def resize_image(image_bytes):
         logger.debug(f'>> Image resized from {width}x{height} to {new_width}x{new_height}')
         return image_base64
     except Exception as e:
-        # if debug is enabled, save image to file
-        try:
-            if logger.level == logging.DEBUG:
-                image = Image.open(io.BytesIO(image_bytes))
-                image.save(f'./logs/{time.time()}.jpg')
-                logger.debug(f'>> Image saved to file.')
-        except Exception as e:
-            logger.debug('>> Could not save image to file.')
-        logger.error(e)
+        logger.error(f"Error while resizing image: {e}")
         return None
 
 @is_authorized

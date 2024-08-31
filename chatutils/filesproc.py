@@ -203,5 +203,6 @@ class FilesProc:
         
 
 if __name__ == '__main__':
+    import asyncio
     filesproc = FilesProc()
     asyncio.run(filesproc.main())
