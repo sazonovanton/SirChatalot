@@ -13,7 +13,7 @@ import configparser
 ######## OpenAI Engine ########
 
 class OpenAIEngine:
-    def __init__(self, text=False):
+    def __init__(self):
         '''
         Initialize OpenAI API 
         '''

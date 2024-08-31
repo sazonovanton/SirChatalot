@@ -14,7 +14,6 @@ from chatutils.text_engines import get_text_engine
 
 class ChatProc:
     def __init__(self) -> None:
-        text = text.lower()
         self.max_tokens = 2000
         self.summarize_too_long = False
         self.log_chats = config.getboolean("Logging", "LogChats", fallback=False)
@@ -46,7 +45,7 @@ class ChatProc:
 
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
-            self.load_function_calling(text)
+            self.load_function_calling(self.text_engine.name)
             self.text_engine.function_calling_tools = self.function_calling_tools
             logger.debug(f'Function calling is enabled')
 
@@ -83,14 +82,14 @@ class ChatProc:
         if self.log_chats:
             logger.info('* Chat history is logged *')
 
-    def load_function_calling(self, text):
+    def load_function_calling(self, textengine):
         '''
         Load function calling tools
         '''
-        if text == "openai":
+        if textengine == "OpenAI":
             from chatutils.tools_config import OpenAIConfig
             tools_config = OpenAIConfig()
-        if text in ["claude", "anthropic"]:
+        if textengine == "Anthropic":
             from chatutils.tools_config import AnthropicConfig 
             tools_config = AnthropicConfig()
         self.webengine = None
