@@ -26,7 +26,7 @@ class FilesProc:
     def __init__(self) -> None:
         # path where files are stored
         self.path = './data/files'
-        self.delete_after_processing = config.getboolean('Files', 'DeleteAfterProcessing') if config.has_option('Files', 'DeleteAfterProcessing') else True
+        self.delete_after_processing = config.getboolean('Files', 'DeleteAfterProcessing', fallback=True)
         self.platform = platform
 
     async def delete_file(self, filepath) -> bool:

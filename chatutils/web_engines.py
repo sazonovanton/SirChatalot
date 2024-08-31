@@ -15,7 +15,7 @@ class GoogleEngine:
     def __init__(self):
         self.api_key = config.get("Web", "APIKey")
         self.cse_id = config.get("Web", "CSEID")
-        self.search_results  = config.getint("Web", "SearchResults") if config.has_option("Web", "SearchResults") else 5
+        self.search_results  = config.getint("Web", "SearchResults", fallback=5)
         self.search_results = min(self.search_results, 10)
         self.search_results = max(self.search_results, 1)
         self.base_url = "https://www.googleapis.com/customsearch/v1"
@@ -57,7 +57,7 @@ class URLOpen:
     Deletes unnecessary tags and returns the text in the body
     '''
     def __init__(self):
-        self.trim_len = config.getint("Web", "TrimLength") if config.has_option("Web", "TrimLength") else None
+        self.trim_len = config.getint("Web", "TrimLength", fallback=None)
         logger.info(f'URL Open Initialized, trim length: {self.trim_len}')
 
     async def parse_data(self, data):

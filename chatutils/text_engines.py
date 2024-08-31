@@ -17,6 +17,7 @@ class OpenAIEngine:
         '''
         Initialize OpenAI API 
         '''
+        self.name = 'OpenAI'
         from openai import AsyncOpenAI
         import openai 
         self.openai = openai
@@ -51,8 +52,7 @@ class OpenAIEngine:
             api_key=self.config.get("OpenAI", "SecretKey"),
             base_url=self.base_url,
         )
-        self.text_initiation = text
-        self.text_init() if self.text_initiation else None
+        self.text_init() 
 
         # Get the encoding for the model
         self.encoding = None
@@ -172,8 +172,6 @@ class OpenAIEngine:
             If not successful returns None
         If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
         '''
-        if self.text_initiation == False:
-            return None, None, None
         if messages is None:
             return None, None, None
         prompt_tokens, completion_tokens = 0, 0
@@ -473,12 +471,12 @@ class YandexEngine:
         '''
         Initialize Yandex API for text generation
         '''
+        self.name = 'YandexGPT'
         import requests 
         import json
         self.requests = requests
         self.json = json
-        self.text_initiation = text
-        self.text_init() if self.text_initiation else None
+        self.text_init() 
 
         self.headers = {
                 'Content-Type': 'application/json',
@@ -590,8 +588,6 @@ class YandexEngine:
             If not successful returns None
         If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
         '''
-        if self.text_initiation == False:
-            return None, None, None
         if messages is None:
             return None, None, None
         prompt_tokens, completion_tokens = 0, 0
@@ -773,10 +769,11 @@ class YandexEngine:
 ######## Anthropic Engine ########
     
 class AnthropicEngine:
-    def __init__(self, text=False):
+    def __init__(self):
         '''
         Initialize Anthropic API for text generation
         '''
+        self.name = 'Anthropic'
         from anthropic import AsyncAnthropic
         import anthropic 
         self.anthropic = anthropic
@@ -813,9 +810,8 @@ class AnthropicEngine:
             base_url=self.base_url,
             proxies=proxy,
         )
-        self.text_initiation = text
         self.function_calling = False
-        self.text_init() if self.text_initiation else None        
+        self.text_init()      
         if self.function_calling:
             self.function_calling_tools = None
 
@@ -997,8 +993,6 @@ class AnthropicEngine:
             If not successful returns None
         If messages tokens are more than 80% of max_tokens, it will be trimmed. 20% of tokens are left for response.
         '''
-        if self.text_initiation == False:
-            return None, None, None
         if messages is None:
             return None, None, None
         prompt_tokens, completion_tokens = 0, 0
@@ -1253,6 +1247,24 @@ class AnthropicEngine:
             logger.exception('Could not filter images')
             return None, {"prompt": 0, "completion": 0}
         
+def get_text_engine(engine_name="openai"):
+    '''
+    Get text engine by name
+    Possible engines:
+    * openai
+    * yandex (yandexgpt)
+    * anthropic (claude)
+    Default engine is OpenAI
+    '''
+    if engine_name.lower() in ["openai"]:
+        return OpenAIEngine()
+    elif engine_name.lower() in ["yandex", "yandexgpt"]:
+        return YandexEngine()
+    elif engine_name.lower() in ["anthropic", "claude"]:
+        return AnthropicEngine()
+    else:
+        raise ValueError(f"Unsupported text engine: {engine_name}")
+
 
 ####### TEST #######
 if __name__ == '__main__':

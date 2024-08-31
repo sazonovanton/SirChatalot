@@ -10,26 +10,16 @@ from pydub import AudioSegment
 from datetime import datetime
 
 from chatutils.audio_engines import get_audio_engine
-# Support: OpenAI API, YandexGPT API, Claude API
-from chatutils.engines import OpenAIEngine, YandexEngine, AnthropicEngine
+from chatutils.text_engines import get_text_engine
 
 class ChatProc:
-    def __init__(self, text="OpenAI") -> None:
+    def __init__(self) -> None:
         text = text.lower()
         self.max_tokens = 2000
         self.summarize_too_long = False
-        self.log_chats = config.getboolean("Logging", "LogChats") if config.has_option("Logging", "LogChats") else False
+        self.log_chats = config.getboolean("Logging", "LogChats", fallback=False)
         self.model_prompt_price, self.model_completion_price = 0, 0
-        self.audio_format, self.s2t_model_price = ".wav", 0
-        if text == "openai":
-            self.text_engine = OpenAIEngine(text=True)
-        elif text == "yagpt" or text == "yandexgpt" or text == "yandex":
-            self.text_engine = YandexEngine(text=True)
-        elif text == "claude" or text == "anthropic":
-            self.text_engine = AnthropicEngine(text=True)
-        else:
-            logger.error("Unknown text engine: {}".format(text))
-            raise Exception("Unknown text engine: {}".format(text))
+        self.text_engine = get_text_engine(config.get("Telegram", "TextEngine", fallback="openai"))
         
         self.model_prompt_price = self.text_engine.model_prompt_price
         self.model_completion_price = self.text_engine.model_completion_price
@@ -49,7 +39,7 @@ class ChatProc:
         if config.has_section("ImageGeneration"):
             self.image_generation = True
         if not self.image_generation and config.has_section("OpenAI"):
-            self.image_generation = config.getboolean("OpenAI", "ImageGeneration") if config.has_option("OpenAI", "ImageGeneration") else False
+            self.image_generation = config.getboolean("OpenAI", "ImageGeneration", fallback=False)
         if self.image_generation:
             self.load_image_generation()
             logger.debug(f'Image generation is enabled, price: ${self.image_generation_price}, size: {self.image_generation_size}, style: {self.image_generation_style}, quality: {self.image_generation_quality}')
@@ -70,14 +60,9 @@ class ChatProc:
             else:
                 logger.info("No audio transcription engine provided")
                 self.speech_engine = None
-            if self.speech_engine:
-                self.audio_format = self.speech_engine.settings["AudioFormat"]
-                self.s2t_model_price = self.speech_engine.settings["AudioModelPrice"]
-                self.transcribe_only = self.speech_engine.settings["TranscribeOnly"]
-                logger.debug(f"Initialized speech engine with TranscribeOnly: {self.transcribe_only}")
         except Exception as e:
             logger.error(f"Failed to initialize audio engine: {e}")
-            raise
+            raise Exception(f"Failed to initialize audio engine: {e}")
         
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
@@ -85,8 +70,8 @@ class ChatProc:
         if self.summarize_too_long:
             print('-- Summarize too long is set to True. It means that if the text is too long, then it will be summarized instead of trimmed.\n')
 
-        self.file_summary_tokens = int(config.get("Files", "MaxSummaryTokens")) if config.has_option("Files", "MaxSummaryTokens") else (self.max_tokens // 2)
-        self.max_file_length = int(config.get("Files", "MaxFileLength")) if config.has_option("Files", "MaxFileLength") else 10000
+        self.file_summary_tokens = config.getint("Files", "MaxSummaryTokens", fallback = (self.max_tokens // 2))
+        self.max_file_length = config.getint("Files", "MaxFileLength", fallback = 10000)
 
         # load chat history from file
         self.chats_location = "./data/tech/chats.pickle"
@@ -127,7 +112,7 @@ class ChatProc:
                 if config.getboolean("Web", "UrlOpen"):
                     from chatutils.web_engines import URLOpen
                     self.urlopener = URLOpen()
-                    self.url_summary = config.getboolean("Web", "URLSummary") if config.has_option("Web", "URLSummary") else False
+                    self.url_summary = config.getboolean("Web", "URLSummary", fallback=False)
                     logger.debug(f'URL opener is enabled, URL summary is set to {self.url_summary}')
                     self.available_functions["url_opener"] = self.urlopener.open_url
                     self.function_calling_tools.append(tools_config.url_opener)
@@ -567,7 +552,7 @@ class ChatProc:
                             image, text = function_response[0], function_response[1]
                             if image is not None:
                                 # add to chat history
-                                if type(self.text_engine) == AnthropicEngine:
+                                if type(self.text_engine.name) == 'Anthropic':
                                     # https://docs.anthropic.com/claude/docs/tool-use-examples
                                     # assistant:
                                     message_content = []
@@ -606,7 +591,7 @@ class ChatProc:
                             )
                             if function_response is None:
                                 function_response = 'Error while searching the web'
-                            if type(self.text_engine) == AnthropicEngine:
+                            if type(self.text_engine.name) == 'Anthropic':
                                 # https://docs.anthropic.com/claude/docs/tool-use-examples
                                 # assistant:
                                 message_content = []
@@ -659,7 +644,7 @@ class ChatProc:
                                     completion_tokens += int(token_usage['completion'])
                             else:
                                 pass
-                            if type(self.text_engine) == AnthropicEngine:
+                            if type(self.text_engine.name) == 'Anthropic':
                                 # https://docs.anthropic.com/claude/docs/tool-use-examples
                                 # assistant:
                                 message_content = []

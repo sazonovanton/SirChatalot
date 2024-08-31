@@ -20,9 +20,9 @@ config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Main', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
 TOKEN = config.get("Telegram", "Token")
-ratelimit_time = config.get("Telegram", "RateLimitTime") if config.has_option("Telegram", "RateLimitTime") else None
-ratelimit_general = config.get("Telegram", "GeneralRateLimit") if config.has_option("Telegram", "GeneralRateLimit") else None
-banlist_enabled = config.getboolean("Telegram", "EnableBanlist") if config.has_option("Telegram", "EnableBanlist") else False
+ratelimit_time = config.get("Telegram", "RateLimitTime", fallback=None)
+ratelimit_general = config.get("Telegram", "GeneralRateLimit", fallback=None)
+banlist_enabled = config.getboolean("Telegram", "EnableBanlist", fallback=False)
 
 logger.info('***** Starting chatbot... *****')
 print('***** Starting chatbot... *****')
@@ -125,8 +125,7 @@ if config.has_option("Telegram", "RateLimitTime"):
 print('-- If you want to learn more about limits please check description (README.md)\n')
 
 from chatutils.processing import ChatProc
-text_engine = config.get("Telegram", "TextEngine") if config.has_option("Telegram", "TextEngine") else "OpenAI"
-gpt = ChatProc(text=text_engine) # speech can be None if you don't want to use speech2text
+gpt = ChatProc() 
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation
 SPEECH = gpt.speech_engine
