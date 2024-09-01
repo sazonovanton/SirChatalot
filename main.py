@@ -129,8 +129,6 @@ gpt = ChatProc()
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation
 SPEECH = gpt.speech_engine
-from chatutils.filesproc import FilesProc
-fp = FilesProc()
 
 ################################## Authorization ###############################################
 
@@ -665,46 +663,6 @@ async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
 
     await update.message.reply_text(msg, reply_markup=reply_markup)
 
-@is_authorized
-async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # check if file function is enabled
-    if not files_enabled:
-        await update.message.reply_text("Sorry, working with files is not supported at the moment.")
-        return None
-
-    global application
-    try:
-        file_id = update.message.document.file_id
-        new_file = await application.bot.get_file(file_id)
-        filename = new_file.file_path.split('/')[-1]
-        filesize = new_file.file_size / 1024 / 1024 # file size in MB
-        if filesize > max_file_size:
-            await update.message.reply_text(f"Sorry, file size is too big. Please try again with a smaller file. Max file size is {max_file_size} MB.")
-            return None
-        new_file_path = await new_file.download_to_drive(custom_path='./data/files/' + filename)
-        await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-
-        logger.info('Recieved: ' + str(new_file_path))
-
-        tic = time.time()
-        text = await fp.extract_text(new_file_path)
-        tt = round(time.time()-tic)
-        logger.info('Process time: ' + str(tt) + ' seconds')
-
-        if text is None or '':
-            await update.message.reply_text("Sorry, something went wrong. Could not extract text from the file.")
-            return None
-        
-        # if yes, get answer from GPT
-        answer = await gpt.filechat(id=update.effective_user.id, text=text)
-        if answer is None:
-            answer = "Sorry, something went wrong. Could not get answer from GPT."
-            logger.error('Could not get answer for user: ' + str(update.effective_user.id))
-        await update.message.reply_text(answer)
-    except Exception as e:
-        logger.error(e)
-        await update.message.reply_text("Sorry, something went wrong while processing the file.")
-
 ################################## Images #####################################################
 async def resize_image(image_bytes):
     '''
@@ -845,10 +803,6 @@ def main() -> None:
     # image generation
     application.add_handler(CommandHandler("imagine", imagine_command))
 
-    # application.add_handler(CommandHandler("save_session", save_session_command))
-    # application.add_handler(CommandHandler("load_session", load_session_command))
-    # application.add_handler(CommandHandler("delete_session", delete_session_command))
-
     application.add_handler(CommandHandler("style", style_command))
     application.add_handler(CallbackQueryHandler(button))
 
@@ -858,14 +812,6 @@ def main() -> None:
 
     # recieve and process images
     application.add_handler(MessageHandler(filters.PHOTO, process_image))
-
-    # download files
-    application.add_handler(MessageHandler(filters.Document.Category('application/pdf'), downloader))
-    application.add_handler(MessageHandler(filters.Document.Category('application/msword'), downloader))
-    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.wordprocessingml.document'), downloader))
-    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.ms-powerpoint'), downloader))
-    application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.presentationml.presentation'), downloader))
-    application.add_handler(MessageHandler(filters.Document.Category('text/plain'), downloader))
 
     # Run the bot until the Ctrl-C is pressed
     application.run_polling()
