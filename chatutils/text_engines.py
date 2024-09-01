@@ -149,6 +149,7 @@ class OpenAIEngine:
                                              "content": content.content})
                 else:
                     revised_messages.append({"role": role, "content": content})
+            return revised_messages
         except Exception as e:
             logger.exception('Could not revise messages for OpenAI API')
             raise Exception('Could not revise messages for OpenAI API')
@@ -259,7 +260,7 @@ class OpenAIEngine:
             }
 
             summary_message.finish_reason = response.choices[0].finish_reason
-            summary_message.content = response.choices[0].message.content
+            summary_message.content = f"<Previous conversation summary:>\n{response.choices[0].message.content}"
             summary_message.role = 'assistant'
 
             return summary_message

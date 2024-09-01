@@ -11,6 +11,8 @@ from datetime import datetime
 
 from chatutils.audio_engines import get_audio_engine
 from chatutils.text_engines import get_text_engine
+from chatutils.errors import ErrorResponses as er
+from chatutils.datatypes import Message, FunctionResponse
 
 class ChatProc:
     def __init__(self) -> None:
@@ -24,6 +26,8 @@ class ChatProc:
         self.model_completion_price = self.text_engine.model_completion_price
         self.max_tokens = self.text_engine.max_tokens
         self.summarize_too_long = self.text_engine.summarize_too_long
+        self.trim_size = 5 # TODO: make it configurable
+        self.trim_too_long = True # TODO: make it configurable
         
         self.vision = self.text_engine.vision
         if self.vision:
@@ -275,32 +279,30 @@ class ChatProc:
                 return False
             
             # Check if there is a chat
-            new_chat = False
             if id not in self.chats:
                 # If there is no chat, then create it
                 success = await self.init_style(id=id)
                 if not success:
                     logger.error('Could not init style for user: ' + str(id))
                     return False
-                new_chat = True
 
             messages = self.chats[id]
-            messages.append({
-                "role": "user", 
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:image/jpeg;base64,{image_b64}"
-                        },
-                    }
-                ] 
-            })
+            
+            new_message = Message()
+            new_message.role = "user"
+            new_message.content_type = "image"
+            new_message.content = {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_b64}"
+                }
+            }
+            messages.append(new_message)
+
             # Add flag that there is an image without caption
             self.pending_images[id] = True
             # save chat history
             self.chats[id] = messages
-            # save chat history to file
             pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
@@ -329,13 +331,12 @@ class ChatProc:
             # remove flag that there is an image without caption
             del self.pending_images[id]
             # add caption to the last image
-            messages[-1]['content'].append({
+            messages[-1].content.append({
                 "type": "text",
                 "text": caption,
             })
             # save chat history
             self.chats[id] = messages
-            # save chat history to file
             pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
@@ -364,14 +365,17 @@ class ChatProc:
             if id in self.chats:
                 messages = self.chats[id]
             else:
-                messages = [{"role": "system", "content": style}]
+                new_message = Message()
+                new_message.role = "system"
+                new_message.content = style
+                messages = [new_message]
             # save chat history
             self.chats[id] = messages
             # save chat history to file
             pickle.dump(self.chats, open(self.chats_location, "wb"))
             return True
         except Exception as e:
-            logger.exception('Could not init style for user: ' + str(id))
+            logger.error(f'Could not init style for user `{id}` due to an error: {e}')
             return False
         
     async def add_to_chat_history(self, id=0, message=None):
@@ -386,7 +390,6 @@ class ChatProc:
                 # If there is no chat, then create it
                 success = await self.init_style(id=id)
                 if not success:
-                    logger.error('Could not init style for user: ' + str(id))
                     return False
             messages = self.chats[id]
             messages.append(message)
@@ -440,17 +443,22 @@ class ChatProc:
 
     async def trim_messages(self, messages, trim_count=1):
         '''
-        Trim messages (delete first trim_count messages)
-        Do not trim system message (role == 'system', id == 0)
+        Trim messages (leave only last trim_count messages and system message)
         '''
         try:
             if messages is None or len(messages) <= 1:
-                logger.warning('Could not trim messages')
+                logger.debug('Could not trim messages due to a short conversation')
                 return None
-            system_message = messages[0] if messages[0]['role'] == 'system' else {"role": "system", "content": self.system_message}
-            messages = messages[1:] if messages[0]['role'] == 'system' else messages
-            logger.debug(f'Deleting messages: {messages[:trim_count]}')
-            messages = messages[trim_count:]
+            if messages[0].role == 'system':
+                system_message = messages[0]
+                messages = messages[1:]
+            else:
+                system_message = Message()
+                system_message.role = "system"
+                system_message.content = self.system_message
+
+            logger.debug(f'Trimming {len(messages)} messages, leaving only {trim_count} last messages')
+            messages = messages[-trim_count:]
             messages.insert(0, system_message)
             return messages
         except Exception as e:
@@ -464,27 +472,92 @@ class ChatProc:
         '''
         try:
             if messages is None or len(messages) <= leave_messages:
-                logger.warning('Could not summarize messages')
+                logger.info('Could not summarize messages due to a short conversation')
                 return None
-            system_message = messages[0] if messages[0]['role'] == 'system' else {"role": "system", "content": self.system_message}
+            if messages[0].role == 'system':
+                system_message = messages[0]
+                messages = messages[1:]
+            else:
+                system_message = Message()
+                system_message.role = "system"
+                system_message.content = self.system_message
+            
+            logger.debug(f'Summarizing {len(messages)} messages')
             last_messages = messages[-leave_messages:]
-            logger.debug(f'Summarizing {len(messages)} messages, leaving only {len(last_messages)} last messages')
-            messages = messages[1:-leave_messages] if messages[0]['role'] == 'system' else messages[:-leave_messages]
-            # summarize messages
-            summary, token_usage = await self.chat_summary(messages)
+
+            summary = await self.chat_summary(messages)
+
             messages = []
             messages.append(system_message)
-            messages.append({
-                "role": "assistant",
-                "content": f"<Previous conversation summary: {summary}>"
-            })
+            messages.append(summary)
+
             for message in last_messages:
                 messages.append(message)
-            logger.debug(f'Summarized messages to {len(messages)} messages, token usage: {token_usage}')
-            return messages, token_usage
+
+            logger.debug(f'Summarized messages to {len(messages)} messages')
+            return messages
         except Exception as e:
             logger.error(f'Could not summarize messages: {e}')
             return None, {"prompt": 0, "completion": 0}
+        
+    async def process_function_calling(self, function):
+        '''
+        Process function calling
+        Input FunctionResponse
+        '''
+        try:
+            if function is None:
+                logger.error('No function provided for processing')
+                return None
+            if function.function_name == 'generate_image':
+                # call function to generate image
+                function_to_call = self.available_functions[function.function_name]
+                function_response = await function_to_call(
+                    prompt = function.function_args.get("prompt"),
+                    image_orientation = function.function_args.get("image_orientation"),
+                    image_style = function.function_args.get("image_style"),
+                )
+                image, text = function_response[0], function_response[1]
+                if image is not None:
+                    # add statistics
+                    await self.add_stats(id=id, images_generated=1)
+                    response = ('image', image, text)
+                elif image is None and text is not None:
+                    response = f'Image was not generated. {text}'
+                    logger.error(f'Function was called, but image was not generated: {response}')
+                else:
+                    response = 'Sorry, something went wrong.'
+            elif function.function_name == 'web_search':
+                # call function to search the web
+                function_to_call = self.available_functions[function.function_name]
+                function_response = await function_to_call(
+                    query = function.function_args.get("query"),
+                )
+                if function_response is None:
+                    function_response = 'Error while searching the web'
+                response = function_response
+            elif function.function_name == 'url_opener':
+                # call function to open URL
+                function_to_call = self.available_functions[function.function_name]
+                function_response = await function_to_call(
+                    url = function.function_args.get("url"),
+                )
+                if function_response is None:
+                    function_response = 'Error while opening the URL or there was no content'
+                elif self.url_summary:
+                    # create summary of the content
+                    logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
+                    function_response, token_usage = await self.text_engine.summary(f'URL content: {function_response}')
+                    if function_response is None:
+                        function_response = 'Error while summarizing the content of the URL'
+                    else:
+                        await self.add_stats(id=id, prompt_tokens_used=int(token_usage['prompt']), completion_tokens_used=int(token_usage['completion']))
+                else:
+                    pass
+                response = function_response
+            return response
+        except Exception as e:
+            logger
 
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
@@ -500,8 +573,7 @@ class ChatProc:
             if id not in self.chats:
                 success = await self.init_style(id=id, style=style)
                 if not success:
-                    logger.error('Could not init style for user: ' + str(id))
-                    return 'Sorry, I could not init style for you.'
+                    return er.style_initiation
             # get messages
             messages = self.chats[id]
             # If there is an image without caption, then add caption
@@ -511,178 +583,29 @@ class ChatProc:
                 messages = self.chats[id]
             else:
                 # Add message to the chat
-                await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
-            # Trim or summarize messages if they are too long
-            messages_tokens = await self.count_tokens(messages)
-            if messages_tokens is None:
-                messages_tokens = 0
-            if messages_tokens > self.max_tokens:
-                if not self.summarize_too_long:
-                    while await self.count_tokens(messages) > int(self.max_tokens*0.8):
-                        messages = await self.trim_messages(messages)
-                else:
-                    messages, token_usage = await self.summarize_messages(messages)
-                    prompt_tokens += int(token_usage['prompt'])
-                    completion_tokens += int(token_usage['completion'])
-                if messages is None:
-                    return 'There was an error due to a long conversation. Please, contact the administrator or /delete your chat history.'
+                new_message = Message()
+                new_message.role = "user"
+                new_message.content = message
+                await self.add_to_chat_history(id=id, message=new_message)
+
+            # Trim and summarize messages if conversation is too long
+            if len(messages)-1 > self.trim_size:
+                if self.trim_too_long:
+                    messages = await self.trim_messages(messages)
+                if self.summarize_too_long:
+                    messages = await self.summarize_messages(messages)
 
             # Wait for response
-            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
-            # add statistics
-            if token_usage is not None:
-                prompt_tokens += int(token_usage['prompt'])
-                completion_tokens += int(token_usage['completion'])
-            # TODO: check if function was called
-            if self.function_calling:
-                if type(response) == tuple:
-                    if response[0] == 'function':
-                        function_name, function_args = response[1], response[2]
-                        corresponding_text, tool_id = response[4], response[5]
-                        logger.debug(f'Function was called: "{function_name}" with arguments: "{function_args}". Corresponding text: "{corresponding_text}". Tool ID: {tool_id}')
-                        if response[1] == 'generate_image':
-                            # call function to generate image
-                            function_to_call = self.available_functions[function_name]
-                            function_response = await function_to_call(
-                                prompt = function_args.get("prompt"),
-                                image_orientation = function_args.get("image_orientation"),
-                                image_style = function_args.get("image_style"),
-                            )
-                            image, text = function_response[0], function_response[1]
-                            if image is not None:
-                                # add to chat history
-                                if type(self.text_engine.name) == 'Anthropic':
-                                    # https://docs.anthropic.com/claude/docs/tool-use-examples
-                                    # assistant:
-                                    message_content = []
-                                    if corresponding_text is not None:
-                                        if len(corresponding_text) > 0:
-                                            message_content.append({"type": "text", "text": corresponding_text})
-                                    message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
-                                    await self.add_to_chat_history(id=id, 
-                                        message={"role": "assistant", "content": message_content})
-                                    # user (function response)
-                                    message_content = [{
-                                        "type": "tool_result",
-                                        "tool_use_id": tool_id,
-                                        "content": f"Image was generated from the prompt: {function_args.get('prompt')} (Revised prompt: {text})",
-                                    }]
-                                    await self.add_to_chat_history(id=id, 
-                                        message={"role": "user", "content": message_content})  
-                                else:
-                                    await self.add_to_chat_history(id=id, 
-                                        message={"role": "function", "name": function_name, "content": str(text)})
-                                # add statistics
-                                await self.add_stats(id=id, images_generated=1)
-                                response = ('image', image, text)
-                            elif image is None and text is not None:
-                                response = f'Image was not generated. {text}'
-                                await self.add_to_chat_history(id=id, 
-                                    message={"role": "assistant", "content": response})
-                            else:
-                                response = 'Sorry, something went wrong.'
-                                logger.error(f'Function was called, but image was not generated: {response}')
-                        elif response[1] == 'web_search':
-                            # call function to search the web
-                            function_to_call = self.available_functions[function_name]
-                            function_response = await function_to_call(
-                                query = function_args.get("query"),
-                            )
-                            if function_response is None:
-                                function_response = 'Error while searching the web'
-                            if type(self.text_engine.name) == 'Anthropic':
-                                # https://docs.anthropic.com/claude/docs/tool-use-examples
-                                # assistant:
-                                message_content = []
-                                if corresponding_text is not None:
-                                    if len(corresponding_text) > 0:
-                                        message_content.append({"type": "text", "text": corresponding_text})
-                                message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
-                                await self.add_to_chat_history(id=id, 
-                                    message={"role": "assistant", "content": message_content})
-                                # user (function response)
-                                message_content = [{
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_id,
-                                    "content": f"Web search results for: {function_args.get('query')}: {function_response}",
-                                }]
-                                await self.add_to_chat_history(id=id,
-                                    message={"role": "user", "content": message_content})
-                            else:
-                                await self.add_to_chat_history(id=id, 
-                                    message={"role": "function", "name": function_name, "content": str(function_response)})
-                            # Push response to LLM again
-                            messages = self.chats[id]
-                            logger.debug(f'Pushing response to LLM again')
-                            logger.debug(f'messages: {messages}')
-                            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
-                            # add statistics
-                            if token_usage is not None:
-                                prompt_tokens += int(token_usage['prompt'])
-                                completion_tokens += int(token_usage['completion'])
-                            if response is None:
-                                response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
-                            else:
-                                await self.save_chat(id=id, messages=messages)
-                        elif response[1] == 'url_opener':
-                            # call function to open URL
-                            function_to_call = self.available_functions[function_name]
-                            function_response = await function_to_call(
-                                url = function_args.get("url"),
-                            )
-                            if function_response is None:
-                                function_response = 'Error while opening the URL or there was no content'
-                            elif self.url_summary:
-                                # create summary of the content
-                                logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
-                                function_response, token_usage = await self.text_engine.summary(f'User message: {message}. Text from URL: {function_response}')
-                                if function_response is None:
-                                    function_response = 'Error while summarizing the content of the URL'
-                                else:
-                                    prompt_tokens += int(token_usage['prompt'])
-                                    completion_tokens += int(token_usage['completion'])
-                            else:
-                                pass
-                            if type(self.text_engine.name) == 'Anthropic':
-                                # https://docs.anthropic.com/claude/docs/tool-use-examples
-                                # assistant:
-                                message_content = []
-                                if corresponding_text is not None:
-                                    if len(corresponding_text) > 0:
-                                        message_content.append({"type": "text", "text": corresponding_text})
-                                message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
-                                await self.add_to_chat_history(id=id, 
-                                    message={"role": "assistant", "content": message_content})
-                                # user (function response)
-                                message_content = [{
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_id,
-                                    "content": f"URL ({function_args.get('url')}) opened. Content: {function_response}",
-                                }]
-                                await self.add_to_chat_history(id=id,
-                                    message={"role": "user", "content": message_content})
-                            else:
-                                await self.add_to_chat_history(
-                                    id=id, 
-                                    message={"role": "function", "name": function_name, "content": f"URL content: {function_response}"}
-                                    )
-                            # Push response to LLM again
-                            messages = self.chats[id]
-                            logger.debug(f'Pushing response of URL opener to LLM again: {function_response}')
-                            response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
-                            # add statistics
-                            if token_usage is not None:
-                                prompt_tokens += int(token_usage['prompt'])
-                                completion_tokens += int(token_usage['completion'])
-                            if response is None:
-                                response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
-                            else:
-                                await self.save_chat(id=id, messages=messages)
-            else:
-                # save chat history
-                await self.save_chat(id=id, messages=messages)
-            # add statistics
+            response_message = await self.text_engine.chat(id=id, messages=messages)
+            if response_message.error is not None:
+                return er.get_error_for_message(response_message.error)
+
+            if self.function_calling and response_message.content_type == 'function':
+                # process function calling
+                function_response = await self.process_function_calling(response_message.content)
+                # TODO
             await self.add_stats(id=id, prompt_tokens_used=prompt_tokens, completion_tokens_used=completion_tokens)
+            response = response_message.content
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))

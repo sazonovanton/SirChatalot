@@ -61,6 +61,20 @@ class Message:
     def __len__(self):
         return len(self.content)
     
+    def copy(self):
+        new_message = Message()
+        new_message.content = self.content
+        new_message.role = self.role
+        new_message.content_type = self.content_type
+        new_message.tokens = self.tokens
+        new_message.price = self.price
+        new_message.model = self.model
+        new_message.finish_reason = self.finish_reason
+        new_message.moderated = self.moderated
+        new_message.misc = self.misc
+        new_message.error = self.error
+        return new_message
+    
     def to_dict(self):
         converted = {}
         converted['content'] = self.content
@@ -121,6 +135,18 @@ class FunctionResponse:
     
     def __hash__(self):
         return hash((self.function_name, self.function_args))
+    
+    def copy(self):
+        new_response = FunctionResponse()
+        new_response.function_name = self.function_name
+        new_response.function_args = self.function_args
+        new_response.content = self.content
+        new_response.tool_id = self.tool_id
+        new_response.price = self.price
+        new_response.text = self.text
+        new_response.misc = self.misc
+        new_response.error = self.error
+        return new_response
 
     def to_dict(self):
         converted = {}
