@@ -16,6 +16,9 @@ import base64
 import io
 
 from chatutils.misc import setup_logging, read_config
+from chatutils.responses import ErrorResponses as er
+from chatutils.responses import GeneralResponses as gr
+
 config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Main', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
 
@@ -66,28 +69,6 @@ else:
 
 # Check if bot should reply to message
 message_reply = config.getboolean("Telegram", "ReplyToMessage", fallback=False)
-
-# check if file functionality is enabled
-if config.has_section('Files'):
-    files_enabled = True
-else:
-    files_enabled = False
-if files_enabled:
-    print('File functionality enabled.')
-
-# check max file size
-max_file_size_limit = 20
-if config.has_option("Files", "MaxFileSizeMB"):
-    max_file_size = config.get("Files", "MaxFileSizeMB")
-    try:
-        max_file_size = int(max_file_size)
-        max_file_size = min(max_file_size, max_file_size_limit)
-    except:
-        max_file_size = max_file_size_limit
-        logger.warning(f"Max file size is not a number. Setting it to {max_file_size_limit}.")
-else:
-    max_file_size = max_file_size_limit
-    logger.info(f"Max file size is not set. Setting it to {max_file_size_limit}.")
 
 def get_rates():
     '''
@@ -146,7 +127,8 @@ def check_code(code, user_id) -> bool:
             return True
     except Exception as e:
         logger.exception('Could not add user to whitelist. Code: ' + code + '. User ID: ' + str(user_id))
-    return False
+    finally:
+        return False
 
 async def check_user(update, message=None, check_rate=True) -> bool:
     '''
@@ -179,7 +161,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
     if banlist_enabled:
         if str(user.id) in banlist:
             logger.warning("Restricted access to banned user: " + str(user))
-            await update.message.reply_text("You are banned.")
+            await update.message.reply_text(gr.banned)
             return False
 
     # check there were no accesscodes provided in config file bot will be available for everyone not in banlist
@@ -192,7 +174,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
         if message is not None:
             if check_code(message, user.id):
                 # if yes, add user to whitelist and send welcome message
-                await update.message.reply_text("You are now able to use this bot. Welcome!")
+                await update.message.reply_text(gr.welcome)
                 # delete chat history
                 success = await gpt.delete_chat(update.effective_user.id)
                 if not success:
@@ -200,11 +182,11 @@ async def check_user(update, message=None, check_rate=True) -> bool:
                 # send welcome message
                 answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
                 if answer is None:
-                    answer = "Sorry, something went wrong. Please try again later."
+                    answer = er.general_error
                     logger.error('Could not get answer to start message')
                 await update.message.reply_text(answer)
                 return None
-        await update.message.reply_text(rf"Sorry, {user.full_name}, you don't have access to this bot.")
+        await update.message.reply_text(gr.no_access(user.full_name))
         return False
     else:
         # check if user rate is limited
@@ -212,7 +194,7 @@ async def check_user(update, message=None, check_rate=True) -> bool:
             ratecheck = await ratelimiter(user.id)
             if ratecheck == False:
                 logger.info("Rate limited user: " + str(user))
-                await update.message.reply_text("You are rate limited. You can check your limits with /limit")
+                await update.message.reply_text(gr.rate_limited)
                 return False
         return True
     return True
@@ -311,8 +293,8 @@ async def ratelimiter(user_id, check=False):
             pickle.dump(rate, f)
         if check: 
             if len(rate[user_id]) > limit:
-                return f"Rate limit of {limit} messages per {ratelimit_time} seconds exceeded. Please wait."
-            return f"You have used your limit of {len(rate[user_id])}/{limit} messages per {ratelimit_time} seconds."
+                 return gr.rate_limit_exceeded_simple(limit, ratelimit_time)
+            return gr.rate_limit_exceeded(len(rate[user_id]), limit, ratelimit_time)
         return True
     except Exception as e:
         logger.exception('Could not create rate limiter. Rate is not limited.')
@@ -400,7 +382,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if access == True:
         answer = await gpt.chat(id=user.id, message=rf"Hi! I'm {user.full_name}!")
         if answer is None:
-            answer = "Sorry, something went wrong. Please try again later."
+            answer = er.general_error
             logger.error('Could not get answer to start message')
         await send_message(update, answer)
     else:
@@ -421,7 +403,6 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "/style - Choose a style for a bot\n"
     help_text += "/imagine <prompt> - Generate an image\n" if IMAGE_GENERATION else ""
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
-    help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
     if gpt.function_calling:
         if gpt.webengine is not None:
@@ -454,7 +435,7 @@ async def statistics_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     '''
     stats_text = await gpt.get_stats(id=update.effective_user.id)
     if stats_text is None or stats_text == '':
-        stats_text = "Sorry, there is no statistics yet or something went wrong. Please try again later."
+        stats_text = er.no_statistics
         logger.error('Could not get statistics for user: ' + str(update.effective_user.id))
     await update.message.reply_text(stats_text)
 
@@ -466,9 +447,9 @@ async def delete_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     success = await gpt.delete_chat(update.effective_user.id)
     # send message about result
     if success:
-        await update.message.reply_text("Chat history deleted")
+        await update.message.reply_text(gr.drop_history)
     else:
-        await update.message.reply_text("Sorry, it seems like there is no history with you.")
+        await update.message.reply_text(er.no_history)
         logger.info('Could not delete chat history for user: ' + str(update.effective_user.id))
 
 @is_authorized
@@ -479,7 +460,7 @@ async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user = update.effective_user
     text = await ratelimiter(user.id, check=True)
     if text is None:
-        text = 'Unlimited'
+        text = gr.unlimited
     await update.message.reply_text(text)
 
 ################################## Messages ###################################################
@@ -502,7 +483,7 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
-        answer = "Sorry, something went wrong. You can try later or /delete your session."
+        answer = er.general_error_wdelete
         logger.error('Could not get answer to message: ' + update.message.text)
     # TODO: function calling
     # if answer is base64, send it as a photo
@@ -528,7 +509,7 @@ async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TY
     elif update.message.video_note:
         file = update.message.video_note
     else:
-        await update.message.reply_text("Unsupported file type.")
+        await update.message.reply_text(er.unsupported_file)
         return
 
     file_id = file.file_id
@@ -552,10 +533,10 @@ async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TY
         logger.info(f'Audio/video file {file_path} was deleted')
     except Exception as e:
         logger.exception(f'Error processing audio/video file: {e}')
-        answer = "Sorry, there was an error processing your audio/video file."
+        answer = er.av_processing_error
 
     if answer is None:
-        answer = "Sorry, something went wrong. You can try later or /delete your session."
+        answer = er.general_error_wdelete
         logger.error(f'Could not get answer to voice/video message for user: {update.effective_user.id}')
     
     await send_message(update, answer, markdown=1)
@@ -569,7 +550,7 @@ async def style_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     # read chat modes
     modes = await chat_modes_read()
     if modes is None:
-        await update.message.reply_text('Sorry, something went wrong. Please try again later.')
+        await update.message.reply_text(er.general_error)
         return None
 
     # generate keyboard with buttons
@@ -604,7 +585,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # read chat modes
     modes = await chat_modes_read()
     if modes is None:
-        await update.message.reply_text('Sorry, something went wrong. Please try again later.')
+        await update.message.reply_text(er.general_error)
         return None
 
     # delete chat history
@@ -622,46 +603,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.info('Changed style for user: ' + str(update.effective_user.id) + ' to ' + str(query.data))
 
     if answer is None:
-        answer = "Sorry, something went wrong. Please try again later."
+        answer = er.general_error
         logger.error('Could not get answer for user: ' + str(update.effective_user.id))
     await query.edit_message_text(text=answer)
-
-@is_authorized
-async def save_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    '''
-    Saves the current chat session to a file.
-    '''
-    user = update.effective_user
-    # save chat history
-    success = await gpt.save_session(update.effective_user.id)
-    if success:
-        await update.message.reply_text("Chat session saved.")
-    else:
-        await update.message.reply_text("Sorry, something went wrong. Please try again later.")
-
-@is_authorized
-async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    '''
-    Loads the chat session.
-    '''
-    user = update.effective_user
-    # give user a choice of sessions
-    sessions = await gpt.stored_sessions(update.effective_user.id)
-    if sessions is None:
-        await update.message.reply_text("Sorry, no stored sessions found. Please try again later.")
-        return None
-
-    # generate keyboard with buttons
-    keyboard = []
-    for name in sessions:
-        keyboard.append(InlineKeyboardButton(name + str('...'), callback_data=name))
-    keyboard = [keyboard]
-
-    # send message with a keyboard
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    msg = "Choose a session from stored ones.\n"
-
-    await update.message.reply_text(msg, reply_markup=reply_markup)
 
 ################################## Images #####################################################
 async def resize_image(image_bytes):
@@ -703,7 +647,7 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Process images - multimodal chat
     '''
     if not VISION:
-        await update.message.reply_text("Sorry, working with images is not supported.")
+        await update.message.reply_text(gr.vision_not_supported)
         return None
     # Recieve image
     global application
@@ -725,7 +669,7 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Send image to GPT Engine
         gpt_answer_image = await gpt.add_image(id=update.effective_user.id, image_b64=image_base64)
         if gpt_answer_image is False:
-            await update.message.reply_text("Sorry, something went wrong with image processing.")
+            await update.message.reply_text(er.image_processing_error)
             return None
         
         if text is not None and text != '':
@@ -734,21 +678,21 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             # If text was not sent along with image, ask user to send it
             if gpt_answer_image:
-                await update.message.reply_text('Image recieved. I\'ll wait for your text before answering to it.')
+                await update.message.reply_text(gr.image_recieved)
                 return None
             else:
-                await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+                await update.message.reply_text(er.general_error)
                 return None
 
         # If we recieve answer from GPT Engine, send it to user
         if gpt_answer is not None:
             await send_message(update, gpt_answer, markdown=1)
         else:
-            await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+            await update.message.reply_text(er.general_error)
         
     except Exception as e:
         logger.error(e)
-        await update.message.reply_text("Sorry, something went wrong while processing the image.")
+        await update.message.reply_text(er.image_processing_error)
     
 
 @is_authorized
@@ -758,7 +702,7 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Example: /imagine A cat on a table
     '''
     if not IMAGE_GENERATION:
-        await update.message.reply_text("Sorry, image generation is not supported.")
+        await update.message.reply_text(gr.image_generation_not_supported)
         return None
     global application
     try:
@@ -769,7 +713,7 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # get the image
         image, text = await gpt.imagine(id=update.effective_user.id, prompt=prompt)
         if image is None and text is None:
-            await update.message.reply_text('Sorry, something went wrong. Please contact the bot owner.')
+            await update.message.reply_text(er.general_error)
             return None
         if text is not None and image is None:
             # we recieved only text
@@ -780,7 +724,7 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_photo(photo=image_bytes, caption=text)
     except Exception as e:
         logger.error(e)
-        await update.message.reply_text("Sorry, something went wrong while creating an image.")
+        await update.message.reply_text(er.image_generation_error)
     
 
 ###############################################################################################

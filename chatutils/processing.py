@@ -11,7 +11,7 @@ from datetime import datetime
 
 from chatutils.audio_engines import get_audio_engine
 from chatutils.text_engines import get_text_engine
-from chatutils.errors import ErrorResponses as er
+from chatutils.responses import ErrorResponses as er
 from chatutils.datatypes import Message, FunctionResponse
 
 class ChatProc:
@@ -217,7 +217,7 @@ class ChatProc:
         try:
             if self.speech_engine is None:
                 logger.error('No speech2text engine provided')
-                return 'Sorry, speech-to-text is not available.'
+                return er.speech_to_text_na
 
             audio = AudioSegment.from_file(file_path)
             audio_duration = len(audio) / 1000.0  # Duration in seconds
@@ -225,7 +225,7 @@ class ChatProc:
             transcript = await self.speech_to_text(file_path)
             if transcript is None:
                 logger.error('Could not convert audio/video to text')
-                return 'Sorry, I could not convert your audio/video to text.'
+                return er.speech_to_text_error
 
             # Add statistics
             await self.add_stats(id=id, speech2text_seconds=audio_duration)
@@ -252,7 +252,7 @@ class ChatProc:
         try:
             if self.speech_engine is None:
                 logger.error('No speech2text engine provided')
-                return 'Sorry, speech-to-text is not available.'
+                return er.speech_to_text_na
             # convert voice to text
             if audio_file is not None:
                 transcript = await self.speech_to_text(audio_file)
@@ -261,7 +261,7 @@ class ChatProc:
                 return None
             if transcript is None:
                 logger.error('Could not convert voice to text')
-                return 'Sorry, I could not convert your voice to text.'
+                return er.speech_to_text_error
             response = await self.chat(id=id, message=transcript)
             return response
         except Exception as e:
@@ -526,7 +526,7 @@ class ChatProc:
                     response = f'Image was not generated. {text}'
                     logger.error(f'Function was called, but image was not generated: {response}')
                 else:
-                    response = 'Sorry, something went wrong.'
+                    response = er.general_error
             elif function.function_name == 'web_search':
                 # call function to search the web
                 function_to_call = self.available_functions[function.function_name]
@@ -557,7 +557,8 @@ class ChatProc:
                 response = function_response
             return response
         except Exception as e:
-            logger
+            logger.exception('Could not process function calling')
+            return None
 
     async def chat(self, id=0, message="Hi! Who are you?", style=None):
         '''
@@ -603,13 +604,14 @@ class ChatProc:
             if self.function_calling and response_message.content_type == 'function':
                 # process function calling
                 function_response = await self.process_function_calling(response_message.content)
-                # TODO
+                if function_response is None:
+                    return er.function_calling_error
             await self.add_stats(id=id, prompt_tokens_used=prompt_tokens, completion_tokens_used=completion_tokens)
             response = response_message.content
             return response
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
-            return 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
+            return er.message_answer_error
         
     async def imagine(self, id=0, prompt=None, add_to_chat=True):
         '''
@@ -640,23 +642,22 @@ class ChatProc:
                 await self.add_stats(id=id, images_generated=1)
                 # add information to history
                 if add_to_chat:
-                    await self.add_to_chat_history(
-                        id=id, 
-                        message={"role": "assistant", "content": f"<system - image was generated from the prompt: {text}>"}
-                    )
+                    new_message = Message()
+                    new_message.role = "assistant"
+                    new_message.content = f"<system - image was generated from the prompt: {prompt}>"
+                    await self.add_to_chat_history(id=id, message=new_message)
                 # add text to chat if it is not None
                 if revision:
                     text = 'Revised prompt: ' + text
                 else:
                     text = None
             if image is None and text is None:
-                logger.error('Could not generate image from prompt: ' + prompt)
-                return 'Sorry, I could not generate an image from your prompt.'
+                return None, er.image_generation_error
             # return image
             return image, text
         except Exception as e:
-            logger.exception('Could not generate image from prompt: ' + prompt + ' for user: ' + str(id))
-            return None, 'Sorry, I could not generate an image from your prompt.'
+            logger.error(f'Could not generate image from prompt `{prompt}` for user: {id}')
+            return None, er.image_generation_error
             
     def load_pickle(self, filepath):
         '''
@@ -758,7 +759,7 @@ class ChatProc:
             except Exception as e:
                 logger.error(f'Could not get statistics for user {id} after adding keys: {e}')
             if counter > 6:
-                return 'There was an error while getting statistics. Please, try again.'
+                return er.general_error
             return await self.get_stats(id=id, counter=counter+1) # recursive call
         except Exception as e:
             logger.error(f'Could not get statistics for user {id}: {e}')
@@ -898,42 +899,3 @@ class ChatProc:
         except Exception as e:
             logger.exception('Could not change style for user: ' + str(id))
             return False
-
-    async def filechat(self, id=0, text='', sumdepth=3):
-        '''
-        Process file 
-        Input id of user and text
-        '''
-        try:
-            # check length of text
-            # if text length is more than self.max_file_length then return message
-            if len(text) > self.max_file_length:
-                return 'Text is too long. Please, send a shorter text.'
-            # if text is than self.max_tokens // 2, then make summary
-            maxlength = round(self.file_summary_tokens) * 4 - 32
-            if len(text) > maxlength:
-                # to do that we split text into chunks with length no more than maxlength and make summary for each chunk
-                # do that until we have summary with length no more than maxlength
-                depth = 0
-                chunklength = self.max_tokens * 4 - 80
-                while len(text) > maxlength:
-                    if depth == sumdepth:
-                        # cut text to maxlength and return
-                        text = text[:maxlength]
-                        break
-                    depth += 1
-                    chunks = [text[i:i+chunklength] for i in range(0, len(text), chunklength)]
-                    text = ''
-                    for chunk in chunks:
-                        text += await self.text_engine.summary(chunk, size=self.file_summary_tokens) + '\n'
-                text = '# Summary from recieved file: #\n' + text
-            else:
-                # if text is shorter than self.max_tokens // 2, then do not make summary
-                text = '# Text from recieved file: #\n' + text
-            # chat with GPT
-            response = self.chat(id=id, message=text)
-            return response
-        except Exception as e:
-            logger.exception('Could not process file for user: ' + str(id))
-            return None
-
