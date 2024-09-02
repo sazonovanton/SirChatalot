@@ -23,7 +23,7 @@ class ErrorResponses:
     general_error = "I'm sorry, something went wrong 🤖\nTry again later or contact admin."
     general_error_wdelete = "I'm sorry, something went wrong 🤖\nYou can try later or /delete your session."
 
-    def get_error_for_message(self, message):
+    def get_error_for_message(message):
         """
         Returns an error message for a given message
         """
@@ -42,20 +42,26 @@ class GeneralResponses:
     vision_not_supported = "Sorry, working with images is not supported 🖼️"
     image_generation_not_supported = "Sorry, image generation is not supported 🖼️"
 
-    def no_access(self, user):
+    def no_access(user):
         """
         Returns a message for a user that has no access to the chatbot
         """
         return f"Sorry, {user}. You don't have access to this chatbot 🚫"
     
-    def rate_limit_exceeded(self, messages_count, limit, ratelimit_time):
+    def rate_limit_exceeded(messages_count, limit, ratelimit_time):
         """
         Returns a message for a user that has exceeded the rate limit
         """
         return f"You have used your limit of {messages_count}/{limit} messages per {ratelimit_time} seconds 🕒"
 
-    def rate_limit_exceeded_simple(self, limit, ratelimit_time):
+    def rate_limit_exceeded_simple(limit, ratelimit_time):
         """
         Returns a simple message for a user that has exceeded the rate limit
         """
         return f"Rate limit of {limit} messages per {ratelimit_time} seconds exceeded 🕒\nPlease wait."
+    
+# TESTING
+if __name__ == "__main__":
+    from responses import ErrorResponses as er
+    
+    print(er.get_error_for_message('test'))

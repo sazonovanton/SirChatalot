@@ -18,6 +18,7 @@ import io
 from chatutils.misc import setup_logging, read_config
 from chatutils.responses import ErrorResponses as er
 from chatutils.responses import GeneralResponses as gr
+from chatutils.datatypes import FunctionResponse
 
 config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Main', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
@@ -368,6 +369,7 @@ async def send_message(update: Update, text, max_length=4096, markdown=0):
                 await update.message.reply_text(part, reply_to_message_id=update.message.message_id if index == 0 and message_reply else None)
     except Exception as e:
         logger.exception('Could not send message to user: ' + str(update.effective_user.id))
+        await update.message.reply_text(er.general_error)
 
 ################################## Commands ###################################################
 
@@ -487,12 +489,12 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error('Could not get answer to message: ' + update.message.text)
     # TODO: function calling
     # if answer is base64, send it as a photo
-    if type(answer) == tuple:
-        if answer[0] == 'image':
-            logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image ({answer[2]}')
-            image_bytes = base64.b64decode(answer[1])
+    if type(answer) == FunctionResponse:
+        if answer.image is not None:
+            logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image ({answer.text})')
+            await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO)
+            image_bytes = base64.b64decode(answer.image)
             await update.message.reply_photo(photo=image_bytes)
-
             return None
     logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     await send_message(update, answer, markdown=1)

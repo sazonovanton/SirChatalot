@@ -68,6 +68,8 @@ class OpenAIEngine:
         self.max_chat_length = self.config.getint("OpenAI", "MaxSessionLength", fallback=None)
         self.log_chats = self.config.getboolean("Logging", "LogChats", fallback=False)
         self.summarize_too_long = self.config.getboolean("OpenAI", "SummarizeTooLong", fallback=False)
+        self.trim_size = self.config.getint("OpenAI", "TrimSize", fallback=8)
+        self.trim_too_long = self.config.getboolean("OpenAI", "TrimTooLong", fallback=True)
         self.requested_tokens = self.config.getint("OpenAI", "ResponseMaxTokens", fallback=None)
 
         self.vision = self.config.getboolean("OpenAI", "Vision", fallback=False)
@@ -106,7 +108,6 @@ class OpenAIEngine:
         Output:
             * FunctionResponse - response with function called
         '''
-        response_message = None
         tool_id = None
         try:
             logger.debug(f'Detecting function called in response: "{response}"')
@@ -116,19 +117,21 @@ class OpenAIEngine:
                 return response
             if self.function_calling_tools is None:
                 return response
-            if not response.choices[0].finish_reason == 'function_call':
+            if not response.choices[0].finish_reason in ['tool_calls', 'function_call']:
                 return response
             
-            tool_calls = response_message.tool_calls
+            tool_calls = response.choices[0].message.tool_calls
 
             function_response = FunctionResponse()
             function_response.function_name=tool_calls[0].function.name
             function_response.function_args=json.loads(tool_calls[0].function.arguments)
-            function_response.tool_id=tool_id
+            function_response.tool_id=tool_calls[0].id
+
+            logger.debug(f'Function was detected with name: {function_response.function_name} and args: {function_response.function_args} (tool_id: {function_response.tool_id})')
 
             return function_response
         except Exception as e:
-            logger.error(f'Could not detect tool called: {e}')
+            logger.error(f'Could not detect tool. Reason: {e}')
             raise Exception('Could not detect tool called')
         
     async def revise_messages(self, messages):
@@ -199,12 +202,13 @@ class OpenAIEngine:
                     tool_choice="auto" if self.function_calling else self.openai.NOT_GIVEN
                 )
             
-            response = await self.detect_function_called(response)
             new_message.tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
             }
             new_message.finish_reason = response.choices[0].finish_reason
+            response = await self.detect_function_called(response)
+            
             if response is not None:
                 if type(response) == FunctionResponse:
                     new_message.content = response

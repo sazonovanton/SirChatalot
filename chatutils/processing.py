@@ -26,8 +26,8 @@ class ChatProc:
         self.model_completion_price = self.text_engine.model_completion_price
         self.max_tokens = self.text_engine.max_tokens
         self.summarize_too_long = self.text_engine.summarize_too_long
-        self.trim_size = 5 # TODO: make it configurable
-        self.trim_too_long = True # TODO: make it configurable
+        self.trim_size = self.text_engine.trim_size
+        self.trim_too_long = self.text_engine.trim_too_long
         
         self.vision = self.text_engine.vision
         if self.vision:
@@ -473,7 +473,7 @@ class ChatProc:
         try:
             if messages is None or len(messages) <= leave_messages:
                 logger.info('Could not summarize messages due to a short conversation')
-                return None
+                return messages
             if messages[0].role == 'system':
                 system_message = messages[0]
                 messages = messages[1:]
@@ -498,7 +498,7 @@ class ChatProc:
             return messages
         except Exception as e:
             logger.error(f'Could not summarize messages: {e}')
-            return None, {"prompt": 0, "completion": 0}
+            return None
         
     async def process_function_calling(self, function):
         '''
@@ -520,8 +520,11 @@ class ChatProc:
                 image, text = function_response[0], function_response[1]
                 if image is not None:
                     # add statistics
+                    logger.debug('Image was generated')
                     await self.add_stats(id=id, images_generated=1)
-                    response = ('image', image, text)
+                    function.image = image
+                    function.text = text
+                    response = function
                 elif image is None and text is not None:
                     response = f'Image was not generated. {text}'
                     logger.error(f'Function was called, but image was not generated: {response}')
@@ -598,6 +601,8 @@ class ChatProc:
 
             # Wait for response
             response_message = await self.text_engine.chat(id=id, messages=messages)
+            if response_message is None:
+                return er.message_answer_error
             if response_message.error is not None:
                 return er.get_error_for_message(response_message.error)
 
@@ -606,6 +611,8 @@ class ChatProc:
                 function_response = await self.process_function_calling(response_message.content)
                 if function_response is None:
                     return er.function_calling_error
+                else:
+                    return function_response
             await self.add_stats(id=id, prompt_tokens_used=prompt_tokens, completion_tokens_used=completion_tokens)
             response = response_message.content
             return response

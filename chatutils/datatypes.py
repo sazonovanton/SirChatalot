@@ -120,6 +120,7 @@ class FunctionResponse:
         self.content = None
         self.tool_id = None
         self.price = 0
+        self.image = None
         self.text = None
         self.misc = None
         self.error = None
@@ -143,6 +144,7 @@ class FunctionResponse:
         new_response.content = self.content
         new_response.tool_id = self.tool_id
         new_response.price = self.price
+        new_response.image = self.image
         new_response.text = self.text
         new_response.misc = self.misc
         new_response.error = self.error
@@ -158,6 +160,8 @@ class FunctionResponse:
         if self.content is not None:
             converted['content'] = self.content
         converted['price'] = self.price
+        if self.image is not None:
+            converted['image'] = self.image
         if self.text is not None:
             converted['text'] = self.text
         if self.error is not None:

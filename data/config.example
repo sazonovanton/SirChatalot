@@ -22,6 +22,9 @@ DeleteImageAfterAnswer = False
 ImageDescriptionOnDelete = False
 FunctionCalling = True
 SummarizeTooLong = False
+TrimTooLong = True
+TrimSize = 8
+ResponseMaxTokens = 2048
 
 [ImageGeneration]
 Engine = dalle
