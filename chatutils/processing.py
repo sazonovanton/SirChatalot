@@ -16,10 +16,7 @@ from chatutils.datatypes import Message, FunctionResponse
 
 class ChatProc:
     def __init__(self) -> None:
-        self.max_tokens = 2000
-        self.summarize_too_long = False
         self.log_chats = config.getboolean("Logging", "LogChats", fallback=False)
-        self.model_prompt_price, self.model_completion_price = 0, 0
         self.text_engine = get_text_engine(config.get("Telegram", "TextEngine", fallback="openai"))
         
         self.model_prompt_price = self.text_engine.model_prompt_price
@@ -36,6 +33,7 @@ class ChatProc:
                 self.image_size = 512
             self.pending_images = {}
 
+        # Image generation
         self.image_generation = False
         self.image_generation_engine_name = None
         self.image_engine = None
@@ -47,12 +45,15 @@ class ChatProc:
             self.load_image_generation()
             logger.debug(f'Image generation is enabled, price: ${self.image_generation_price}, size: {self.image_generation_size}, style: {self.image_generation_style}, quality: {self.image_generation_quality}')
 
+        # Function calling
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
             self.load_function_calling(self.text_engine.name)
             self.text_engine.function_calling_tools = self.function_calling_tools
             logger.debug(f'Function calling is enabled')
+        self.depth = config.getint("Chat", "FunctionCallingDepth", fallback=3)
 
+        # Speech to text
         self.speech_engine = None
         try:
             if config.has_section("AudioTranscript"):
@@ -67,14 +68,12 @@ class ChatProc:
             logger.error(f"Failed to initialize audio engine: {e}")
             raise Exception(f"Failed to initialize audio engine: {e}")
         
+        # System 
         self.system_message = self.text_engine.system_message 
         print('System message:', self.system_message)
         print('-- System message is used to set personality to the bot. It can be changed in the self.config file.')
         if self.summarize_too_long:
             print('-- Summarize too long is set to True. It means that if the text is too long, then it will be summarized instead of trimmed.\n')
-
-        self.file_summary_tokens = config.getint("Files", "MaxSummaryTokens", fallback = (self.max_tokens // 2))
-        self.max_file_length = config.getint("Files", "MaxFileLength", fallback = 10000)
 
         # load chat history from file
         self.chats_location = "./data/tech/chats.pickle"
@@ -226,9 +225,6 @@ class ChatProc:
             if transcript is None:
                 logger.error('Could not convert audio/video to text')
                 return er.speech_to_text_error
-
-            # Add statistics
-            await self.add_stats(id=id, speech2text_seconds=audio_duration)
 
             logger.debug(f"TranscribeOnly setting: {self.speech_engine.settings['TranscribeOnly']}")
 
@@ -383,7 +379,7 @@ class ChatProc:
         Add message to chat history
         Input:
             * id - id of user
-            * message - message to add to chat history (JSON format: {"role": "user", "content": "message"})
+            * message - message to add to chat history (Message object)
         '''
         try:
             if id not in self.chats:
@@ -441,14 +437,14 @@ class ChatProc:
         '''
         return await self.text_engine.chat_summary(messages)
 
-    async def trim_messages(self, messages, trim_count=1):
+    async def trim_messages(self, messages, trim_count=2):
         '''
         Trim messages (leave only last trim_count messages and system message)
         '''
         try:
             if messages is None or len(messages) <= 1:
                 logger.debug('Could not trim messages due to a short conversation')
-                return None
+                return messages
             if messages[0].role == 'system':
                 system_message = messages[0]
                 messages = messages[1:]
@@ -521,15 +517,13 @@ class ChatProc:
                 if image is not None:
                     # add statistics
                     logger.debug('Image was generated')
-                    await self.add_stats(id=id, images_generated=1)
                     function.image = image
-                    function.text = text
-                    response = function
+                    function.content = text
                 elif image is None and text is not None:
-                    response = f'Image was not generated. {text}'
-                    logger.error(f'Function was called, but image was not generated: {response}')
+                    function.error = f'Image was not generated, text was returned: {text}'
+                    logger.error(f'Function was called, but image was not generated: `{text}`')
                 else:
-                    response = er.general_error
+                    function.error = 'Image was not generated due to an error'
             elif function.function_name == 'web_search':
                 # call function to search the web
                 function_to_call = self.available_functions[function.function_name]
@@ -537,8 +531,9 @@ class ChatProc:
                     query = function.function_args.get("query"),
                 )
                 if function_response is None:
-                    function_response = 'Error while searching the web'
-                response = function_response
+                    function.error = 'Error while searching the web'
+                else:
+                    function.content = function_response
             elif function.function_name == 'url_opener':
                 # call function to open URL
                 function_to_call = self.available_functions[function.function_name]
@@ -546,19 +541,16 @@ class ChatProc:
                     url = function.function_args.get("url"),
                 )
                 if function_response is None:
-                    function_response = 'Error while opening the URL or there was no content'
+                    function.error = 'Error while opening the URL or there was no content'
                 elif self.url_summary:
                     # create summary of the content
                     logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
                     function_response, token_usage = await self.text_engine.summary(f'URL content: {function_response}')
                     if function_response is None:
-                        function_response = 'Error while summarizing the content of the URL'
-                    else:
-                        await self.add_stats(id=id, prompt_tokens_used=int(token_usage['prompt']), completion_tokens_used=int(token_usage['completion']))
+                        function.error = 'Error while summarizing the content of the URL'
                 else:
                     pass
-                response = function_response
-            return response
+            return function
         except Exception as e:
             logger.exception('Could not process function calling')
             return None
@@ -582,7 +574,6 @@ class ChatProc:
             messages = self.chats[id]
             # If there is an image without caption, then add caption
             if self.vision and id in self.pending_images:
-                self.chats[id] = messages
                 await self.add_caption(id, message)
                 messages = self.chats[id]
             else:
@@ -611,15 +602,21 @@ class ChatProc:
                 function_response = await self.process_function_calling(response_message.content)
                 if function_response is None:
                     return er.function_calling_error
-                else:
-                    return function_response
-            await self.add_stats(id=id, prompt_tokens_used=prompt_tokens, completion_tokens_used=completion_tokens)
-            response = response_message.content
-            return response
+                # Return to chat function response
+                response_message = await self.chat(id=id, message=function_response)
+
+            # Add assistant's response to chat history
+            assistant_message = Message()
+            assistant_message.role = "assistant"
+            assistant_message.content = response_message.content
+            await self.add_to_chat_history(id=id, message=assistant_message)
+
+            return response_message.content
         except Exception as e:
             logger.exception('Could not get answer to message: ' + message + ' from user: ' + str(id))
             return er.message_answer_error
-        
+
+
     async def imagine(self, id=0, prompt=None, add_to_chat=True):
         '''
         Generate image from text
@@ -646,7 +643,6 @@ class ChatProc:
             image, text = await self.image_engine.imagine(prompt=prompt, id=0, revision=True)
             if image is not None:
                 # add statistics
-                await self.add_stats(id=id, images_generated=1)
                 # add information to history
                 if add_to_chat:
                     new_message = Message()
@@ -678,48 +674,6 @@ class ChatProc:
             pickle.dump(payload, open(filepath, "wb"))
             logger.debug(f'Could not load file: {filepath}. Created new file.')
             return payload
-        
-    async def add_stats(self, id=None, speech2text_seconds=None, messages_sent=None, voice_messages_sent=None, prompt_tokens_used=None, completion_tokens_used=None, images_generated=None):
-        '''
-        Add statistics (tokens used, messages sent, voice messages sent) by user
-        Input:
-            * id - id of user
-            * speech2text_seconds - seconds used for speech2text
-            * messages_sent - messages sent
-            * voice_messages_sent - voice messages sent
-            * prompt_tokens_used - tokens used for prompt
-            * completion_tokens_used - tokens used for completion
-            * images_generated - images generated
-        '''
-        try:
-            if id is None:
-                logger.debug('Could not add stats. No ID provided')
-                return None
-            if id not in self.stats:
-                self.stats[id] = {'Tokens used': 0, 'Speech to text seconds': 0, 'Messages sent': 0, 'Voice messages sent': 0, 'Prompt tokens used': 0, 'Completion tokens used': 0, 'Images generated': 0}
-            self.stats[id]['Messages sent'] += messages_sent if messages_sent is not None else 0
-            if self.speech_engine:
-                self.stats[id]['Speech to text seconds'] += round(speech2text_seconds) if speech2text_seconds is not None else 0
-                self.stats[id]['Voice messages sent'] += voice_messages_sent if voice_messages_sent is not None else 0
-            self.stats[id]['Prompt tokens used'] += prompt_tokens_used if prompt_tokens_used is not None else 0
-            self.stats[id]['Completion tokens used'] += completion_tokens_used if completion_tokens_used is not None else 0
-            if self.image_generation:
-                self.stats[id]['Images generated'] += images_generated if images_generated is not None else 0
-            # save statistics to file (unsafe way)
-            pickle.dump(self.stats, open(self.stats_location, "wb"))
-        except KeyError as e:
-            logger.error('Could not add statistics for user: ' + str(id))
-            # add key to stats and try again
-            current_stats = self.stats[id]
-            key_missing = str(e).split('\'')[1]
-            current_stats[key_missing] = 0
-            self.stats[id] = current_stats
-            try:
-                pickle.dump(self.stats, open(self.stats_location, "wb"))
-            except Exception as e:
-                logger.error('Could not add statistics for user after adding keys: ' + str(id))
-        except Exception as e:
-            logger.error('Could not add statistics for user: ' + str(id))
 
     async def get_stats(self, id=None, counter=0):
         '''

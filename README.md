@@ -566,9 +566,9 @@ docker compose -f docker-compose.yml down
 
 ## Read messages
 You can read user messages for moderation purposes with `read_messages.py`.  
-Call it from projects `chatutils` directory with:
+Call it from projects root directory with:
 ```bash
-python3 read_messages.py
+python3 -m chatutils.read_messages
 ```  
 
 ## Warnings

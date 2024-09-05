@@ -481,8 +481,6 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     
     # DEBUG
     logger.debug(f'>> Username: {update.effective_user.username}. Message: {update.message.text}')
-    # add stats
-    await gpt.add_stats(id=update.effective_user.id, messages_sent=1)
     # send message with a result
     if answer is None:
         answer = er.general_error_wdelete
@@ -495,6 +493,9 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO)
             image_bytes = base64.b64decode(answer.image)
             await update.message.reply_photo(photo=image_bytes)
+            return None
+        if answer.error is not None:
+            await send_message(update, answer.error)
             return None
     logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     await send_message(update, answer, markdown=1)

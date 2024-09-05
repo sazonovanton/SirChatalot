@@ -75,8 +75,9 @@ class Message:
         new_message.error = self.error
         return new_message
     
-    def to_dict(self):
+    def to_dict(self, text_only=False):
         converted = {}
+        converted['role'] = self.role
         converted['content'] = self.content
         converted['content_type'] = self.content_type
         converted['tokens'] = self.tokens
