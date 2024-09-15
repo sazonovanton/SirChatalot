@@ -18,7 +18,6 @@ import io
 from chatutils.misc import setup_logging, read_config
 from chatutils.responses import ErrorResponses as er
 from chatutils.responses import GeneralResponses as gr
-from chatutils.datatypes import FunctionResponse
 
 config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Main', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
@@ -216,7 +215,7 @@ def is_authorized(func):
         # check if user is in whitelist
         text = update.message.text if update.message is not None else None
         access = await check_user(update, text, check_rate=check_rate)
-        logger.debug(f'Checking access for function {func_called}, rate check is {check_rate}, access is {access}')
+        logger.debug(f'Checking access for function `{func_called}`, rate check is {check_rate}, access is {access}')
         # if not, return
         if access != True:
             return
@@ -487,15 +486,16 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error('Could not get answer to message: ' + update.message.text)
     # TODO: function calling
     # if answer is base64, send it as a photo
-    if type(answer) == FunctionResponse:
-        if answer.image is not None:
-            logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image ({answer.text})')
+    if type(answer) == dict:
+        if "image" in answer:
+            logger.debug(f'<< Username: {update.effective_user.username}. Answer - Image')
             await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.UPLOAD_PHOTO)
-            image_bytes = base64.b64decode(answer.image)
+            image_bytes = base64.b64decode(answer["image"])
             await update.message.reply_photo(photo=image_bytes)
             return None
-        if answer.error is not None:
-            await send_message(update, answer.error)
+        else:
+            logger.warning(f'<< Username: {update.effective_user.username}. Answer - Unknown dict: {answer}')
+            await send_message(update, er.general_error)
             return None
     logger.debug(f'<< Username: {update.effective_user.username}. Answer: {answer}')
     await send_message(update, answer, markdown=1)

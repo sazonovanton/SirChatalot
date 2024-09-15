@@ -1,7 +1,7 @@
 # Description: Chats processing class
 
 from chatutils.misc import setup_logging, read_config, leave_only_text
-from chatutils.datatypes import FunctionResponse, Message
+from chatutils.datatypes import Message
 
 config = read_config('./data/.config')
 logger = setup_logging(logger_name='SirChatalot-Engines', log_level=config.get('Logging', 'LogLevel', fallback='WARNING'))
@@ -106,7 +106,7 @@ class OpenAIEngine:
         Input:
             * response - response from GPT
         Output:
-            * FunctionResponse - response with function called
+            * Message - response from GPT
         '''
         tool_id = None
         try:
@@ -122,12 +122,14 @@ class OpenAIEngine:
             
             tool_calls = response.choices[0].message.tool_calls
 
-            function_response = FunctionResponse()
-            function_response.function_name=tool_calls[0].function.name
-            function_response.function_args=json.loads(tool_calls[0].function.arguments)
-            function_response.tool_id=tool_calls[0].id
+            function_response = Message()
+            function_response.role = 'assistant'
+            function_response.content_type = 'tool'
+            function_response.tool_name = tool_calls[0].function.name
+            function_response.tool_args = json.loads(tool_calls[0].function.arguments)
+            function_response.tool_id = tool_calls[0].id
 
-            logger.debug(f'Function was detected with name: {function_response.function_name} and args: {function_response.function_args} (tool_id: {function_response.tool_id})')
+            logger.debug(f'Function was detected with name: {function_response.tool_name} and args: {function_response.tool_args} (tool_id: {function_response.tool_id})')
 
             return function_response
         except Exception as e:
@@ -143,15 +145,25 @@ class OpenAIEngine:
         '''
         try:
             revised_messages = []
+            print('<---')
             for message in messages:
                 role = message.role
                 content = message.content
-                if role == 'function':
-                    revised_messages.append({"role": role, 
-                                             "name": content.function_name, 
-                                             "content": content.content})
+                print(f"Role: {role}, Content: {content}")
+                if message.tool_name is not None:
+                    revised_messages.append({
+                        "tool_calls": [{
+                            "id": message.tool_id,
+                            "function": {
+                                "name": message.tool_name,
+                                "arguments": json.dumps(message.tool_args)
+                            }
+                        }]
+                    })
+                    print(f"   Tool call: {message.tool_name} with args: {message.tool_args}")
                 else:
                     revised_messages.append({"role": role, "content": content})
+            print('--->')
             return revised_messages
         except Exception as e:
             logger.exception('Could not revise messages for OpenAI API')
@@ -187,9 +199,6 @@ class OpenAIEngine:
                 'prompt_price': self.model_prompt_price,
                 'completion_price': self.model_completion_price
             }
-            messages_tokens = await self.count_tokens(messages)
-            if messages_tokens is None:
-                messages_tokens = 0
 
             user_id = str(hashlib.sha1(str(id).encode("utf-8")).hexdigest()) if self.end_user_id else self.openai.NOT_GIVEN
             response = await self.client.chat.completions.create(
@@ -201,7 +210,8 @@ class OpenAIEngine:
                     tools=self.function_calling_tools,
                     tool_choice="auto" if self.function_calling else self.openai.NOT_GIVEN
                 )
-            
+            print('//Response:', response)
+
             new_message.tokens = {
                 "prompt": response.usage.prompt_tokens,
                 "completion": response.usage.completion_tokens
@@ -210,10 +220,8 @@ class OpenAIEngine:
             response = await self.detect_function_called(response)
             
             if response is not None:
-                if type(response) == FunctionResponse:
-                    new_message.content = response
-                    new_message.role = 'function'
-                    new_message.content_type = 'function'
+                if type(response) == Message:
+                    new_message = response
                 else:
                     new_message.content = response.choices[0].message.content
                     new_message.role = 'assistant'
@@ -257,6 +265,8 @@ class OpenAIEngine:
                     messages=await self.revise_messages(messages),
                     user=user_id
                 )
+
+            print('//Response:', response)
             
             summary_message.tokens = {
                 "prompt": response.usage.prompt_tokens,
@@ -322,7 +332,7 @@ class OpenAIEngine:
                 # Check if there is images in message and leave only text
                 if self.vision:
                     message, trimmed = await leave_only_text(message, logger=logger)
-                tokens += len(self.model_encoding.encode(message.content))
+                tokens += len(self.model_encoding.encode(message.content)) if message.content is not None else 0
             logger.debug(f'Messages were counted for tokens: {tokens}')
             return tokens
         except Exception as e:
@@ -974,7 +984,7 @@ class AnthropicEngine:
                 response = await self.detect_function_called(response)
                 if response is not None:
                     if type(response) == tuple:
-                        if response[0] == 'function':
+                        if response[0] == 'tool':
                             logger.info(f'Function {response[1]} was called by user {id}')
                             return response, messages, response[3]
             else:

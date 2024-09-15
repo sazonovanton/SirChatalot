@@ -1,6 +1,6 @@
 from .misc import leave_only_text
 import pickle
-from .datatypes import Message, FunctionResponse
+from .datatypes import Message
 chats = pickle.load(open('./data/tech/chats.pickle', 'rb'))
 
 print('\n')

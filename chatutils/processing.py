@@ -12,7 +12,7 @@ from datetime import datetime
 from chatutils.audio_engines import get_audio_engine
 from chatutils.text_engines import get_text_engine
 from chatutils.responses import ErrorResponses as er
-from chatutils.datatypes import Message, FunctionResponse
+from chatutils.datatypes import Message
 
 class ChatProc:
     def __init__(self) -> None:
@@ -437,7 +437,7 @@ class ChatProc:
         '''
         return await self.text_engine.chat_summary(messages)
 
-    async def trim_messages(self, messages, trim_count=2):
+    async def trim_messages(self, messages, trim_count=10):
         '''
         Trim messages (leave only last trim_count messages and system message)
         '''
@@ -499,49 +499,53 @@ class ChatProc:
     async def process_function_calling(self, function):
         '''
         Process function calling
-        Input FunctionResponse
         '''
         try:
             if function is None:
                 logger.error('No function provided for processing')
                 return None
-            if function.function_name == 'generate_image':
+            print('Function:', function)
+            message = {}
+            if function.tool_name == 'generate_image':
                 # call function to generate image
-                function_to_call = self.available_functions[function.function_name]
+                function_to_call = self.available_functions[function.tool_name]
                 function_response = await function_to_call(
-                    prompt = function.function_args.get("prompt"),
-                    image_orientation = function.function_args.get("image_orientation"),
-                    image_style = function.function_args.get("image_style"),
+                    prompt = function.tool_args.get("prompt"),
+                    image_orientation = function.tool_args.get("image_orientation"),
+                    image_style = function.tool_args.get("image_style"),
                 )
                 image, text = function_response[0], function_response[1]
                 if image is not None:
                     # add statistics
                     logger.debug('Image was generated')
-                    function.image = image
-                    function.content = text
+                    message["image"] = image
+                    if text is not None:
+                        message["content"] = f'Image was generated, revised prompt: `{text}`'
+                    else:
+                        message["content"] = 'Image was generated with a given prompt'
                 elif image is None and text is not None:
-                    function.error = f'Image was not generated, text was returned: {text}'
+                    message["content"] = f'Image was not generated, text was returned: {text}'
                     logger.error(f'Function was called, but image was not generated: `{text}`')
                 else:
-                    function.error = 'Image was not generated due to an error'
-            elif function.function_name == 'web_search':
+                    message["content"] = 'Image was not generated due to an error'
+            elif function.tool_name == 'web_search':
                 # call function to search the web
-                function_to_call = self.available_functions[function.function_name]
+                function_to_call = self.available_functions[function.tool_name]
                 function_response = await function_to_call(
-                    query = function.function_args.get("query"),
+                    query = function.tool_args.get("query"),
                 )
                 if function_response is None:
-                    function.error = 'Error while searching the web'
+                    message["content"] = 'Error while searching the web'
                 else:
-                    function.content = function_response
-            elif function.function_name == 'url_opener':
+                    message["content"] = function_response
+            elif function.tool_name == 'url_opener':
                 # call function to open URL
-                function_to_call = self.available_functions[function.function_name]
+                function_to_call = self.available_functions[function.tool_name]
                 function_response = await function_to_call(
-                    url = function.function_args.get("url"),
+                    url = function.tool_args.get("url"),
                 )
                 if function_response is None:
-                    function.error = 'Error while opening the URL or there was no content'
+                    message["content"] = 'Error while opening the URL or there was no content'
                 elif self.url_summary:
                     # create summary of the content
                     logger.debug(f'Attempting to summarize the content of the URL ({len(function_response)})')
@@ -550,7 +554,8 @@ class ChatProc:
                         function.error = 'Error while summarizing the content of the URL'
                 else:
                     pass
-            return function
+                message["content"] = function_response
+            return message
         except Exception as e:
             logger.exception('Could not process function calling')
             return None
@@ -564,52 +569,70 @@ class ChatProc:
             * style - style of chat (default: None)
         '''
         try:
-            prompt_tokens, completion_tokens = 0, 0
             # Init style if it is not set
             if id not in self.chats:
                 success = await self.init_style(id=id, style=style)
                 if not success:
                     return er.style_initiation
-            # get messages
+            # 1. get messages
             messages = self.chats[id]
-            # If there is an image without caption, then add caption
-            if self.vision and id in self.pending_images:
-                await self.add_caption(id, message)
-                messages = self.chats[id]
-            else:
-                # Add message to the chat
-                new_message = Message()
-                new_message.role = "user"
-                new_message.content = message
-                await self.add_to_chat_history(id=id, message=new_message)
 
-            # Trim and summarize messages if conversation is too long
+            # 2. add message to the chat history
+            if type(message) == Message:
+                new_message = message
+                await self.add_to_chat_history(id=id, message=new_message)
+            elif type(message) == str:
+                # If there is an image without caption, then add caption
+                if self.vision and id in self.pending_images:
+                    await self.add_caption(id, message)
+                    messages = self.chats[id]
+                else:
+                    # Add message to the chat
+                    new_message = Message()
+                    new_message.role = "user"
+                    new_message.content = message
+                    await self.add_to_chat_history(id=id, message=new_message)
+            else:
+                logger.error('Could not get answer to message. Message is not a string or Message object')
+                return er.message_answer_error
+
+            # 3. if chat is too long, then trim or summarize it
             if len(messages)-1 > self.trim_size:
                 if self.trim_too_long:
                     messages = await self.trim_messages(messages)
                 if self.summarize_too_long:
                     messages = await self.summarize_messages(messages)
 
-            # Wait for response
+            # 4. get answer to the message
             response_message = await self.text_engine.chat(id=id, messages=messages)
+            print(f'Response message: {response_message}')
             if response_message is None:
                 return er.message_answer_error
             if response_message.error is not None:
                 return er.get_error_for_message(response_message.error)
-
-            if self.function_calling and response_message.content_type == 'function':
-                # process function calling
-                function_response = await self.process_function_calling(response_message.content)
-                if function_response is None:
+            if self.function_calling and response_message.content_type == 'tool':
+                # process function calling if it is enabled and response is a tool
+                await self.add_to_chat_history(id=id, message=response_message)
+                function_message = await self.process_function_calling(response_message)
+                if function_message is None:
                     return er.function_calling_error
-                # Return to chat function response
-                response_message = await self.chat(id=id, message=function_response)
-
-            # Add assistant's response to chat history
-            assistant_message = Message()
-            assistant_message.role = "assistant"
-            assistant_message.content = response_message.content
-            await self.add_to_chat_history(id=id, message=assistant_message)
+                # Return to chat function response as a Message object
+                tool_message = Message()
+                tool_message.role = "tool"
+                tool_message.content = function_message["content"]
+                if 'image' in function_message:
+                    # return image to user
+                    await self.add_to_chat_history(id=id, message=tool_message)
+                    return function_message
+                else:
+                    # return tool response to the LLM
+                    response_message = await self.text_engine.chat(id=id, message=tool_message)
+            else:
+                # if response is not a tool, then add it to the chat history and return content to user
+                assistant_message = Message()
+                assistant_message.role = "assistant"
+                assistant_message.content = response_message.content
+                await self.add_to_chat_history(id=id, message=assistant_message)
 
             return response_message.content
         except Exception as e:
