@@ -27,8 +27,14 @@ class GoogleEngine:
             result = {
                 "title": item["title"],
                 "link": item["link"],
-                "snippet": item["snippet"]
+                "snippet": item["snippet"] if "snippet" in item else None,
             }
+            # Extract description from metatags if snippet is not available
+            if not result["snippet"] and "pagemap" in item and "metatags" in item["pagemap"]:
+                for metatag in item["pagemap"]["metatags"]:
+                    if "og:description" in metatag:
+                        result["description"] = metatag["og:description"]
+                        break
             results.append(result)
         return results
 

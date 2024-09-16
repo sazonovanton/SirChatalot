@@ -681,7 +681,7 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             # If text was not sent along with image, ask user to send it
             if gpt_answer_image:
-                await update.message.reply_text(gr.image_recieved)
+                await update.message.reply_text(gr.image_received)
                 return None
             else:
                 await update.message.reply_text(er.general_error)
