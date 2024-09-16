@@ -70,7 +70,7 @@ class OpenAIEngine:
         self.summarize_too_long = self.config.getboolean("OpenAI", "SummarizeTooLong", fallback=False)
         self.trim_size = self.config.getint("OpenAI", "TrimSize", fallback=8)
         self.trim_too_long = self.config.getboolean("OpenAI", "TrimTooLong", fallback=True)
-        self.requested_tokens = self.config.getint("OpenAI", "ResponseMaxTokens", fallback=None)
+        self.max_completion_tokens = self.config.getint("OpenAI", "MaxCompletionTokens", fallback=3997)
 
         self.vision = self.config.getboolean("OpenAI", "Vision", fallback=False)
         self.function_calling = self.config.getboolean("OpenAI", "FunctionCalling", fallback=False)
@@ -149,19 +149,30 @@ class OpenAIEngine:
             for message in messages:
                 role = message.role
                 content = message.content
-                print(f"Role: {role}, Content: {content}")
-                if message.tool_name is not None:
+                if message.tool_name is not None and message.role == 'assistant':
                     revised_messages.append({
+                        "role": role,
+                        "content": content,
                         "tool_calls": [{
                             "id": message.tool_id,
                             "function": {
                                 "name": message.tool_name,
                                 "arguments": json.dumps(message.tool_args)
-                            }
+                            },
+                        "type": "function"
                         }]
                     })
-                    print(f"   Tool call: {message.tool_name} with args: {message.tool_args}")
+                    print(f"+ Role: {role}, Content: {content}, Tool id: {message.tool_id}, Tool name: {message.tool_name}")
+                elif role == 'tool':
+                    revised_messages.append({
+                        "role": role,
+                        "tool_call_id": message.tool_id,
+                        "name": message.tool_name,
+                        "content": str(content)
+                    })
+                    print(f"+ Role: {role}, Content: {content}, Tool id: {message.tool_id}, Tool name: {message.tool_name}")
                 else:
+                    print(f"Role: {role}, Content: {content}")
                     revised_messages.append({"role": role, "content": content})
             print('--->')
             return revised_messages
@@ -186,7 +197,7 @@ class OpenAIEngine:
         
         new_message = Message()
 
-        if self.moderation:
+        if self.moderation and len(messages) > 0:
             messages[-1].moderated = True
             if await self.moderation_pass(messages[-1], id) == False:
                 messages[-1].moderated = False
@@ -204,11 +215,15 @@ class OpenAIEngine:
             response = await self.client.chat.completions.create(
                     model=self.model,
                     temperature=self.temperature, 
-                    max_tokens=self.requested_tokens,
+                    max_completion_tokens=self.max_completion_tokens,
                     messages=await self.revise_messages(messages),
                     user=user_id,
                     tools=self.function_calling_tools,
-                    tool_choice="auto" if self.function_calling else self.openai.NOT_GIVEN
+                    tool_choice="auto" if self.function_calling else self.openai.NOT_GIVEN,
+                    extra_headers={
+                        "HTTP-Referer": "https://github.com/sazonovanton/SirChatalot", 
+                        "X-Title": "SirChatalot"
+                    }
                 )
             print('//Response:', response)
 
@@ -261,9 +276,13 @@ class OpenAIEngine:
             response = await self.client.chat.completions.create(
                     model=self.model,
                     temperature=self.temperature, 
-                    max_tokens=maxtokens,
+                    max_completion_tokens=maxtokens,
                     messages=await self.revise_messages(messages),
-                    user=user_id
+                    user=user_id,
+                    extra_headers={
+                        "HTTP-Referer": "https://github.com/sazonovanton/SirChatalot", 
+                        "X-Title": "SirChatalot"
+                    }
                 )
 
             print('//Response:', response)
@@ -376,9 +395,13 @@ class OpenAIEngine:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=420,
+                        max_completion_tokens=420,
                         messages=[new_message],
-                        user=str(user_id)
+                        user=str(user_id),
+                        extra_headers={
+                            "HTTP-Referer": "https://github.com/sazonovanton/SirChatalot", 
+                            "X-Title": "SirChatalot"
+                    }
                 )
 
                 prompt_tokens = int(response.usage.prompt_tokens)

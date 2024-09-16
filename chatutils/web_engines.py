@@ -40,14 +40,17 @@ class GoogleEngine:
             "num": self.search_results
         }
         try:
+            data = None
             logger.debug(f'Searching for: "{query}". Results number: {self.search_results}')
             async with aiohttp.ClientSession() as session:
                 async with session.get(self.base_url, params=params) as response:
                     data = await response.json()
                     data = await self.format_data(data)
                     return data
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
-            logger.error(f'Error while searching: {e}')
+            logger.error(f'Error while searching: {e} (response: {data})')
             return None
 
 class URLOpen:
@@ -73,6 +76,8 @@ class URLOpen:
             if len(text) < 5:
                 text = None
             return text
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             logger.error(f'Error while parsing data: {e}')
             return None
@@ -84,6 +89,8 @@ class URLOpen:
                     data = await response.text()
                     data = await self.parse_data(data)
                     return data
+        except KeyboardInterrupt:
+            raise KeyboardInterrupt
         except Exception as e:
             logger.error(f'Error while opening URL: {e}')
             return None

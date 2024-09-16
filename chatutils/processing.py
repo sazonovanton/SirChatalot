@@ -287,12 +287,12 @@ class ChatProc:
             new_message = Message()
             new_message.role = "user"
             new_message.content_type = "image"
-            new_message.content = {
+            new_message.content = [{
                 "type": "image_url",
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{image_b64}"
                 }
-            }
+            }]
             messages.append(new_message)
 
             # Add flag that there is an image without caption
@@ -461,7 +461,7 @@ class ChatProc:
             logger.error(f'Could not trim messages: {e}')
             return None
         
-    async def summarize_messages(self, messages, leave_messages=2):
+    async def summarize_messages(self, messages, leave_messages=3):
         '''
         Summarize messages (leave only last leave_messages messages)
         Do not summarize system message (role == 'system', id == 0)
@@ -620,13 +620,17 @@ class ChatProc:
                 tool_message = Message()
                 tool_message.role = "tool"
                 tool_message.content = function_message["content"]
+                tool_message.tool_id = response_message.tool_id
+                tool_message.tool_name = response_message.tool_name
                 if 'image' in function_message:
                     # return image to user
                     await self.add_to_chat_history(id=id, message=tool_message)
                     return function_message
                 else:
                     # return tool response to the LLM
-                    response_message = await self.text_engine.chat(id=id, message=tool_message)
+                    await self.add_to_chat_history(id=id, message=tool_message)
+                    response_message = await self.text_engine.chat(id=id, messages=self.chats[id])
+                    print(f'Response message after function calling: {response_message}')
             else:
                 # if response is not a tool, then add it to the chat history and return content to user
                 assistant_message = Message()
