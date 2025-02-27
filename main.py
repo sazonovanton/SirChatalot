@@ -521,7 +521,16 @@ async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYP
         for file in os.listdir(user_folder):
             file_path = os.path.join(user_folder, file)
             os.remove(file_path)
+
         deleted = await files_rag.remove_text_user(user_id)
+        
+        with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
+            files = json.load(f)
+        if str(user_id) in files:
+            del files[str(user_id)]
+        with codecs.open('./data/files/files.json', 'w', 'utf-8') as f:
+            json.dump(files, f)
+
         logger.info(f'Files for user {user_id} were deleted. RAG removed: {deleted}')
         if deleted:
             await update.message.reply_text("Files and RAG dataset were deleted.")
@@ -761,6 +770,7 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_file_path = await new_file.download_to_drive(custom_path=os.path.join(f'./data/files/{user_id}', filename))
         
         logger.info(f'File {filename} was saved to {new_file_path}')
+        m = await update.message.reply_text(f"File {filename} was saved. Processing the file...")
 
         # Read and process the file
         text = await files_proc.convert_to_text(str(new_file_path))
@@ -771,8 +781,23 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not processed:
             await update.message.reply_text("Sorry, something went wrong while processing the file into a RAG dataset.")
             return None
+        if len(text) > 8192:
+            text = text[:8192] + '...'
+        summary, _ = await gpt.text_engine.summary(text, size=210)
 
-        await update.message.reply_text(f"File {filename} was processed.")
+        # {user_id: {'filename': {'summary': '...', 'processed': True/False}}}
+        if os.path.exists('./data/files/files.json'):
+            with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
+                files = json.load(f) 
+        else:
+            files = {}
+        if user_id not in files:
+            files[user_id] = {}
+        files[user_id][filename] = {'summary': summary, 'processed': processed}
+        with codecs.open('./data/files/files.json', 'w', 'utf-8') as f:
+            json.dump(files, f, indent=4)
+
+        await m.edit_text(f"File {filename} was processed.\n\nSummary:\n{summary}")
     except BadRequest as e:
         logger.error(e)
         await update.message.reply_text("Sorry, it seems like the file is too big. Telegram limits file size to 20 MB. Please try again with a smaller file.")
