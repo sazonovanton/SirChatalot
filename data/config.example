@@ -47,5 +47,13 @@ UrlOpen = True
 URLSummary = True
 TrimLength = 3000
 
+[Files]
+Enabled = True
+MaxFileSizeMB = 150
+
+[Embeddings]
+SecretKey = ******
+Model = text-embedding-3-small
+
 [Logging]
 LogLevel = INFO
