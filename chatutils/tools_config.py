@@ -69,17 +69,17 @@ class OpenAIConfig:
                         "type": "function",
                         "function": {
                             "name": "semantic_search",
-                            "description": "Searches for similar text chunks in RAG database using given text",
+                            "description": "Searches for similar text chunks in RAG database using given text. Returns top similar text chunks. Should be used to find information in internal documents.",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
                                     "text": {
                                         "type": "string",
-                                        "description": "Text to search similar texts for"
+                                        "description": "Text to search similar text chunks for"
                                     },
                                     "n_results": {
                                         "type": "integer",
-                                        "description": "Number of results to return, ranged from most to least similar",
+                                        "description": "Number of results to return",
                                         "default": 3
                                     }
                                 },
