@@ -93,11 +93,6 @@ if config.has_section('Files'):
     files_enabled = True
 else:
     files_enabled = False
-if files_enabled:
-    from chatutils.filesproc import FilesProcessor, FilesRAG
-    files_proc = FilesProcessor()
-    files_rag = FilesRAG()
-    print('File functionality enabled.')
 
 # check max file size
 max_file_size_limit = 20
@@ -522,7 +517,7 @@ async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYP
             file_path = os.path.join(user_folder, file)
             os.remove(file_path)
 
-        deleted = await files_rag.remove_text_user(user_id)
+        deleted = await gpt.files_rag.remove_text_user(user_id)
         
         with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
             files = json.load(f)
@@ -547,7 +542,7 @@ async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     '''
     user_id = update.effective_user.id
     try:
-        user_files = await files_rag.user_files(user_id) # list of files - can be empty
+        user_files = await gpt.files_rag.user_files(user_id) # list of files - can be empty
         if user_files is None:
             await update.message.reply_text("Sorry, something went wrong while listing files.")
             return None
@@ -753,10 +748,11 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global application
     try:
         await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-        logger.debug(f'>> Recieved file: {update.message.document.file_name}')
+        logger.debug(f'>> Received file: {update.message.document.file_name}')
 
         file_id = update.message.document.file_id
         user_id = update.effective_user.id
+        user_id_str = str(user_id)
         filename = update.message.document.file_name
 
         new_file = await application.bot.get_file(file_id)
@@ -773,31 +769,31 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m = await update.message.reply_text(f"File {filename} was saved. Processing the file...")
 
         # Read and process the file
-        text = await files_proc.convert_to_text(str(new_file_path))
+        text = await gpt.files_proc.convert_to_text(str(new_file_path))
         if text is None:
             await update.message.reply_text("Sorry, something went wrong while processing the file to text.")
             return None
-        processed = await files_rag.process_text(text, user_id=user_id, filename=filename)
+        processed = await gpt.files_rag.process_text(text, user_id=user_id, filename=filename)
         if not processed:
             await update.message.reply_text("Sorry, something went wrong while processing the file into a RAG dataset.")
             return None
         if len(text) > 8192:
             text = text[:8192] + '...'
-        summary, _ = await gpt.text_engine.summary(text, size=210)
+        summary, _ = await gpt.text_engine.summary(text, size=160)
 
-        # {user_id: {'filename': {'summary': '...', 'processed': True/False}}}
         if os.path.exists('./data/files/files.json'):
             with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
                 files = json.load(f) 
         else:
             files = {}
-        if user_id not in files:
-            files[user_id] = {}
-        files[user_id][filename] = {'summary': summary, 'processed': processed}
+        if user_id_str not in files:
+            files[user_id_str] = {}
+        files[user_id_str][filename] = {'summary': summary, 'processed': processed}
         with codecs.open('./data/files/files.json', 'w', 'utf-8') as f:
-            json.dump(files, f, indent=4)
+            json.dump(files, f, ensure_ascii=False, indent=4)
 
         await m.edit_text(f"File {filename} was processed.\n\nSummary:\n{summary}")
+        
     except BadRequest as e:
         logger.error(e)
         await update.message.reply_text("Sorry, it seems like the file is too big. Telegram limits file size to 20 MB. Please try again with a smaller file.")

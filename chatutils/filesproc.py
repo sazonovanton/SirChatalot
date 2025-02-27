@@ -296,7 +296,7 @@ class FilesRAG:
             logger.error(f"Error inserting texts: {e}")
             return False
 
-    async def search_texts(self, text, user_id, n_results=4, filter: dict = None, max_distance=1.0) -> list:
+    async def search_text(self, text, user_id, n_results=4, filter: dict = None, max_distance=1.0) -> list:
         """
         Searches for similar texts based on the given vector. Embeddings are calculated for the text using the embeddings engine.
 
@@ -328,6 +328,44 @@ class FilesRAG:
             logger.error(f"Error searching texts: {e}")
             return None
         
+    async def semantic_search(self, text, user_id, n_results=4, filter: dict = None, max_distance=1.0) -> list:
+        """
+        Searches for similar texts based on the given text. Embeddings are calculated for the text using the embeddings engine.
+
+        Parameters:
+            text: text to search for
+            user_id: user id to filter results
+            n_results: number of results to return
+            filter: dictionary with filter conditions
+            max_distance: maximum distance for search
+
+        Returns a list of results - formatted to {"filename": [text, ...]}
+        Uses search_text to get the results and then formats them based on the filename.
+        """
+        try:
+            if n_results is None:
+                n_results = 4
+            logger.debug(f"Searching for similar texts based on: {text} (for user: {user_id})")
+            results = await self.search_text(text, user_id, n_results, filter, max_distance)
+            if results:
+                formatted_results = {}
+                for i, result in enumerate(results["metadatas"]):
+                    if result and "filename" in result[0]:
+                        filename = result[0]["filename"]
+                        if filename not in formatted_results:
+                            formatted_results[filename] = []
+                        formatted_results[filename].extend(results["documents"][i])  
+                logger.debug(f"Semantic search results: {formatted_results}")
+                return formatted_results
+            else:
+                return {}
+        except KeyboardInterrupt:
+            logger.error("Semantic search cancelled by user.")
+            raise KeyboardInterrupt
+        except Exception as e:
+            logger.error(f"Error performing semantic search: {e}")
+            return []
+
     async def remove_texts(self, filename: str) -> bool:
         """
         Removes texts from the collection based on the filename.
@@ -604,67 +642,71 @@ if __name__ == "__main__":
 
         # print("Tests for FilesProcessor completed.")
 
-        # # Test for FilesRAG
-        # print("Starting tests for FilesRAG...")
-        # rag = FilesRAG()
-
-        # # Dummy data for testing insertion
-        # texts = [
-        #     "The pineapple is a tropical plant with an edible fruit", 
-        #     "A car, or an automobile, is a motor vehicle with wheels.", 
-        #     "Paris is the capital and largest city of France.",
-        #     "The peach is a deciduous tree first domesticated and cultivated in China.",
-        #     "A bicycle, also called a bike or cycle, is a human-powered or motor-powered, pedal-driven, single-track vehicle, having two wheels attached to a frame, one behind the other.",
-        #     "An airplane, an aeroplane, or a plane, is a fixed-wing aircraft that is propelled forward by thrust from a jet engine, propeller, or rocket engine."
-        # ]
-        # metadata = [
-        #     {"user_id": "user1", "filename": "pineapple.txt"},
-        #     {"user_id": "user1", "filename": "car.txt"},
-        #     {"user_id": "user1", "filename": "paris.txt"},
-        #     {"user_id": "user1", "filename": "peach.txt"},
-        #     {"user_id": "user2", "filename": "bicycle.txt"},
-        #     {"user_id": "user1", "filename": "airplane.txt"}
-        # ]
-        
-        # # Test insertion of texts
-        # success = await rag.insert_texts(texts, metadata)
-        # print(f"- Insertion success: {success}")
-
-        # # Test searching texts
-        # search_result = await rag.search_texts("car", "user1", n_results=2)
-        # print(f"- Search result: {search_result}")
-
-        # # Test getting user files
-        # user_files = await rag.user_files("user1")
-        # print(f"- User files: {user_files}")
-
-        # # Test removal of texts by filename
-        # remove_success = await rag.remove_texts("pineapple.txt")
-        # print(f"- Remove by filename success: {remove_success}")
-
-        # # Test removal of texts by user_id
-        # remove_user_success = await rag.remove_text_user("user1")
-        # print(f"- Remove by user_id success: {remove_user_success}")
-
-        # print("Tests for FilesRAG completed.")
-
-        # Whole text processing
-        print("Starting whole text process")
+        # Test for FilesRAG
+        print("Starting tests for FilesRAG...")
         rag = FilesRAG()
-        processor = FilesProcessor()
 
-        # Processing of a pdf file
-        pdf_text = await processor.convert_pdf_to_text('test/user_manual.pdf')
-        print(f"- PDF file content: {pdf_text[:100]}...")
+        # Dummy data for testing insertion
+        texts = [
+            "The pineapple is a tropical plant with an edible fruit", 
+            "A car, or an automobile, is a motor vehicle with wheels.", 
+            "Paris is the capital and largest city of France.",
+            "The peach is a deciduous tree first domesticated and cultivated in China.",
+            "A bicycle, also called a bike or cycle, is a human-powered or motor-powered, pedal-driven, single-track vehicle, having two wheels attached to a frame, one behind the other.",
+            "An airplane, an aeroplane, or a plane, is a fixed-wing aircraft that is propelled forward by thrust from a jet engine, propeller, or rocket engine."
+        ]
+        metadata = [
+            {"user_id": "user1", "filename": "pineapple.txt"},
+            {"user_id": "user1", "filename": "car.txt"},
+            {"user_id": "user1", "filename": "paris.txt"},
+            {"user_id": "user1", "filename": "peach.txt"},
+            {"user_id": "user2", "filename": "bicycle.txt"},
+            {"user_id": "user1", "filename": "airplane.txt"}
+        ]
+        
+        # Test insertion of texts
+        success = await rag.insert_texts(texts, metadata)
+        print(f"- Insertion success: {success}")
 
-        # Process the text and insert into the collection
-        success = await rag.process_text(pdf_text, "user1", "user_manual.pdf")
-        print(f"- Text processing success: {success}")
-
-        # Find similar texts
-        search_result = await rag.search_texts("power supply requirements", "user1", n_results=2)
+        # Test searching texts
+        search_result = await rag.search_text("car", "user1", n_results=2)
         print(f"- Search result: {search_result}")
 
-        print("Whole text process completed.")
+        # Test getting user files
+        user_files = await rag.user_files("user1")
+        print(f"- User files: {user_files}")
+
+        # Test semantic search
+        semantic_result = await rag.semantic_search("fruit", "user1", n_results=2)
+        print(f"- Semantic search result: {semantic_result}")
+
+        # Test removal of texts by filename
+        remove_success = await rag.remove_texts("pineapple.txt")
+        print(f"- Remove by filename success: {remove_success}")
+
+        # Test removal of texts by user_id
+        remove_user_success = await rag.remove_text_user("user1")
+        print(f"- Remove by user_id success: {remove_user_success}")
+
+        print("Tests for FilesRAG completed.")
+
+        # # Whole text processing
+        # print("Starting whole text process")
+        # rag = FilesRAG()
+        # processor = FilesProcessor()
+
+        # # Processing of a pdf file
+        # pdf_text = await processor.convert_pdf_to_text('test/user_manual.pdf')
+        # print(f"- PDF file content: {pdf_text[:100]}...")
+
+        # # Process the text and insert into the collection
+        # success = await rag.process_text(pdf_text, "user1", "user_manual.pdf")
+        # print(f"- Text processing success: {success}")
+
+        # # Find similar texts
+        # search_result = await rag.search_text("power supply requirements", "user1", n_results=2)
+        # print(f"- Search result: {search_result}")
+
+        # print("Whole text process completed.")
 
     asyncio.run(run_tests())

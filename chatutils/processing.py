@@ -22,6 +22,8 @@ import pickle
 import os
 from pydub import AudioSegment
 from datetime import datetime
+import json
+import codecs
 
 from chatutils.audio_engines import get_audio_engine
 # Support: OpenAI API, YandexGPT API, Claude API
@@ -69,6 +71,15 @@ class ChatProc:
             self.load_image_generation()
             logger.debug(f'Image generation is enabled, price: ${self.image_generation_price}, size: {self.image_generation_size}, style: {self.image_generation_style}, quality: {self.image_generation_quality}')
 
+        self.files_processing = False
+        if config.has_section("Files"):
+            self.files_processing = True
+        if self.files_processing:
+            from chatutils.filesproc import FilesProcessor, FilesRAG
+            self.files_proc = FilesProcessor()
+            self.files_rag = FilesRAG()
+            logger.debug(f'Files processing is enabled')
+
         self.function_calling = self.text_engine.function_calling
         if self.function_calling:
             self.load_function_calling(text)
@@ -111,6 +122,8 @@ class ChatProc:
         self.stats_location = "./data/tech/stats.pickle"
         self.stats = self.load_pickle(self.stats_location)
 
+
+
         if self.log_chats:
             logger.info('* Chat history is logged *')
 
@@ -147,6 +160,10 @@ class ChatProc:
                     logger.debug(f'URL opener is enabled, URL summary is set to {self.url_summary}')
                     self.available_functions["url_opener"] = self.urlopener.open_url
                     self.function_calling_tools.append(tools_config.url_opener)
+        if "Files" in config:
+            self.available_functions["semantic_search"] = self.files_rag.semantic_search
+            self.function_calling_tools.append(tools_config.semantic_search)
+        logger.debug(f'Function calling tools: {self.function_calling_tools}')
 
     def load_image_generation(self):
         '''
@@ -544,6 +561,25 @@ class ChatProc:
             else:
                 # Add message to the chat
                 await self.add_to_chat_history(id=id, message={"role": "user", "content": message})
+
+            # Add to system message information about available files
+            if self.files_processing and "semantic_search" in self.available_functions:
+                if os.path.exists('./data/files/files.json'):
+                    with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
+                        available_docs = json.load(f) 
+                else:
+                    available_docs = {}
+                    
+                user_id_str = str(id)
+                if user_id_str in available_docs:
+                    # modify first message if it's role system
+                    if messages[0]['role'] == 'system':
+                        if '# Available files:' in messages[0]['content']:
+                            messages[0]['content'] = messages[0]['content'].split('# Available files:')[0]
+                        messages[0]['content'] += f'\n# Available files: {available_docs[user_id_str]}'
+                    else:
+                        messages.insert(0, {"role": "system", "content": f'{self.system_message}\n# Available files: {available_docs[user_id_str]}'})
+
             # Trim or summarize messages if they are too long
             messages_tokens = await self.count_tokens(messages)
             if messages_tokens is None:
@@ -710,6 +746,50 @@ class ChatProc:
                                 response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
                             else:
                                 await self.save_chat(id=id, messages=messages)
+                        elif response[1] == 'semantic_search':
+                                function_to_call = self.available_functions[function_name]
+                                logger.debug(f'Calling function: {function_name} with arguments: {function_args}')
+                                function_response = await function_to_call(
+                                    text = function_args.get("text"),
+                                    n_results = function_args.get("n_results"),
+                                    user_id = id,
+                                )
+                                if function_response is None:
+                                    function_response = 'Error while searching the RAG database'
+                                if type(self.text_engine) == AnthropicEngine:
+                                    # https://docs.anthropic.com/claude/docs/tool-use-examples
+                                    # assistant:
+                                    message_content = []
+                                    if corresponding_text is not None:
+                                        if len(corresponding_text) > 0:
+                                            message_content.append({"type": "text", "text": corresponding_text})
+                                    message_content.append({"type": "tool_use", "id": tool_id, "name": function_name, "input": function_args})
+                                    await self.add_to_chat_history(id=id, 
+                                        message={"role": "assistant", "content": message_content})
+                                    # user (function response)
+                                    message_content = [{
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_id,
+                                        "content": f"Semantic search results for: {function_args.get('text')}: {function_response}",
+                                    }]
+                                    await self.add_to_chat_history(id=id,
+                                        message={"role": "user", "content": message_content})
+                                else:
+                                    await self.add_to_chat_history(id=id, 
+                                        message={"role": "function", "name": function_name, "content": str(function_response)})
+                                # Push response to LLM again
+                                messages = self.chats[id]
+                                logger.debug(f'Pushing response to LLM again')
+                                logger.debug(f'messages: {messages}')
+                                response, messages, token_usage = await self.text_engine.chat(id=id, messages=messages)
+                                # add statistics
+                                if token_usage is not None:
+                                    prompt_tokens += int(token_usage['prompt'])
+                                    completion_tokens += int(token_usage['completion'])
+                                if response is None:
+                                    response = 'Sorry, I could not get an answer to your message. Please try again or contact the administrator.'
+                                else:
+                                    await self.save_chat(id=id, messages=messages)
             else:
                 # save chat history
                 await self.save_chat(id=id, messages=messages)

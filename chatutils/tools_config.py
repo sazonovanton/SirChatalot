@@ -64,6 +64,29 @@ class OpenAIConfig:
                             }
                         }
                     }
+    
+    semantic_search = {
+                        "type": "function",
+                        "function": {
+                            "name": "semantic_search",
+                            "description": "Searches for similar text chunks in RAG database using given text",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "text": {
+                                        "type": "string",
+                                        "description": "Text to search similar texts for"
+                                    },
+                                    "n_results": {
+                                        "type": "integer",
+                                        "description": "Number of results to return, ranged from most to least similar",
+                                        "default": 3
+                                    }
+                                },
+                                "required": ["text"],  
+                            }
+                        }
+                    }
 
 class AnthropicConfig:
     """Rewrite the OpenAIConfig class to AnthropicConfig class"""
@@ -72,8 +95,10 @@ class AnthropicConfig:
         self.image_generation = OpenAIConfig.image_generation['function']
         self.web_search = OpenAIConfig.web_search['function']
         self.url_opener = OpenAIConfig.url_opener['function']
+        self.semantic_search = OpenAIConfig.semantic_search['function']
 
         # rename parameters to input_schema
         self.image_generation['input_schema'] = self.image_generation.pop('parameters')
         self.web_search['input_schema'] = self.web_search.pop('parameters')
         self.url_opener['input_schema'] = self.url_opener.pop('parameters')
+        self.semantic_search['input_schema'] = self.semantic_search.pop('parameters')
