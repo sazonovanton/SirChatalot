@@ -216,13 +216,13 @@ class OpenAIEngine:
                 messages_tokens = 0
 
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
-            requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
-            requested_tokens = max(requested_tokens, 50)
+            # requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
+            # requested_tokens = max(requested_tokens, 50)
             if self.function_calling:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=requested_tokens,
+                        # max_tokens=requested_tokens,
                         messages=messages,
                         user=str(user_id),
                         tools=self.function_calling_tools,
@@ -238,7 +238,7 @@ class OpenAIEngine:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=requested_tokens,
+                        # max_tokens=requested_tokens,
                         messages=messages,
                         user=str(user_id)
                 )
