@@ -8,6 +8,7 @@ import time
 from telegram import ForceReply, Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters, CallbackQueryHandler
 from telegram.constants import ChatAction
+from telegram.error import BadRequest
 import codecs
 import pickle
 from functools import wraps
@@ -17,6 +18,7 @@ from datetime import datetime
 from PIL import Image
 import base64
 import io
+import json
 
 # import configuration
 import configparser
@@ -92,6 +94,9 @@ if config.has_section('Files'):
 else:
     files_enabled = False
 if files_enabled:
+    from chatutils.filesproc import FilesProcessor, FilesRAG
+    files_proc = FilesProcessor()
+    files_rag = FilesRAG()
     print('File functionality enabled.')
 
 # check max file size
@@ -150,8 +155,6 @@ gpt = ChatProc(text=text_engine, speech=speech_engine) # speech can be None if y
 VISION = gpt.vision
 IMAGE_GENERATION = gpt.image_generation
 SPEECH = gpt.speech_engine
-from chatutils.filesproc import FilesProc
-fp = FilesProc()
 
 ################################## Authorization ###############################################
 
@@ -443,8 +446,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "/style - Choose a style for a bot\n"
     help_text += "/imagine <prompt> - Generate an image\n" if IMAGE_GENERATION else ""
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
-    help_text += "Some text files can be processed by the bot.\n" if files_enabled else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
+    if files_enabled:
+        help_text += "Some files can be processed by the bot. Send a file to the bot to add it to the RAG database. Bot will take this information into account when answering your questions.\n"
+        help_text += "/list_files - List all files in RAG database\n"
+        help_text += "/delete_files - Delete all files\n"
     if gpt.function_calling:
         if gpt.webengine is not None:
             help_text += "\nYou can ask the bot to find something on the web. Just ask it to search for something. It will make request to a serach engine and will see a snippets of the first results. Example: `Find me a links to the best websites about cats.`\n"
@@ -503,6 +509,49 @@ async def limit_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if text is None:
         text = 'Unlimited'
     await update.message.reply_text(text)
+
+@is_authorized
+async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    Delete all files from the user folder
+    '''
+    user_id = update.effective_user.id
+    user_folder = f'./data/files/{user_id}'
+    try:
+        for file in os.listdir(user_folder):
+            file_path = os.path.join(user_folder, file)
+            os.remove(file_path)
+        deleted = await files_rag.remove_text_user(user_id)
+        logger.info(f'Files for user {user_id} were deleted. RAG removed: {deleted}')
+        if deleted:
+            await update.message.reply_text("Files and RAG dataset were deleted.")
+        else:
+            await update.message.reply_text("Error removing RAG dataset.")
+    except Exception as e:
+        logger.exception(f'Error deleting files for user {user_id}: {e}')
+        await update.message.reply_text("Sorry, something went wrong while deleting files.")
+
+@is_authorized
+async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''
+    List all files associated with the user in the RAG database
+    '''
+    user_id = update.effective_user.id
+    try:
+        user_files = await files_rag.user_files(user_id) # list of files - can be empty
+        if user_files is None:
+            await update.message.reply_text("Sorry, something went wrong while listing files.")
+            return None
+        if user_files == []:
+            await update.message.reply_text("No files found.")
+            return None
+        files_text = "Files:\n"
+        for file in user_files:
+            files_text += f"* {file}\n"
+        await update.message.reply_text(files_text)        
+    except Exception as e:
+        logger.exception(f'Error listing files for user {user_id}: {e}')
+        await update.message.reply_text("Sorry, something went wrong while listing files.")
 
 ################################## Messages ###################################################
 
@@ -694,35 +743,44 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     global application
     try:
+        await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
+        logger.debug(f'>> Recieved file: {update.message.document.file_name}')
+
         file_id = update.message.document.file_id
+        user_id = update.effective_user.id
+        filename = update.message.document.file_name
+
         new_file = await application.bot.get_file(file_id)
-        filename = new_file.file_path.split('/')[-1]
         filesize = new_file.file_size / 1024 / 1024 # file size in MB
         if filesize > max_file_size:
             await update.message.reply_text(f"Sorry, file size is too big. Please try again with a smaller file. Max file size is {max_file_size} MB.")
             return None
-        new_file_path = await new_file.download_to_drive(custom_path='./data/files/' + filename)
-        await application.bot.send_chat_action(chat_id=update.effective_chat.id, action=ChatAction.TYPING)
-
-        logger.info('Recieved: ' + str(new_file_path))
-
-        tic = time.time()
-        text = await fp.extract_text(new_file_path)
-        tt = round(time.time()-tic)
-        logger.info('Process time: ' + str(tt) + ' seconds')
-
-        if text is None or '':
-            await update.message.reply_text("Sorry, something went wrong. Could not extract text from the file.")
-            return None
         
-        # if yes, get answer from GPT
-        answer = await gpt.filechat(id=update.effective_user.id, text=text)
-        if answer is None:
-            answer = "Sorry, something went wrong. Could not get answer from GPT."
-            logger.error('Could not get answer for user: ' + str(update.effective_user.id))
-        await update.message.reply_text(answer)
-    except Exception as e:
+        if not os.path.exists(f'./data/files/{user_id}'):
+            os.makedirs(f'./data/files/{user_id}')
+        new_file_path = await new_file.download_to_drive(custom_path=os.path.join(f'./data/files/{user_id}', filename))
+        
+        logger.info(f'File {filename} was saved to {new_file_path}')
+
+        # Read and process the file
+        text = await files_proc.convert_to_text(str(new_file_path))
+        if text is None:
+            await update.message.reply_text("Sorry, something went wrong while processing the file to text.")
+            return None
+        processed = await files_rag.process_text(text, user_id=user_id, filename=filename)
+        if not processed:
+            await update.message.reply_text("Sorry, something went wrong while processing the file into a RAG dataset.")
+            return None
+
+        await update.message.reply_text(f"File {filename} was processed.")
+    except BadRequest as e:
         logger.error(e)
+        await update.message.reply_text("Sorry, it seems like the file is too big. Telegram limits file size to 20 MB. Please try again with a smaller file.")
+    except Exception as e:
+        if logger.level == logging.DEBUG:
+            logger.exception(e)
+        else:
+            logger.error(e)
         await update.message.reply_text("Sorry, something went wrong while processing the file.")
 
 ################################## Images #####################################################
@@ -869,6 +927,8 @@ def main() -> None:
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
     application.add_handler(CommandHandler("limit", limit_command))
+    application.add_handler(CommandHandler("delete_files", delete_files_command))
+    application.add_handler(CommandHandler("list_files", list_files_command))
 
     # image generation
     application.add_handler(CommandHandler("imagine", imagine_command))

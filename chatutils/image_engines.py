@@ -41,7 +41,7 @@ class DalleEngine:
             base_url=base_url,
         )
         import configparser
-        self.config = configparser.SafeConfigParser({
+        self.config = configparser.ConfigParser({
             "ImageGenModel": "dall-e-3",
             "ImageGenerationSize": "1024x1024",
             "ImageGenerationStyle": "vivid",
@@ -246,7 +246,7 @@ class StabilityEngine:
         import requests
         self.requests = requests
         import configparser
-        self.config = configparser.SafeConfigParser({
+        self.config = configparser.ConfigParser({
             "ImageGenURL": "https://api.stability.ai/v2beta/stable-image/generate/core",
             "ImageGenerationRatio": "1:1",
             "ImageGenerationPrice": 0,
@@ -474,7 +474,7 @@ class YandexEngine:
         import requests
         self.requests = requests
         import configparser
-        self.config = configparser.SafeConfigParser({
+        self.config = configparser.ConfigParser({
             "ImageGenModel": "yandex-art/latest",
             "ImageGenURL": "https://llm.api.cloud.yandex.net/foundationModels/v1/imageGenerationAsync",
             "ImageCheckURL": "https://llm.api.cloud.yandex.net:443/operations",
