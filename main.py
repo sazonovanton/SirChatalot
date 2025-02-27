@@ -444,8 +444,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
     if files_enabled:
         help_text += "Some files can be processed by the bot. Send a file to the bot to add it to the RAG database. Bot will take this information into account when answering your questions.\n"
-        help_text += "/list_files - List all files in RAG database\n"
-        help_text += "/delete_files - Delete all files\n"
+        help_text += "/listfiles - List all files in RAG database\n"
+        help_text += "/deletefiles - Delete all files\n"
     if gpt.function_calling:
         if gpt.webengine is not None:
             help_text += "\nYou can ask the bot to find something on the web. Just ask it to search for something. It will make request to a serach engine and will see a snippets of the first results. Example: `Find me a links to the best websites about cats.`\n"
@@ -948,8 +948,8 @@ def main() -> None:
     application.add_handler(CommandHandler("delete", delete_command))
     application.add_handler(CommandHandler("statistics", statistics_command))
     application.add_handler(CommandHandler("limit", limit_command))
-    application.add_handler(CommandHandler("delete_files", delete_files_command))
-    application.add_handler(CommandHandler("list_files", list_files_command))
+    application.add_handler(CommandHandler("deletefiles", delete_files_command))
+    application.add_handler(CommandHandler("listfiles", list_files_command))
 
     # image generation
     application.add_handler(CommandHandler("imagine", imagine_command))
