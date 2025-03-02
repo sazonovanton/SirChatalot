@@ -576,7 +576,7 @@ class ChatProc:
                     if messages[0]['role'] == 'system':
                         if '# Available files:' in messages[0]['content']:
                             messages[0]['content'] = messages[0]['content'].split('# Available files:')[0]
-                        messages[0]['content'] += f'\n# Available files: {available_docs[user_id_str]}'
+                        messages[0]['content'] += f'\n# Available files: {available_docs[user_id_str]}\n---\nUse semantic search to find information in the files when you think it can be there.'
                     else:
                         messages.insert(0, {"role": "system", "content": f'{self.system_message}\n# Available files: {available_docs[user_id_str]}'})
 
