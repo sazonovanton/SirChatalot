@@ -137,6 +137,7 @@ OpenAI:
 * OpenAI.ImageDescriptionOnDelete: Whether to replace image with it description after it was deleted (see `OpenAI.DeleteImageAfterAnswer`). Default: `False`.
 * OpenAI.FunctionCalling: Whether to use function calling capabilities (see section [Function calling](#function-calling)). Default: `False`.
 * OpenAI.SummarizeTooLong: Whether to summarize first set of messages if session is too long instead of deleting it. Default: `False`.
+* OpenAI.Proxy: The proxy for the OpenAI API. Optional. Default: `None`. It should be in the format `http://login:password@proxy:port`.  
 
 Files:
 * Files.Enabled: Whether to enable files support. Optional. Default: `True`.
@@ -458,9 +459,25 @@ FunctionCalling = True
 [Files]
 Enabled = True
 MaxFileSizeMB = 20
+
+[Files]
+Enabled = True
+MaxFileSizeMB = 150
+
+[Embeddings]
+SecretKey = ***
+Engine = OpenAI
+Model = text-embedding-3-small
+BaseURL = https://api.openai.com/v1
+
 ```
 * Files.Enabled: Whether to enable files support. Default: `True`.
 * Files.MaxFileSizeMB: The maximum file size in megabytes. Default: `20` (limited by Telegram).
+* Embeddings.SecretKey: The secret key for the Embeddings API (OpenAI). 
+* Embeddings.Model: The model to use for generating embeddings. Default: `text-embedding-3-small`.
+* Embeddings.BaseURL: The base URL for the Embeddings API. Default: `https://api.openai.com/v1`.
+* Embeddings.Proxy: The HTTP proxy for the Embeddings API. Default: `None`. It should be in the format `http://login:password@proxy:port`.  
+* Embeddings.Engine: The engine to use for generating embeddings. Default: `OpenAI`.
 
 ### How It Works
 1. When you send a file to the bot, it extracts the text content and adds file summary to system message.  
