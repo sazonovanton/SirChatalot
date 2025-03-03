@@ -443,7 +443,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
     if files_enabled and gpt.function_calling:
-        help_text += "Some files can be processed by the bot. Send a file to the bot to add it to the RAG database. Bot will take this information into account when answering your questions.\n"
+        help_text += "\nSome files can be processed by the bot. Send a file to the bot to add it to the RAG database. Bot will take this information into account when answering your questions.\n"
         help_text += "The implementation uses function calling to interact with the RAG database, making it more similar to an agent-based approach rather than a classic RAG system.\n"
         help_text += "/listfiles - List all files in RAG database\n"
         help_text += "/deletefiles - Delete all files\n"
@@ -517,6 +517,9 @@ async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYP
     user_id = update.effective_user.id
     user_folder = f'./data/files/{user_id}'
     try:
+        if not os.path.exists(user_folder):
+            await update.message.reply_text("No files found.")
+            return None
         for file in os.listdir(user_folder):
             file_path = os.path.join(user_folder, file)
             os.remove(file_path)
@@ -550,15 +553,21 @@ async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     user_id = update.effective_user.id
     try:
         user_files = await gpt.files_rag.user_files(user_id) # list of files - can be empty
+        common_files = await gpt.files_rag.user_files("common")
         if user_files is None:
             await update.message.reply_text("Sorry, something went wrong while listing files.")
             return None
-        if user_files == []:
-            await update.message.reply_text("No files found.")
-            return None
-        files_text = "📁 *Your Files:*\n\n"
-        for i, file in enumerate(user_files, 1):
-            files_text += f"{i}. 📄 `{file}`\n"
+        files_text = ""
+        if user_files != []:
+            files_text += "📁 *Your Files:*\n\n"
+            for i, file in enumerate(user_files, 1):
+                files_text += f"{i}. 📄 `{file}`\n"
+        if common_files != []:
+            files_text += "📁 *Common Files:*\n\n"
+            for i, file in enumerate(common_files, 1):
+                files_text += f"{i}. 📄 `{file}`\n"
+        if user_files == [] and common_files == []:
+            files_text = "No files found."
         await send_message(update, files_text, markdown=1)        
     except Exception as e:
         logger.exception(f'Error listing files for user {user_id}: {e}')
@@ -787,8 +796,8 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not processed:
             await update.message.reply_text("Sorry, something went wrong while processing the file into a RAG dataset.")
             return None
-        if len(text) > 8192:
-            text = text[:8192] + '...'
+        if len(text) > 4096:
+            text = text[:4096] + '...'
         summary, _ = await gpt.text_engine.summary(text, size=160)
 
         if os.path.exists('./data/files/files.json'):
@@ -944,6 +953,57 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 ###############################################################################################
 
+async def process_files_on_start(files_dir='./data/files/common'):
+    '''
+    Loads common files on startup to the RAG database
+    User 'common' is used to store files that are available to all users
+    '''
+    if not files_enabled or not gpt.function_calling:
+        return None
+    try:
+        if not os.path.exists(files_dir):
+            logger.info(f'Files directory {files_dir} not found.')
+            return None
+        
+        if not os.path.exists('./data/files/files.json'):
+            with codecs.open('./data/files/files.json', 'w', 'utf-8') as f:
+                json.dump({}, f)
+        with codecs.open('./data/files/files.json', 'r', 'utf-8') as f:
+            files = json.load(f)
+        if 'common' not in files:
+            files['common'] = {} 
+        logger.info(f'Files found in common directory: {len(os.listdir(files_dir))}; Processed: {len(files["common"])}')
+
+        for file in os.listdir(files_dir):
+            file_path = os.path.join(files_dir, file)
+
+            # Check if already processed
+            if file in files['common']:
+                if files['common'][file]['processed']:
+                    logger.info(f'- File {file} was already processed into RAG dataset (COMMON).')
+                    continue
+
+            text = await gpt.files_proc.convert_to_text(file_path)
+            if text is None:
+                logger.error(f'Could not convert file {file} to text (COMMON).')
+                continue
+            processed = await gpt.files_rag.process_text(text, user_id='common', filename=file)
+            if not processed:
+                logger.error(f'Could not process file {file} into RAG dataset (COMMON).')
+                continue
+            if len(text) > 4096:
+                text = text[:4096] + '...'
+            summary, _ = await gpt.text_engine.summary(text, size=160)
+
+            files['common'][file] = {'summary': summary, 'processed': processed}
+            with codecs.open('./data/files/files.json', 'w', 'utf-8') as f:
+                json.dump(files, f, ensure_ascii=False, indent=4)
+
+            logger.info(f'File {file} was processed into RAG dataset (COMMON).')
+    except Exception as e:
+        logger.exception(f'Error processing common files: {e}')
+        return None
+
 def main() -> None:
     '''
     Start the bot.
@@ -985,6 +1045,10 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.Document.Category('application/vnd.ms-powerpoint'), downloader))
     application.add_handler(MessageHandler(filters.Document.Category('application/vnd.openxmlformats-officedocument.presentationml.presentation'), downloader))
     application.add_handler(MessageHandler(filters.Document.Category('text/plain'), downloader))
+
+    # Process common files on start
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(process_files_on_start())
 
     # Run the bot until the Ctrl-C is pressed
     application.run_polling()

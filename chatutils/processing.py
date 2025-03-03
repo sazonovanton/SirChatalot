@@ -571,14 +571,23 @@ class ChatProc:
                     available_docs = {}
                     
                 user_id_str = str(id)
-                if user_id_str in available_docs:
+                if user_id_str in available_docs or 'common' in available_docs:
+                    add_text = '\n# Available files:\n'
+                    if user_id_str in available_docs:
+                        add_text += f'## User files: {available_docs[user_id_str]}\n'
+                    if 'common' in available_docs:
+                        add_text += f'## Common files: {available_docs["common"]}\n'
+                    add_text += '---\nUse semantic search to find information in the files when you think it can be there.'
                     # modify first message if it's role system
                     if messages[0]['role'] == 'system':
                         if '# Available files:' in messages[0]['content']:
                             messages[0]['content'] = messages[0]['content'].split('# Available files:')[0]
-                        messages[0]['content'] += f'\n# Available files: {available_docs[user_id_str]}\n---\nUse semantic search to find information in the files when you think it can be there.'
+                        messages[0]['content'] += add_text
                     else:
-                        messages.insert(0, {"role": "system", "content": f'{self.system_message}\n# Available files: {available_docs[user_id_str]}'})
+                        messages.insert(0, {"role": "system", "content": f'{self.system_message}\n{add_text}'})
+                    self.chats[id] = messages
+                    # save chat history to file
+                    pickle.dump(self.chats, open(self.chats_location, "wb"))
 
             # Trim or summarize messages if they are too long
             messages_tokens = await self.count_tokens(messages)

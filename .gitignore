@@ -170,5 +170,4 @@ moderation.txt
 *.bmp
 
 files.json
-data/files/test
-data/files/chromadb
+data/files/*
