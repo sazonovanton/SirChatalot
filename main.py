@@ -442,8 +442,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     help_text += "/imagine <prompt> - Generate an image\n" if IMAGE_GENERATION else ""
     help_text += "You can also send an image, bot has a multimodal chat functionality.\n" if VISION else ""
     help_text += "Bot will answer to your voice messages if you send them.\n" if SPEECH is not None else ""
-    if files_enabled:
+    if files_enabled and gpt.function_calling:
         help_text += "Some files can be processed by the bot. Send a file to the bot to add it to the RAG database. Bot will take this information into account when answering your questions.\n"
+        help_text += "The implementation uses function calling to interact with the RAG database, making it more similar to an agent-based approach rather than a classic RAG system.\n"
         help_text += "/listfiles - List all files in RAG database\n"
         help_text += "/deletefiles - Delete all files\n"
     if gpt.function_calling:
@@ -510,6 +511,9 @@ async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYP
     '''
     Delete all files from the user folder
     '''
+    if not files_enabled or not gpt.function_calling:
+        await update.message.reply_text("Sorry, working with files is not enabled.")
+        return None
     user_id = update.effective_user.id
     user_folder = f'./data/files/{user_id}'
     try:
@@ -540,6 +544,9 @@ async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     '''
     List all files associated with the user in the RAG database
     '''
+    if not files_enabled or not gpt.function_calling:
+        await update.message.reply_text("Sorry, working with files is not enabled.")
+        return None
     user_id = update.effective_user.id
     try:
         user_files = await gpt.files_rag.user_files(user_id) # list of files - can be empty
@@ -742,7 +749,10 @@ async def load_session_command(update: Update, context: ContextTypes.DEFAULT_TYP
 async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # check if file function is enabled
     if not files_enabled:
-        await update.message.reply_text("Sorry, working with files is not supported at the moment.")
+        await update.message.reply_text("Sorry, working with files is not enabled.")
+        return None
+    if not gpt.function_calling:
+        await update.message.reply_text("Sorry, function calling is not enabled.")
         return None
 
     global application
@@ -982,4 +992,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
