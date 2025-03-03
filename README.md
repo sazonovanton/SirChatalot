@@ -440,33 +440,42 @@ Here is a list of the fields in this example:
 * SystemMessage: The message that will shape your bot's personality. You will need some prompt engineering to make it work properly.
 
 ## Files
-Bot supports working with files (limited). You can send a file to the bot and it will send back a response based on the file's extracted text.  
-To use this functionality you should make some changes in configuration file. Example:  
+SirChatalot supports working with files through a Retrieval-Augmented Generation (RAG) system. When you send a supported file to the bot, it extracts the text content, processes it into semantic chunks, and stores these in a vector database. The bot can then use this information to provide more informed responses to your questions when needed (if function calling is enabled).  
+
+### Supported File Types
+Currently supported file types: `.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf`, `.txt`, `.md`, `.csv`, `.log`
+
+### Requirements
+- Install `catdoc` for `.doc` and `.ppt` files support and test it by calling `catdoc` in the terminal.
+
+### Configuration
+To enable file handling, add the following section to your `.config` file (example):
 ```ini
+[OpenAI]
 ...
+FunctionCalling = True
+
 [Files]
 Enabled = True
-MaxFileSizeMB = 10
-MaxSummaryTokens = 1000
-MaxFileLength = 10000
-DeleteAfterProcessing = True
-...
+MaxFileSizeMB = 20
 ```
+* Files.Enabled: Whether to enable files support. Default: `True`.
+* Files.MaxFileSizeMB: The maximum file size in megabytes. Default: `20` (limited by Telegram).
 
-Currently supported file types: `.docx`, `.doc`, `.pptx`, `.ppt`, `.pdf`, `.txt`.  
-If you use Linux - install `catdoc` for `.doc` and `.ppt` files support and test it calling `catdoc` in the terminal. `.doc` and `.ppt` files support won't work without it.  
-If you use Windows - install `comtypes` for `.doc` and `.ppt` files support with `pip install comtypes`.  
+### How It Works
+1. When you send a file to the bot, it extracts the text content and adds file summary to system message.  
+2. The text is intelligently split into overlapping chunks at natural boundaries.
+3. These chunks are embedded and stored in a ChromaDB vector database.
+4. When you ask questions, the bot can search this database for relevant information.
+5. If function calling is enabled, the bot can automatically search the database when it thinks information from your files might be helpful.
 
-Files temporarily stored in the `./data/files` directory. After successful processing, they are deleted if other behavior is not specified in the `./data/.config` file.  
-Maximum file size to work with is 20 MB (`python-telegram-bot` limitation), you can set your own limit in the `./data/.config` file (in MB), but it will be limited by the `python-telegram-bot` limit.  
-If file is too large, the bot will attempt to summarize it to the length of MaxTokens/2. You can set your own limit in the `./data/.config` file (in tokens - one token is ~4 characters).    
-You can also limit max file lenght (in characters) by setting the `Files.MaxFileLength` field in the `./data/.config` file (in tokens). It can be set because sumarization is made with API requests and it can be expensive.  
-Summarisation will happen by chunks of size `Files.MaxSummaryTokens` until the whole file is processed. Summary for chunks will be combined into one summary (maximum 3 itterations, then text is just cut).  
+The implementation uses function calling to interact with the RAG database, making it more similar to an agent-based approach rather than a classic RAG system. This allows the model to decide when and how to retrieve information from your files.
 
-By default this functionality is disabled.
+### Commands
+* `/listfiles` - List all files you've added to the RAG database
+* `/deletefiles` - Delete all your files from the RAG database
 
-> [!WARNING]
-> Files support will be changed in the future. Current implementation will be removed.
+Files are temporarily stored in the `./data/files` directory. After successful processing, they are deleted if `DeleteAfterProcessing` is set to `True` in the config file.
 
 ## Running the Bot
 To run the bot, simply run the command `python3 main.py`. The bot will start and will wait for messages. 
