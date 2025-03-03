@@ -471,6 +471,9 @@ MaxFileSizeMB = 20
 
 The implementation uses function calling to interact with the RAG database, making it more similar to an agent-based approach rather than a classic RAG system. This allows the model to decide when and how to retrieve information from your files.
 
+### Common files
+You can add files that will be accessible to all users. To do that, add files to the `./data/files/common` directory. They will be processed and added to the database on the bot start.  
+
 ### Commands
 * `/listfiles` - List all files you've added to the RAG database
 * `/deletefiles` - Delete all your files from the RAG database
