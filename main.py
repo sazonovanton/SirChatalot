@@ -556,10 +556,10 @@ async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if user_files == []:
             await update.message.reply_text("No files found.")
             return None
-        files_text = "Files:\n"
-        for file in user_files:
-            files_text += f"* {file}\n"
-        await update.message.reply_text(files_text)        
+        files_text = "📁 *Your Files:*\n\n"
+        for i, file in enumerate(user_files, 1):
+            files_text += f"{i}. 📄 `{file}`\n"
+        await send_message(update, files_text, markdown=1)        
     except Exception as e:
         logger.exception(f'Error listing files for user {user_id}: {e}')
         await update.message.reply_text("Sorry, something went wrong while listing files.")
