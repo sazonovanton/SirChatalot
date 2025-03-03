@@ -25,7 +25,6 @@ import tiktoken
 import asyncio
 import json
 
-
 ######## OpenAI Engine ########
 
 class OpenAIEngine:
@@ -38,8 +37,8 @@ class OpenAIEngine:
         import openai 
         self.openai = openai
         import configparser
-        self.config = configparser.SafeConfigParser({
-            "ChatModel": "gpt-3.5-turbo",
+        self.config = configparser.ConfigParser({
+            "ChatModel": "gpt-4o-mini",
             "ChatModelCompletionPrice": 0,
             "ChatModelPromptPrice": 0,
             "Temperature": 0.7,
@@ -63,11 +62,21 @@ class OpenAIEngine:
                 self.base_url = self.config.get("OpenAI", "APIBase")
             else:
                 self.base_url = None
+        # check if proxy is needed
+        self.proxy = None
+        if self.config.has_option("OpenAI", "Proxy"):
+            if str(self.config.get("OpenAI", "Proxy")).lower() not in ['default', '', 'none', 'false']:
+                self.proxy = self.config.get("OpenAI", "Proxy")
+            else:
+                self.proxy = None
+        if self.proxy is not None:
+            import httpx
+            http_client = httpx.AsyncClient(proxy=self.proxy)
         # Set up the API 
-        # TODO: working with other parameters
         self.client = AsyncOpenAI(
             api_key=self.config.get("OpenAI", "SecretKey"),
             base_url=self.base_url,
+            http_client=http_client if self.proxy is not None else None
         )
         self.text_initiation, self.speech_initiation = text, speech
         self.text_init() if self.text_initiation else None
@@ -207,13 +216,13 @@ class OpenAIEngine:
                 messages_tokens = 0
 
             user_id = hashlib.sha1(str(id).encode("utf-8")).hexdigest() if self.end_user_id else None
-            requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
-            requested_tokens = max(requested_tokens, 50)
+            # requested_tokens = min(self.max_tokens, self.max_tokens - messages_tokens)
+            # requested_tokens = max(requested_tokens, 50)
             if self.function_calling:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=requested_tokens,
+                        # max_tokens=requested_tokens,
                         messages=messages,
                         user=str(user_id),
                         tools=self.function_calling_tools,
@@ -229,7 +238,7 @@ class OpenAIEngine:
                 response = await self.client.chat.completions.create(
                         model=self.model,
                         temperature=self.temperature, 
-                        max_tokens=requested_tokens,
+                        # max_tokens=requested_tokens,
                         messages=messages,
                         user=str(user_id)
                 )
@@ -544,7 +553,7 @@ class YandexEngine:
         Initialize Yandex API for text generation
         '''
         import configparser
-        self.config = configparser.SafeConfigParser({
+        self.config = configparser.ConfigParser({
             "Endpoint": "https://llm.api.cloud.yandex.net/foundationModels/v1/completion",
             "ChatModel": "yandexgpt-lite/latest",
             "SummarisationModel": "summarization/latest",
@@ -833,7 +842,7 @@ class AnthropicEngine:
         import anthropic 
         self.anthropic = anthropic
         import configparser
-        self.config = configparser.SafeConfigParser({
+        self.config = configparser.ConfigParser({
             "ChatModel": "claude-3-haiku-20240307",
             "ChatModelCompletionPrice": 0,
             "ChatModelPromptPrice": 0,

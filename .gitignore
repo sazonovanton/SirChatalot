@@ -168,3 +168,6 @@ moderation.txt
 *.png
 *.gif
 *.bmp
+
+files.json
+data/files/*

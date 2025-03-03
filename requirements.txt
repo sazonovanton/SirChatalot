@@ -10,3 +10,6 @@ comtypes
 Pillow
 aiohttp
 BeautifulSoup4
+aiofiles
+chromadb
+PyMuPDF
