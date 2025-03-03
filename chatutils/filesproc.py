@@ -302,7 +302,7 @@ class FilesRAG:
 
         Parameters:
             text: text to search for
-            user_id: user id to filter results
+            user_id: user id to filter results (also searches for user_id = 'common')
             n_results: number of results to return
             filter: dictionary with filter conditions
             max_distance: maximum distance for search
@@ -310,16 +310,64 @@ class FilesRAG:
         Returns a list of results.
         """
         try:
-            where_clause = filter.copy() if filter else {}
-            where_clause["user_id"] = user_id
-
             vector, _ = await self.emb_engine.get_embeddings(text)
-            
-            result = self.collection.query(
+
+            where_clause = filter.copy() if filter else {}
+
+            # Query for user-specific content
+            where_clause["user_id"] = user_id
+            result_user = self.collection.query(
                 query_embeddings=[vector],
                 n_results=n_results,
                 where=where_clause
             )
+
+            # Query for common content
+            where_clause["user_id"] = "common"
+            result_common = self.collection.query(
+                query_embeddings=[vector],
+                n_results=n_results,
+                where=where_clause
+            )
+
+            # Initialize with the user results
+            result = {}
+            
+            # Function to safely initialize or extend lists
+            def init_or_extend(target_dict, key, source_dict):
+                if key in source_dict and source_dict[key] and len(source_dict[key]) > 0:
+                    if key not in target_dict or not target_dict[key]:
+                        target_dict[key] = source_dict[key]
+                    else:
+                        target_dict[key].extend(source_dict[key])
+
+            # Process user results
+            if result_user and all(key in result_user for key in ["ids", "embeddings", "documents", "metadatas", "distances"]):
+                for key in ["ids", "embeddings", "documents", "metadatas", "distances"]:
+                    init_or_extend(result, key, result_user)
+
+            # Process common results
+            if result_common and all(key in result_common for key in ["ids", "embeddings", "documents", "metadatas", "distances"]):
+                for key in ["ids", "embeddings", "documents", "metadatas", "distances"]:
+                    init_or_extend(result, key, result_common)
+
+            if not result or "ids" not in result or not result["ids"]:
+                logger.info("No results found for the given search.")
+                return []
+            
+            # Sort results based on distance
+            if all(key in result for key in ["ids", "embeddings", "documents", "metadatas", "distances"]):
+                # Create a list of tuples for sorting
+                combined = list(zip(result["ids"], result["embeddings"], result["documents"], 
+                                  result["metadatas"], result["distances"]))
+                # Sort by distance (5th element, index 4)
+                combined.sort(key=lambda x: x[4])
+                
+                # Unpack the sorted results
+                result["ids"], result["embeddings"], result["documents"], result["metadatas"], result["distances"] = \
+                    [list(item) for item in zip(*combined)]
+
+            logger.debug(f"Search results: {result}")
             return result
         except KeyboardInterrupt:
             logger.error("Search cancelled by user.")
