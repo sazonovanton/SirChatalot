@@ -40,7 +40,7 @@ class RateLimitConfig(StrictModel):
 class ModelSpec(StrictModel):
     name: str
     model: str
-    api_key: str
+    api_key: str = 'not-needed'  # keyless endpoints (Ollama, local vLLM) can omit this
     base_url: str | None = None
     # USD per 1M tokens
     prompt_price: float = 0.0
@@ -81,7 +81,7 @@ class ImageRateLimit(StrictModel):
 
 
 class ImageGenConfig(StrictModel):
-    api_key: str
+    api_key: str = 'not-needed'  # keyless endpoints (Ollama, local vLLM) can omit this
     base_url: str | None = None
     model: str = 'dall-e-3'
     # 'images' = the OpenAI images endpoint (/v1/images/generations: OpenAI, xAI,
@@ -103,7 +103,7 @@ class ImageGenConfig(StrictModel):
 
 
 class AudioConfig(StrictModel):
-    api_key: str
+    api_key: str = 'not-needed'  # keyless endpoints (Ollama, local vLLM) can omit this
     base_url: str | None = None
     model: str = 'whisper-1'
     # 'transcriptions' = the OpenAI audio endpoint (/v1/audio/transcriptions).
@@ -169,7 +169,7 @@ class WebConfig(StrictModel):
 
 
 class EmbeddingsConfig(StrictModel):
-    api_key: str
+    api_key: str = 'not-needed'  # keyless endpoints (Ollama, local vLLM) can omit this
     base_url: str | None = None
     model: str = 'text-embedding-3-small'
 

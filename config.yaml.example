@@ -32,10 +32,11 @@ models:
     completion_price: 15.0
     vision: true
     tools: true
+  # Keyless endpoints (Ollama, local vLLM) — api_key can be omitted entirely:
   # - name: local-llama
   #   model: llama3.1
   #   base_url: http://localhost:11434/v1
-  #   api_key: "unused"
+  #   tools: true
 
 default_model: gpt-4o-mini
 # On API errors/timeouts/rate limits the request is retried on these models in order.
