@@ -1,0 +1,236 @@
+'''
+Central configuration for SirChatalot.
+
+The whole application is configured by a single YAML file (default: ./data/config.yaml,
+override with the SIRCHATALOT_CONFIG environment variable). This module is the only
+place that reads it; everything else receives typed config objects via constructors.
+'''
+
+import os
+import sys
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+
+DEFAULT_CONFIG_PATH = './data/config.yaml'
+
+
+class ConfigError(Exception):
+    pass
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
+class TelegramConfig(StrictModel):
+    token: str
+    access_codes: list[str] = []
+    banlist_enabled: bool = False
+    reply_to_message: bool = False
+
+
+class RateLimitConfig(StrictModel):
+    window_seconds: int = Field(gt=0)
+    general_limit: int | None = Field(default=None, ge=0)
+    # per-user overrides; 0 means unlimited
+    user_overrides: dict[int, int] = {}
+
+
+class ModelSpec(StrictModel):
+    name: str
+    model: str
+    api_key: str
+    base_url: str | None = None
+    # USD per 1M tokens
+    prompt_price: float = 0.0
+    completion_price: float = 0.0
+    max_history_tokens: int = Field(default=16000, gt=0)
+    temperature: float = 0.7
+    vision: bool = False
+    tools: bool = False
+    timeout_seconds: float = Field(default=120.0, gt=0)
+    proxy: str | None = None
+
+
+class ChatConfig(StrictModel):
+    system_message: str = (
+        'You are a helpful assistant named Sir Chat-a-lot, '
+        'who answers in a style of a knight in the middle ages.'
+    )
+    summarize_too_long: bool = False
+    moderation: bool = False
+    image_size: int = Field(default=512, gt=0)
+    end_user_id: bool = True
+    max_session_length: int | None = Field(default=None, gt=0)
+
+
+class StyleConfig(StrictModel):
+    description: str
+    system_message: str
+
+
+class ImageRateLimit(StrictModel):
+    count: int = Field(gt=0)
+    window_seconds: int = Field(gt=0)
+
+
+class ImageGenConfig(StrictModel):
+    api_key: str
+    base_url: str | None = None
+    model: str = 'dall-e-3'
+    base_price: float = 0.0
+    size: str = '1024x1024'
+    style: str = 'vivid'
+    quality: str = 'standard'
+    rate_limit: ImageRateLimit | None = None
+
+
+class AudioConfig(StrictModel):
+    api_key: str
+    base_url: str | None = None
+    model: str = 'whisper-1'
+    price_per_minute: float = 0.0
+    format: str = 'mp3'
+    transcribe_only: bool = False
+
+
+class WebSearchConfig(StrictModel):
+    provider: str = 'google'
+    api_key: str
+    cse_id: str
+    results: int = Field(default=5, ge=1, le=10)
+
+    @field_validator('provider')
+    @classmethod
+    def _known_provider(cls, v):
+        if v.lower() != 'google':
+            raise ValueError(f'unknown web search provider: {v}')
+        return v.lower()
+
+
+class UrlOpenConfig(StrictModel):
+    enabled: bool = True
+    summarize: bool = False
+    trim_length: int | None = Field(default=3000, gt=0)
+
+
+class WebConfig(StrictModel):
+    search: WebSearchConfig | None = None
+    url_open: UrlOpenConfig | None = None
+
+
+class EmbeddingsConfig(StrictModel):
+    api_key: str
+    base_url: str | None = None
+    model: str = 'text-embedding-3-small'
+
+
+class FilesConfig(StrictModel):
+    embeddings: EmbeddingsConfig
+    max_file_size_mb: int = Field(default=20, gt=0, le=20)
+    chunk_size: int = Field(default=600, gt=0)
+    overlap_percent: float = Field(default=0.1, ge=0.0, lt=1.0)
+    max_distance: float = Field(default=1.0, gt=0)
+    search_results: int = Field(default=4, ge=1)
+
+
+class AgentConfig(StrictModel):
+    max_iterations: int = Field(default=5, ge=1)
+
+
+class LoggingConfig(StrictModel):
+    level: str = 'WARNING'
+    log_chats: bool = False
+
+    @field_validator('level')
+    @classmethod
+    def _valid_level(cls, v):
+        if v.upper() not in ('DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'):
+            raise ValueError(f'unknown logging level: {v}')
+        return v.upper()
+
+
+class AppConfig(StrictModel):
+    telegram: TelegramConfig
+    models: list[ModelSpec] = Field(min_length=1)
+    default_model: str
+    fallback_chain: list[str] = []
+    chat: ChatConfig = ChatConfig()
+    styles: dict[str, StyleConfig] = {}
+    rate_limit: RateLimitConfig | None = None
+    image_generation: ImageGenConfig | None = None
+    audio: AudioConfig | None = None
+    web: WebConfig | None = None
+    files: FilesConfig | None = None
+    agent: AgentConfig = AgentConfig()
+    logging: LoggingConfig = LoggingConfig()
+
+    @model_validator(mode='after')
+    def _check_model_names(self):
+        names = [m.name for m in self.models]
+        dupes = {n for n in names if names.count(n) > 1}
+        if dupes:
+            raise ValueError(f'duplicate model names: {", ".join(sorted(dupes))}')
+        if self.default_model not in names:
+            raise ValueError(f'default_model "{self.default_model}" is not defined in models')
+        for name in self.fallback_chain:
+            if name not in names:
+                raise ValueError(f'fallback_chain entry "{name}" is not defined in models')
+        return self
+
+    def model_spec(self, name: str) -> ModelSpec | None:
+        for spec in self.models:
+            if spec.name == name:
+                return spec
+        return None
+
+
+def config_path() -> str:
+    return os.environ.get('SIRCHATALOT_CONFIG', DEFAULT_CONFIG_PATH)
+
+
+def load_config(path: str | None = None) -> AppConfig:
+    path = path or config_path()
+    try:
+        with open(path, encoding='utf-8') as f:
+            raw = yaml.safe_load(f)
+    except FileNotFoundError:
+        raise ConfigError(
+            f'Config file not found: {path}\n'
+            f'Copy config.yaml.example to {DEFAULT_CONFIG_PATH} and fill in your keys.'
+        ) from None
+    except yaml.YAMLError as e:
+        raise ConfigError(f'Config file {path} is not valid YAML:\n{e}') from None
+    if not isinstance(raw, dict):
+        raise ConfigError(f'Config file {path} must contain a YAML mapping, got {type(raw).__name__}')
+    try:
+        return AppConfig.model_validate(raw)
+    except ValidationError as e:
+        lines = [f'Config file {path} is invalid:']
+        for err in e.errors():
+            loc = '.'.join(str(p) for p in err['loc']) or '<root>'
+            lines.append(f'  - {loc}: {err["msg"]}')
+        raise ConfigError('\n'.join(lines)) from None
+
+
+def main() -> int:
+    '''Validate the config file and print a short summary (python -m sirchatalot.config [path]).'''
+    path = sys.argv[1] if len(sys.argv) > 1 else None
+    try:
+        cfg = load_config(path)
+    except ConfigError as e:
+        print(e, file=sys.stderr)
+        return 1
+    print(f'Config OK: {path or config_path()}')
+    print(f'  models: {", ".join(m.name for m in cfg.models)} (default: {cfg.default_model})')
+    print(f'  fallback chain: {cfg.fallback_chain or "none"}')
+    for feature in ('rate_limit', 'image_generation', 'audio', 'web', 'files'):
+        state = 'enabled' if getattr(cfg, feature) is not None else 'disabled'
+        print(f'  {feature}: {state}')
+    print(f'  styles: {", ".join(cfg.styles) or "none"}')
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())

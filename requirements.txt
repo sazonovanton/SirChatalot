@@ -1,12 +1,12 @@
-python-telegram-bot>=20.1
-openai>=1.0.0
-anthropic
+python-telegram-bot>=21.0
+openai>=1.30.0
 tiktoken
+pydantic>=2.5
+PyYAML>=6.0
+aiosqlite>=0.19
 pydub>=0.25.1
-PyPDF2
 python-docx
 python-pptx
-comtypes
 Pillow
 aiohttp
 BeautifulSoup4

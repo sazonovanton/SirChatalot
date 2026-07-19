@@ -1,0 +1,118 @@
+# SirChatalot configuration.
+# Copy this file to ./data/config.yaml and fill in your keys.
+# Optional sections (rate_limit, image_generation, audio, web, files) can be removed
+# entirely to disable the corresponding feature.
+
+telegram:
+  token: "0000000000:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  # Users get whitelisted by sending one of these codes to the bot.
+  # Remove or leave empty to make the bot available to everyone.
+  access_codes: [whitelistcode, secondwhitelistcode]
+  banlist_enabled: false
+  reply_to_message: false
+
+# Any OpenAI-compatible API works: OpenAI, OpenRouter, Ollama, vLLM,
+# Anthropic/Yandex via their OpenAI-compatible endpoints, etc.
+# Prices are USD per 1M tokens (used only for the /statistics estimate).
+models:
+  - name: gpt-4o-mini
+    model: gpt-4o-mini
+    api_key: "sk-..."
+    prompt_price: 0.15
+    completion_price: 0.6
+    max_history_tokens: 16000
+    temperature: 0.7
+    vision: true
+    tools: true
+  - name: claude-sonnet
+    model: anthropic/claude-sonnet-4.5
+    base_url: https://openrouter.ai/api/v1
+    api_key: "sk-or-..."
+    prompt_price: 3.0
+    completion_price: 15.0
+    vision: true
+    tools: true
+  # - name: local-llama
+  #   model: llama3.1
+  #   base_url: http://localhost:11434/v1
+  #   api_key: "unused"
+
+default_model: gpt-4o-mini
+# On API errors/timeouts/rate limits the request is retried on these models in order.
+fallback_chain: [claude-sonnet]
+
+chat:
+  system_message: >-
+    You are a helpful assistant named Sir Chat-a-lot,
+    who answers in a style of a knight in the middle ages.
+  summarize_too_long: false   # summarize long history instead of trimming it
+  moderation: false           # check user messages with the OpenAI moderation API
+  image_size: 512             # long side for downscaling incoming photos (vision)
+  end_user_id: true           # pass a hashed user id to the API
+  # max_session_length: 15    # warn the user when the session gets this long
+
+# Bot personalities for the /style command.
+styles:
+  Alice:
+    description: Alice is empathetic and friendly
+    system_message: >-
+      You are an empathetic and friendly woman named Alice, who answers helpful, funny and a bit flirty.
+  Bob:
+    description: Bob is brutal and honest
+    system_message: >-
+      You are a brutal and honest man named Bob, who answers directly and without any sugarcoating.
+
+rate_limit:
+  window_seconds: 3600
+  general_limit: 100
+  # Per-user overrides (0 = unlimited).
+  user_overrides: {}
+  #   123456789: 500
+
+image_generation:
+  api_key: "sk-..."
+  # base_url: null
+  model: dall-e-3
+  base_price: 0.04            # USD per image, for /statistics
+  size: 1024x1024
+  style: vivid
+  quality: standard
+  rate_limit: {count: 16, window_seconds: 3600}
+
+audio:
+  api_key: "sk-..."
+  # base_url: null
+  model: whisper-1
+  price_per_minute: 0.006
+  format: mp3
+  transcribe_only: false      # true = reply with the transcript instead of answering
+
+web:
+  search:
+    provider: google
+    api_key: "..."
+    cse_id: "..."
+    results: 5
+  url_open:
+    enabled: true
+    summarize: false
+    trim_length: 3000
+
+# Document upload + agentic RAG (semantic search over uploaded files).
+files:
+  embeddings:
+    api_key: "sk-..."
+    # base_url: null
+    model: text-embedding-3-small
+  max_file_size_mb: 20
+  chunk_size: 600
+  overlap_percent: 0.1
+  max_distance: 1.0
+  search_results: 4
+
+agent:
+  max_iterations: 5
+
+logging:
+  level: WARNING
+  log_chats: false
