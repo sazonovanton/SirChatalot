@@ -56,19 +56,24 @@ def hashed_user(user_id) -> str:
     return hashlib.sha1(str(user_id).encode('utf-8')).hexdigest()
 
 
+def openai_http_client(proxy: str | None):
+    '''httpx client for AsyncOpenAI-based engines; None uses the SDK default.'''
+    if not proxy:
+        return None
+    import httpx
+    return httpx.AsyncClient(proxy=proxy)
+
+
 class LLMEngine:
-    def __init__(self, spec: ModelSpec):
+    def __init__(self, spec: ModelSpec, default_proxy: str | None = None):
         self.spec = spec
-        http_client = None
-        if spec.proxy:
-            import httpx
-            http_client = httpx.AsyncClient(proxy=spec.proxy)
+        self.proxy = spec.proxy or default_proxy
         self.client = AsyncOpenAI(
             api_key=spec.api_key,
             base_url=spec.base_url,
             timeout=spec.timeout_seconds,
             max_retries=1,
-            http_client=http_client,
+            http_client=openai_http_client(self.proxy),
         )
         try:
             self.encoding = tiktoken.encoding_for_model(spec.model.split('/')[-1])

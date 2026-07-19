@@ -15,9 +15,11 @@ logger = get_logger('audio')
 
 
 class AudioEngine:
-    def __init__(self, cfg: AudioConfig):
+    def __init__(self, cfg: AudioConfig, proxy: str | None = None):
         self.cfg = cfg
-        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        from sirchatalot.engine import openai_http_client
+        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url,
+                                  http_client=openai_http_client(proxy))
 
     async def duration_seconds(self, file_path: str) -> float:
         from pydub import AudioSegment

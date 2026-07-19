@@ -9,9 +9,11 @@ logger = get_logger('embeddings')
 
 
 class EmbeddingsEngine:
-    def __init__(self, cfg: EmbeddingsConfig):
+    def __init__(self, cfg: EmbeddingsConfig, proxy: str | None = None):
         self.cfg = cfg
-        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        from sirchatalot.engine import openai_http_client
+        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url,
+                                  http_client=openai_http_client(proxy))
 
     async def get_embeddings(self, texts: list[str]) -> list[list[float]]:
         '''Embeddings for a list of texts. Raises on failure.'''

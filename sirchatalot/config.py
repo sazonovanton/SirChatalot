@@ -155,6 +155,15 @@ class FilesConfig(StrictModel):
     search_results: int = Field(default=4, ge=1)
 
 
+class ProxiesConfig(StrictModel):
+    '''HTTP(S) proxy URLs per traffic kind (e.g. http://user:pass@host:3128).'''
+    telegram: str | None = None   # Bot API traffic
+    llm: str | None = None        # all OpenAI-compatible calls (chat, images,
+                                  # audio, embeddings); ModelSpec.proxy overrides per model
+    search: str | None = None     # web search providers
+    jina: str | None = None       # URL opening: Jina Reader and the direct fallback
+
+
 class AgentConfig(StrictModel):
     max_iterations: int = Field(default=5, ge=1)
 
@@ -214,6 +223,7 @@ class AppConfig(StrictModel):
     files: FilesConfig | None = None
     memory: MemoryConfig | None = None
     mcp_servers: list[McpServerConfig] = []
+    proxies: ProxiesConfig = ProxiesConfig()
     agent: AgentConfig = AgentConfig()
     logging: LoggingConfig = LoggingConfig()
 

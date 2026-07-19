@@ -19,7 +19,8 @@ class AllModelsFailedError(Exception):
 
 class ModelRegistry:
     def __init__(self, cfg: AppConfig, db: Database):
-        self.engines = {spec.name: LLMEngine(spec) for spec in cfg.models}
+        self.engines = {spec.name: LLMEngine(spec, default_proxy=cfg.proxies.llm)
+                        for spec in cfg.models}
         self.default = cfg.default_model
         self.fallback_chain = cfg.fallback_chain
         self.db = db

@@ -48,21 +48,22 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
     image_engine = None
     if cfg.image_generation is not None:
         from sirchatalot.media.images import ImageEngine
-        image_engine = ImageEngine(cfg.image_generation, end_user_id=cfg.chat.end_user_id)
+        image_engine = ImageEngine(cfg.image_generation, end_user_id=cfg.chat.end_user_id,
+                                   proxy=cfg.proxies.llm)
 
     audio_engine = None
     if cfg.audio is not None:
         from sirchatalot.media.audio import AudioEngine
-        audio_engine = AudioEngine(cfg.audio)
+        audio_engine = AudioEngine(cfg.audio, proxy=cfg.proxies.llm)
 
     web_search = None
     url_opener = None
     if cfg.web is not None:
         from sirchatalot.tools.web import UrlOpener, make_search_engine
         if cfg.web.search is not None:
-            web_search = make_search_engine(cfg.web.search)
+            web_search = make_search_engine(cfg.web.search, proxy=cfg.proxies.search)
         if cfg.web.url_open is not None and cfg.web.url_open.enabled:
-            url_opener = UrlOpener(cfg.web.url_open)
+            url_opener = UrlOpener(cfg.web.url_open, proxy=cfg.proxies.jina)
 
     files_proc = None
     files_rag = None
@@ -71,7 +72,8 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
         from sirchatalot.files.extract import FilesProcessor
         from sirchatalot.files.rag import FilesRAG
         files_proc = FilesProcessor()
-        files_rag = FilesRAG(cfg.files, EmbeddingsEngine(cfg.files.embeddings))
+        files_rag = FilesRAG(cfg.files, EmbeddingsEngine(cfg.files.embeddings,
+                                                         proxy=cfg.proxies.llm))
 
     memory = None
     if cfg.memory is not None:
@@ -205,10 +207,13 @@ def run() -> None:
             await mcp_manager.stop()
         await db.close()
 
-    application = (Application.builder()
-                   .token(cfg.telegram.token)
-                   .post_init(post_init)
-                   .post_shutdown(post_shutdown)
-                   .build())
+    builder = (Application.builder()
+               .token(cfg.telegram.token)
+               .post_init(post_init)
+               .post_shutdown(post_shutdown))
+    if cfg.proxies.telegram:
+        builder = (builder.proxy(cfg.proxies.telegram)
+                   .get_updates_proxy(cfg.proxies.telegram))
+    application = builder.build()
     register_handlers(application)
     application.run_polling()

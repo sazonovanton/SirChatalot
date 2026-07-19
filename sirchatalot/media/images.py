@@ -27,10 +27,13 @@ def _is_dalle(model: str) -> bool:
 
 
 class ImageEngine:
-    def __init__(self, cfg: ImageGenConfig, end_user_id: bool = True):
+    def __init__(self, cfg: ImageGenConfig, end_user_id: bool = True,
+                 proxy: str | None = None):
         self.cfg = cfg
         self.end_user_id = end_user_id
-        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url)
+        from sirchatalot.engine import openai_http_client
+        self.client = AsyncOpenAI(api_key=cfg.api_key, base_url=cfg.base_url,
+                                  http_client=openai_http_client(proxy))
         self._rate_events: dict[int, list[float]] = {}
 
     def rate_limited(self, user_id) -> bool:

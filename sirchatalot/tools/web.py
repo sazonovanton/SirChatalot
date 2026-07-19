@@ -31,8 +31,9 @@ BROWSER_HEADERS = {
 class SearchEngine:
     '''Base for web search providers: fetch JSON, parse into title/link/snippet.'''
 
-    def __init__(self, cfg: WebSearchConfig):
+    def __init__(self, cfg: WebSearchConfig, proxy: str | None = None):
         self.cfg = cfg
+        self.proxy = proxy
 
     async def search(self, query: str) -> list[dict] | None:
         try:
@@ -55,7 +56,7 @@ class GoogleSearch(SearchEngine):
         params = {'key': self.cfg.api_key, 'cx': self.cfg.cse_id,
                   'q': query, 'num': self.cfg.results}
         async with session.get('https://www.googleapis.com/customsearch/v1',
-                               params=params) as response:
+                               params=params, proxy=self.proxy) as response:
             return await response.json()
 
     def _parse(self, data):
@@ -67,7 +68,7 @@ class SearxngSearch(SearchEngine):
     async def _fetch(self, session, query):
         params = {'q': query, 'format': 'json'}
         async with session.get(f'{self.cfg.url.rstrip("/")}/search',
-                               params=params) as response:
+                               params=params, proxy=self.proxy) as response:
             return await response.json()
 
     def _parse(self, data):
@@ -81,7 +82,7 @@ class TavilySearch(SearchEngine):
         payload = {'api_key': self.cfg.api_key, 'query': query,
                    'max_results': self.cfg.results}
         async with session.post('https://api.tavily.com/search',
-                                json=payload) as response:
+                                json=payload, proxy=self.proxy) as response:
             return await response.json()
 
     def _parse(self, data):
@@ -96,7 +97,8 @@ class BraveSearch(SearchEngine):
                    'Accept': 'application/json'}
         params = {'q': query, 'count': self.cfg.results}
         async with session.get('https://api.search.brave.com/res/v1/web/search',
-                               params=params, headers=headers) as response:
+                               params=params, headers=headers,
+                               proxy=self.proxy) as response:
             return await response.json()
 
     def _parse(self, data):
@@ -113,8 +115,8 @@ SEARCH_PROVIDERS = {
 }
 
 
-def make_search_engine(cfg: WebSearchConfig) -> SearchEngine:
-    return SEARCH_PROVIDERS[cfg.provider](cfg)
+def make_search_engine(cfg: WebSearchConfig, proxy: str | None = None) -> SearchEngine:
+    return SEARCH_PROVIDERS[cfg.provider](cfg, proxy=proxy)
 
 
 def _host_is_private(host: str) -> bool:
@@ -152,8 +154,9 @@ class _SafeResolver(aiohttp.abc.AbstractResolver):
 
 
 class UrlOpener:
-    def __init__(self, cfg: UrlOpenConfig):
+    def __init__(self, cfg: UrlOpenConfig, proxy: str | None = None):
         self.cfg = cfg
+        self.proxy = proxy
 
     async def check_url(self, url: str) -> str | None:
         '''Returns a rejection reason, or None if the URL is safe to fetch.'''
@@ -186,7 +189,7 @@ class UrlOpener:
         try:
             async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
                 async with session.get(f'https://r.jina.ai/{url}',
-                                       headers=headers) as response:
+                                       headers=headers, proxy=self.proxy) as response:
                     if response.status != 200:
                         logger.warning(f'Jina Reader returned {response.status} for {url}')
                         return None
@@ -201,7 +204,10 @@ class UrlOpener:
 
     async def _open_direct(self, url: str) -> str | None:
         try:
-            connector = aiohttp.TCPConnector(resolver=_SafeResolver())
+            # with a proxy the target DNS is resolved by the proxy, so the
+            # rebinding-safe resolver only applies to direct connections
+            connector = (aiohttp.TCPConnector(resolver=_SafeResolver())
+                         if not self.proxy else None)
             async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT,
                                              connector=connector) as session:
                 # follow redirects manually so every hop is validated BEFORE it is fetched
@@ -211,7 +217,8 @@ class UrlOpener:
                         logger.warning(f'URL rejected ({reason}): {url}')
                         return None
                     async with session.get(url, allow_redirects=False,
-                                           headers=BROWSER_HEADERS) as response:
+                                           headers=BROWSER_HEADERS,
+                                           proxy=self.proxy) as response:
                         if response.status in (301, 302, 303, 307, 308):
                             location = response.headers.get('Location')
                             if not location:

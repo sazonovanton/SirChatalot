@@ -144,6 +144,14 @@ files:
   max_distance: 1.0
   search_results: 4
 
+# HTTP proxies per traffic kind (all optional). Format: http://user:pass@host:port
+proxies:
+  telegram: null   # Telegram Bot API traffic
+  llm: null        # all OpenAI-compatible calls (chat/images/audio/embeddings);
+                   # a per-model `proxy` in models[] overrides this
+  search: null     # web search providers
+  jina: null       # URL opening (Jina Reader and the direct fallback)
+
 agent:
   max_iterations: 5
 

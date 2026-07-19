@@ -100,6 +100,11 @@ mcp_servers:
 
 Each user can toggle individual built-in tools and whole MCP servers with `/tools`.
 
+HTTP proxies can be set per traffic kind in the `proxies` section — `telegram`
+(Bot API), `llm` (all OpenAI-compatible calls; a per-model `proxy` in `models[]`
+overrides it), `search` (search providers) and `jina` (URL opening, both the
+Jina Reader and the direct fallback). Format: `http://user:pass@host:port`.
+
 Web search (`web.search`) supports four providers: `google` (api_key + cse_id),
 `searxng` (instance `url`), `tavily` (api_key), `brave` (api_key). URL opening
 (`web.url_open`) fetches pages through the [Jina Reader](https://jina.ai/reader)
