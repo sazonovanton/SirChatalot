@@ -105,6 +105,8 @@ class ImageEngine:
 
     async def _generate(self, prompt, size, style, quality, user_id):
         try:
+            if self.cfg.api == 'chat':
+                return await self._generate_via_chat(prompt)
             kwargs = {}
             if self.end_user_id and user_id is not None:
                 kwargs['user'] = hashed_user(user_id)
@@ -127,3 +129,39 @@ class ImageEngine:
         except Exception:
             logger.exception('Could not generate image')
             return None, None
+
+    async def _generate_via_chat(self, prompt):
+        '''Image generation through chat completions with modalities
+        (the OpenRouter way for models like google/gemini-2.5-flash-image).'''
+        response = await self.client.chat.completions.create(
+            model=self.cfg.model,
+            messages=[{'role': 'user', 'content': prompt}],
+            extra_body={'modalities': ['image', 'text']},
+        )
+        message = response.choices[0].message
+        b64 = extract_b64_from_chat_message(message)
+        caption = (message.content or '').strip() or None
+        if b64 is None:
+            logger.error(f'Chat image generation returned no image '
+                         f'(model {self.cfg.model}): {caption}')
+            return None, caption
+        return b64, caption
+
+
+def extract_b64_from_chat_message(message) -> str | None:
+    '''Pull the first base64 image out of a chat message with an `images` field
+    (data URLs like data:image/png;base64,...).'''
+    images = getattr(message, 'images', None)
+    if not images and getattr(message, 'model_extra', None):
+        images = message.model_extra.get('images')
+    if not images:
+        return None
+    first = images[0]
+    if not isinstance(first, dict):
+        first = getattr(first, 'model_dump', lambda: {})()
+    url = ((first.get('image_url') or {}).get('url')
+           if isinstance(first.get('image_url'), dict) else first.get('url', ''))
+    if not url or not url.startswith('data:'):
+        return None
+    _, _, payload = url.partition('base64,')
+    return payload or None

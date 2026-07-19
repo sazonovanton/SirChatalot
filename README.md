@@ -109,7 +109,13 @@ Web search (`web.search`) supports four providers: `google` (api_key + cse_id),
 `searxng` (instance `url`), `tavily` (api_key), `brave` (api_key). URL opening
 (`web.url_open`) fetches pages through the [Jina Reader](https://jina.ai/reader)
 by default (`via_jina: true`, optional `jina_api_key`) and falls back to a direct
-SSRF-guarded fetch when Jina is unavailable.
+SSRF-guarded fetch when Jina is unavailable. Set `via_jina: false` for fully local
+operation: pages are extracted with trafilatura (main content as clean markdown,
+boilerplate stripped).
+
+Image generation works with the OpenAI images endpoint (`api: images` — OpenAI,
+xAI, Together...) or through chat completions (`api: chat`) for OpenRouter image
+models such as `google/gemini-2.5-flash-image`.
 
 ## Access control and limits
 

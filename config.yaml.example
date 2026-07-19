@@ -95,6 +95,12 @@ image_generation:
   api_key: "sk-..."
   # base_url: null
   model: dall-e-3
+  api: images                 # images = OpenAI images endpoint (OpenAI, xAI, Together...)
+  # OpenRouter image models work through chat completions instead:
+  # api: chat
+  # model: google/gemini-2.5-flash-image
+  # base_url: https://openrouter.ai/api/v1
+  # api_key: "sk-or-..."
   base_price: 0.04            # USD per image, for /statistics
   size: 1024x1024
   style: vivid

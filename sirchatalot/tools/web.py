@@ -21,6 +21,19 @@ logger = get_logger('web')
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+
+async def read_capped(response, cap: int = MAX_RESPONSE_BYTES) -> bytes:
+    '''Read the full body up to `cap` bytes. (StreamReader.read(n) returns the
+    first buffered chunk only, which silently truncates pages.)'''
+    chunks = []
+    total = 0
+    async for chunk in response.content.iter_chunked(64 * 1024):
+        chunks.append(chunk)
+        total += len(chunk)
+        if total >= cap:
+            break
+    return b''.join(chunks)[:cap]
 # many sites (e.g. Wikipedia) reject the default python client User-Agent
 BROWSER_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
@@ -193,7 +206,7 @@ class UrlOpener:
                     if response.status != 200:
                         logger.warning(f'Jina Reader returned {response.status} for {url}')
                         return None
-                    raw = await response.content.read(MAX_RESPONSE_BYTES)
+                    raw = await read_capped(response)
             text = raw.decode('utf-8', errors='replace').strip()
             if self.cfg.trim_length is not None:
                 text = text[:self.cfg.trim_length]
@@ -228,7 +241,7 @@ class UrlOpener:
                         if response.status >= 400:
                             logger.warning(f'URL returned {response.status}: {url}')
                             return None
-                        raw = await response.content.read(MAX_RESPONSE_BYTES)
+                        raw = await read_capped(response)
                     return self._parse(raw)
             logger.warning(f'Too many redirects for URL: {url}')
             return None
@@ -237,19 +250,36 @@ class UrlOpener:
             return None
 
     def _parse(self, raw: bytes) -> str | None:
+        '''Extract LLM-friendly text: trafilatura (main content as markdown)
+        with a crude BeautifulSoup fallback.'''
+        text = None
+        try:
+            import trafilatura
+            text = trafilatura.extract(
+                raw.decode('utf-8', errors='replace'),
+                output_format='markdown', include_links=False, include_tables=True,
+            )
+        except Exception as e:
+            logger.warning(f'trafilatura extraction failed: {e}')
+        if not text:
+            text = self._parse_bs4(raw)
+        if not text:
+            return None
+        if self.cfg.trim_length is not None:
+            text = text[:self.cfg.trim_length]
+        return text if len(text) >= 5 else None
+
+    def _parse_bs4(self, raw: bytes) -> str | None:
         try:
             soup = BeautifulSoup(raw, 'html.parser')
             body = soup.find('body')
             if body is None:
                 return None
-            text = '\n'.join(
+            return '\n'.join(
                 tag.get_text().strip()
                 for tag in body.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'a',
                                           'li', 'ul', 'ol', 'blockquote'])
             ).replace('\n', ' ')
-            if self.cfg.trim_length is not None:
-                text = text[:self.cfg.trim_length]
-            return text if len(text) >= 5 else None
         except Exception as e:
             logger.error(f'Error while parsing URL content: {e}')
             return None

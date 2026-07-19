@@ -84,11 +84,22 @@ class ImageGenConfig(StrictModel):
     api_key: str
     base_url: str | None = None
     model: str = 'dall-e-3'
+    # 'images' = the OpenAI images endpoint (/v1/images/generations: OpenAI, xAI,
+    # Together...). 'chat' = image generation through chat completions with
+    # modalities (OpenRouter image models like google/gemini-2.5-flash-image).
+    api: str = 'images'
     base_price: float = 0.0
     size: str = '1024x1024'
     style: str = 'vivid'
     quality: str = 'standard'
     rate_limit: ImageRateLimit | None = None
+
+    @field_validator('api')
+    @classmethod
+    def _known_api(cls, v):
+        if v not in ('images', 'chat'):
+            raise ValueError(f'image_generation.api must be "images" or "chat", got: {v}')
+        return v
 
 
 class AudioConfig(StrictModel):
