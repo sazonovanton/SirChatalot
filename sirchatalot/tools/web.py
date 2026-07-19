@@ -71,20 +71,25 @@ class UrlOpener:
         return None
 
     async def open_url(self, url: str) -> str | None:
-        reason = await self.check_url(url)
-        if reason is not None:
-            logger.warning(f'URL rejected ({reason}): {url}')
-            return None
         try:
             async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
-                async with session.get(url, max_redirects=3, allow_redirects=True) as response:
-                    # re-check the final URL after redirects
-                    final = str(response.url)
-                    if final != url and await self.check_url(final) is not None:
-                        logger.warning(f'URL redirect rejected: {url} -> {final}')
+                # follow redirects manually so every hop is validated BEFORE it is fetched
+                for _ in range(4):
+                    reason = await self.check_url(url)
+                    if reason is not None:
+                        logger.warning(f'URL rejected ({reason}): {url}')
                         return None
-                    raw = await response.content.read(MAX_RESPONSE_BYTES)
-            return self._parse(raw)
+                    async with session.get(url, allow_redirects=False) as response:
+                        if response.status in (301, 302, 303, 307, 308):
+                            location = response.headers.get('Location')
+                            if not location:
+                                return None
+                            url = str(response.url.join(aiohttp.client.URL(location)))
+                            continue
+                        raw = await response.content.read(MAX_RESPONSE_BYTES)
+                    return self._parse(raw)
+            logger.warning(f'Too many redirects for URL: {url}')
+            return None
         except Exception as e:
             logger.error(f'Error while opening URL {url}: {e}')
             return None
