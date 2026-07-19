@@ -1,0 +1,11 @@
+services:
+  sirchatalot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: sazonovanton/sirchatalot:latest
+    container_name: SirChatalot
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    restart: unless-stopped

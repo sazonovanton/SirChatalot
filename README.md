@@ -345,12 +345,22 @@ Uploaded files go to `./data/files/<user_id>/`, the ChromaDB vector store lives 
 
 ## Docker
 
+Run the published image ([`sazonovanton/sirchatalot`](https://hub.docker.com/r/sazonovanton/sirchatalot)):
+
 ```
-docker compose up -d --build
+docker compose up -d
 ```
 
-The compose file mounts `./data` and `./logs`. The image includes ffmpeg (voice)
-and catdoc (legacy `.doc`/`.ppt` conversion).
+Or build from source:
+
+```
+docker compose -f docker-compose.build.yml up -d --build
+```
+
+Both compose files mount `./data` (config, database, files) and `./logs`. The
+image includes ffmpeg (voice) and catdoc (legacy `.doc`/`.ppt` conversion); for
+npx-based stdio MCP servers uncomment the nodejs block in the Dockerfile and
+build your own image.
 
 ## Development
 
