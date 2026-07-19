@@ -31,7 +31,10 @@ class ChatManager:
         self.web_search = web_search
         self.url_opener = url_opener
         self.files_rag = files_rag
-        self.pending_images: dict[int, bool] = {}
+        if cfg.chat.moderation and self.registry.engines[self.registry.default].spec.base_url:
+            logger.warning('Moderation is enabled but the default model does not use '
+                           'api.openai.com — moderation calls will likely fail and be '
+                           'treated as pass.')
 
     # ---- system message ----
 
@@ -41,9 +44,8 @@ class ChatManager:
             return self.cfg.styles[style_name].system_message
         return self.cfg.chat.system_message
 
-    async def _build_system_message(self, user_id: int) -> str:
+    async def _build_system_message(self, user_id: int, spec) -> str:
         text = await self._base_system_message(user_id)
-        spec = await self.registry.spec_for_user(user_id)
         if spec.vision:
             text += '\n# You have vision capabilities enabled'
         if spec.tools:
@@ -70,20 +72,33 @@ class ChatManager:
                      'when you think it can be there.')
         return '\n'.join(lines)
 
-    async def _prepare_history(self, user_id: int) -> list:
+    async def _prepare_history(self, user_id: int, spec=None) -> list:
+        if spec is None:
+            spec = await self.registry.spec_for_user(user_id)
         messages = await self.db.get_history(user_id) or []
-        system = {'role': 'system', 'content': await self._build_system_message(user_id)}
+        system = {'role': 'system',
+                  'content': await self._build_system_message(user_id, spec)}
         if messages and messages[0].get('role') == 'system':
             messages[0] = system
         else:
             messages.insert(0, system)
         return messages
 
+    @staticmethod
+    def _awaiting_caption(messages: list) -> bool:
+        '''True when the last message is a user photo without any text yet.'''
+        if not messages:
+            return False
+        last = messages[-1]
+        content = last.get('content')
+        return (last.get('role') == 'user' and isinstance(content, list)
+                and any(p.get('type') == 'image_url' for p in content)
+                and not any(p.get('type') == 'text' for p in content))
+
     # ---- history size management ----
 
-    async def _shrink_if_needed(self, user_id: int, messages: list) -> tuple[list, Usage]:
+    async def _shrink_if_needed(self, engine, messages: list) -> tuple[list, Usage]:
         usage = Usage()
-        engine = await self.registry.engine_for_user(user_id)
         limit = engine.spec.max_history_tokens
         if engine.count_tokens(messages) <= limit:
             return messages, usage
@@ -105,6 +120,17 @@ class ChatManager:
         if len(messages) <= leave + 1:
             return messages, Usage()
         head, middle, tail = messages[0], messages[1:-leave], messages[-leave:]
+        # a role:"tool" message must follow its assistant tool_calls message;
+        # move orphaned tool plumbing from the kept tail into the summarized middle
+        while tail and (
+            tail[0].get('role') == 'tool'
+            or (tail[0].get('tool_calls')
+                and sum(1 for m in tail[1:] if m.get('role') == 'tool')
+                < len(tail[0]['tool_calls']))
+        ):
+            middle.append(tail.pop(0))
+        if not tail:
+            return messages, Usage()
         text = '\n'.join(f"{m.get('role')}: {message_text(m)}" for m in middle)
         try:
             summary, usage = await summary_engine(self.registry).summary(text)
@@ -142,14 +168,14 @@ class ChatManager:
                          'Please try again.',
                     messages=[], spec=await self.registry.spec_for_user(user_id))
 
-            messages = await self._prepare_history(user_id)
-            if self.pending_images.pop(user_id, None) and isinstance(
-                    messages[-1].get('content'), list):
+            engine = await self.registry.engine_for_user(user_id)
+            messages = await self._prepare_history(user_id, engine.spec)
+            if self._awaiting_caption(messages):
                 messages[-1]['content'].append({'type': 'text', 'text': text})
             else:
                 messages.append({'role': 'user', 'content': text})
 
-            messages, extra_usage = await self._shrink_if_needed(user_id, messages)
+            messages, extra_usage = await self._shrink_if_needed(engine, messages)
 
             ctx = ToolContext(
                 user_id=user_id, user_message=text,
@@ -164,8 +190,10 @@ class ChatManager:
                 user_id, messages, self.registry, tool_registry, ctx,
                 max_iterations=self.cfg.agent.max_iterations,
                 end_user=str(user_id) if self.cfg.chat.end_user_id else None,
+                primary=engine,
             )
             outcome.usage += extra_usage
+            outcome.cost_usd += extra_usage.cost(engine.spec)
             outcome.text = self._session_length_note(outcome)
             await self.db.save_history(user_id, outcome.messages)
             await self.db.add_stats(
@@ -173,13 +201,16 @@ class ChatManager:
                 prompt_tokens=outcome.usage.prompt_tokens,
                 completion_tokens=outcome.usage.completion_tokens,
                 images_generated=outcome.images_generated,
-                cost_usd=outcome.usage.cost(outcome.spec)
+                cost_usd=outcome.cost_usd
                 + outcome.images_generated * self._image_price(),
             )
             return outcome
         except AllModelsFailedError as e:
             logger.error(f'All models failed for user {user_id}: {e}')
-            return None
+            return AgentOutcome(
+                text='The AI service is currently unavailable or rate limited. '
+                     'Please try again later.',
+                messages=[], spec=await self.registry.spec_for_user(user_id))
         except Exception:
             logger.exception(f'Could not process message from user {user_id}')
             return None
@@ -236,7 +267,6 @@ class ChatManager:
                              'image_url': {'url': f'data:image/jpeg;base64,{image_b64}'}}],
             })
             await self.db.save_history(user_id, messages)
-            self.pending_images[user_id] = True
             return True
         except Exception:
             logger.exception(f'Could not add image for user {user_id}')
@@ -262,7 +292,6 @@ class ChatManager:
     async def delete_chat(self, user_id: int) -> bool:
         if self.cfg.logging.log_chats:
             await self._dump_chat(user_id)
-        self.pending_images.pop(user_id, None)
         return await self.db.delete_history(user_id)
 
     async def _dump_chat(self, user_id: int) -> None:

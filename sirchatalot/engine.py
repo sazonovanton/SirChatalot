@@ -52,7 +52,7 @@ class ChatResult:
     finish_reason: str = 'stop'
 
 
-def _hashed_user(user_id) -> str:
+def hashed_user(user_id) -> str:
     return hashlib.sha1(str(user_id).encode('utf-8')).hexdigest()
 
 
@@ -87,7 +87,7 @@ class LLMEngine:
             kwargs['tools'] = tools
             kwargs['tool_choice'] = tool_choice or 'auto'
         if end_user is not None:
-            kwargs['user'] = _hashed_user(end_user)
+            kwargs['user'] = hashed_user(end_user)
         if max_tokens is not None:
             kwargs['max_tokens'] = max_tokens
         try:
@@ -146,11 +146,18 @@ class LLMEngine:
             logger.error(f'Moderation check failed ({self.spec.name}): {e}')
             return None
 
+    # rough per-image budget so histories with photos still get trimmed
+    IMAGE_TOKENS = 1000
+
     def count_tokens(self, messages: list) -> int:
         tokens = 0
         for message in messages:
             text = f"{message.get('role', '')}: {message_text(message)}"
             tokens += len(self.encoding.encode(text))
+            content = message.get('content')
+            if isinstance(content, list):
+                tokens += self.IMAGE_TOKENS * sum(
+                    1 for p in content if p.get('type') == 'image_url')
         return tokens
 
 

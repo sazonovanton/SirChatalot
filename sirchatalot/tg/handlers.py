@@ -279,7 +279,8 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     await context.bot.send_chat_action(chat_id=update.effective_chat.id,
                                        action=ChatAction.TYPING)
-    prompt = update.message.text.removeprefix('/imagine').strip()
+    # strip the command itself, including the /imagine@botname group-chat form
+    prompt = re.sub(r'^/\w+(@\w+)?\s*', '', update.message.text).strip()
     image_bytes, text = await services.chat.imagine(update.effective_user.id, prompt)
     if image_bytes is None:
         await update.effective_message.reply_text(text or GENERIC_ERROR)
@@ -327,7 +328,12 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             return
         summary = await services.chat.summarize_text(text[:4096]) or ''
         await services.db.upsert_file(str(user_id), filename, summary, True)
-        await progress.edit_text(f'File {filename} was processed.\n\nSummary:\n{summary}')
+        note = ''
+        spec = await services.registry.spec_for_user(user_id)
+        if not spec.tools:
+            note = (f'\n\n⚠️ Your current model ({spec.name}) does not support tools, '
+                    f'so it cannot search this file. Use /model to switch.')
+        await progress.edit_text(f'File {filename} was processed.\n\nSummary:\n{summary}{note}')
     except BadRequest as e:
         logger.error(f'File download failed: {e}')
         await update.effective_message.reply_text(

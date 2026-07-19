@@ -38,7 +38,8 @@ async def generate_image(ctx: ToolContext, prompt: str,
                          image_orientation: str | None = None,
                          image_style: str | None = None) -> ToolResult:
     b64_image, revised_prompt = await ctx.image_engine.generate_image(
-        prompt, image_orientation=image_orientation, image_style=image_style
+        prompt, image_orientation=image_orientation, image_style=image_style,
+        user_id=ctx.user_id,
     )
     if b64_image is None:
         return ToolResult(for_model=f'Image was not generated. {revised_prompt or ""}'.strip())

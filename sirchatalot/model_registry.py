@@ -42,12 +42,16 @@ class ModelRegistry:
         return True
 
     async def complete(self, user_id: int, messages: list, tools: list | None = None,
-                       tool_choice: str | None = None, end_user: str | None = None):
+                       tool_choice: str | None = None, end_user: str | None = None,
+                       primary: LLMEngine | None = None):
         '''
         Complete with the user's model, falling back along fallback_chain on
         retriable API errors. Returns (ChatResult, spec actually used).
+        Pass `primary` when the caller already resolved the user's engine
+        (avoids a DB read per call in the agent loop).
         '''
-        primary = await self.engine_for_user(user_id)
+        if primary is None:
+            primary = await self.engine_for_user(user_id)
         chain = [primary.spec.name] + [n for n in self.fallback_chain if n != primary.spec.name]
         last_error = None
         for name in chain:

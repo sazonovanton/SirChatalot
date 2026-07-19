@@ -76,15 +76,18 @@ class FilesRAG:
         max_distance = max_distance if max_distance is not None else self.cfg.max_distance
         try:
             vector = await self.embeddings.get_embedding(text)
-            hits: list[Hit] = []
-            for owner in {str(user_id), COMMON_USER}:
-                result = await asyncio.to_thread(
+            owners = {str(user_id), COMMON_USER}
+            results = await asyncio.gather(*[
+                asyncio.to_thread(
                     self.collection.query,
                     query_embeddings=[vector],
                     n_results=n_results,
                     where={'user_id': owner},
                     include=['documents', 'metadatas', 'distances'],
-                )
+                ) for owner in owners
+            ])
+            hits: list[Hit] = []
+            for result in results:
                 # Chroma returns one sublist per query embedding; we always send one
                 documents = (result.get('documents') or [[]])[0]
                 metadatas = (result.get('metadatas') or [[]])[0]

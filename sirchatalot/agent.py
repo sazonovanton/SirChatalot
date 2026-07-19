@@ -22,34 +22,36 @@ class AgentOutcome:
     messages: list
     spec: ModelSpec
     usage: Usage = field(default_factory=Usage)
+    cost_usd: float = 0.0    # priced per call with the model actually used
     media: list[bytes] = field(default_factory=list)
     images_generated: int = 0
 
 
 async def run_turn(user_id: int, messages: list, registry: ModelRegistry,
                    tools: ToolRegistry, ctx: ToolContext, max_iterations: int = 5,
-                   end_user: str | None = None) -> AgentOutcome:
+                   end_user: str | None = None, primary=None) -> AgentOutcome:
     '''
     Run one conversation turn. `messages` is mutated in place (assistant/tool
     messages are appended) and returned inside the outcome for persistence.
     '''
     total_usage = Usage()
+    cost_usd = 0.0
     media: list[bytes] = []
-    images_generated = 0
     schemas = tools.enabled_schemas(ctx)
 
     for iteration in range(max_iterations):
         result, spec = await registry.complete(
-            user_id, messages, tools=schemas or None, end_user=end_user
+            user_id, messages, tools=schemas or None, end_user=end_user, primary=primary
         )
         total_usage += result.usage
+        cost_usd += result.usage.cost(spec)
         assistant = result.message
 
         if not assistant.get('tool_calls'):
             messages.append({'role': 'assistant', 'content': assistant.get('content') or ''})
             return AgentOutcome(text=assistant.get('content') or '', messages=messages,
-                                spec=spec, usage=total_usage, media=media,
-                                images_generated=images_generated)
+                                spec=spec, usage=total_usage, cost_usd=cost_usd,
+                                media=media, images_generated=len(media))
 
         messages.append(assistant)
         calls = assistant['tool_calls']
@@ -63,14 +65,14 @@ async def run_turn(user_id: int, messages: list, registry: ModelRegistry,
             messages.append({'role': 'tool', 'tool_call_id': call['id'],
                              'content': tool_result.for_model})
             media.extend(tool_result.images)
-            if call['function']['name'] == 'generate_image' and tool_result.images:
-                images_generated += len(tool_result.images)
 
     # iteration budget exhausted: force a final text answer
     logger.warning(f'Agent reached max iterations ({max_iterations}) for user {user_id}')
-    result, spec = await registry.complete(user_id, messages, tools=None, end_user=end_user)
+    result, spec = await registry.complete(user_id, messages, tools=None,
+                                           end_user=end_user, primary=primary)
     total_usage += result.usage
+    cost_usd += result.usage.cost(spec)
     text = result.message.get('content') or ''
     messages.append({'role': 'assistant', 'content': text})
     return AgentOutcome(text=text, messages=messages, spec=spec, usage=total_usage,
-                        media=media, images_generated=images_generated)
+                        cost_usd=cost_usd, media=media, images_generated=len(media))

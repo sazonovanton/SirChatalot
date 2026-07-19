@@ -32,6 +32,13 @@ DOCUMENT_FILTER = (
     | filters.Document.MimeType('application/vnd.ms-powerpoint')
     | filters.Document.MimeType('application/vnd.openxmlformats-officedocument.presentationml.presentation')
     | filters.Document.MimeType('text/plain')
+    | filters.Document.MimeType('text/csv')
+    | filters.Document.MimeType('text/markdown')
+    # clients often send text files with a generic mime type; match by extension too
+    | filters.Document.FileExtension('txt')
+    | filters.Document.FileExtension('md')
+    | filters.Document.FileExtension('csv')
+    | filters.Document.FileExtension('log')
 )
 
 

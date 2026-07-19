@@ -55,6 +55,27 @@ def _host_is_private(host: str) -> bool:
     return False
 
 
+class _SafeResolver(aiohttp.abc.AbstractResolver):
+    '''
+    DNS resolver that rejects non-public addresses at resolution time, so the
+    address actually connected to is the one that was validated (prevents
+    DNS-rebinding around a separate pre-flight check).
+    '''
+
+    def __init__(self):
+        self._inner = aiohttp.resolver.ThreadedResolver()
+
+    async def resolve(self, host, port=0, family=socket.AF_INET):
+        results = await self._inner.resolve(host, port, family)
+        for entry in results:
+            if not ipaddress.ip_address(entry['host']).is_global:
+                raise OSError(f'Refusing to connect to non-public address of {host}')
+        return results
+
+    async def close(self):
+        await self._inner.close()
+
+
 class UrlOpener:
     def __init__(self, cfg: UrlOpenConfig):
         self.cfg = cfg
@@ -72,7 +93,9 @@ class UrlOpener:
 
     async def open_url(self, url: str) -> str | None:
         try:
-            async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
+            connector = aiohttp.TCPConnector(resolver=_SafeResolver())
+            async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT,
+                                             connector=connector) as session:
                 # follow redirects manually so every hop is validated BEFORE it is fetched
                 for _ in range(4):
                     reason = await self.check_url(url)
