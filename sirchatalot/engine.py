@@ -117,10 +117,11 @@ class LLMEngine:
         return ChatResult(message=message, usage=usage,
                           finish_reason=choice.finish_reason or 'stop')
 
-    async def summary(self, text: str, size: int = 420) -> tuple[str, Usage]:
+    async def summary(self, text: str, size: int = 420,
+                      instruction: str | None = None) -> tuple[str, Usage]:
         result = await self.complete(
             [{'role': 'system',
-              'content': 'You are very good at summarizing text. '
+              'content': instruction or 'You are very good at summarizing text. '
                          'Answer to the user message with the summary only.'},
              {'role': 'user', 'content': str(text)}],
             max_tokens=size,

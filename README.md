@@ -11,6 +11,13 @@ Features:
 * **Multiple models** with per-user runtime switching (`/model`) and an optional fallback chain.
 * **Agentic tool use**: the model can generate images, search the web, open URLs and
   search your uploaded documents — across several tool-calling iterations per turn.
+* **MCP servers**: declare [Model Context Protocol](https://modelcontextprotocol.io)
+  servers (stdio or streamable-http) in the config and their tools become available
+  to the model. Users control which tools and MCP servers are active for them with `/tools`.
+* **User memory**: the model saves lasting facts about the user (`save_memory` tool),
+  they are injected into the system prompt; users view and delete them with `/memory`.
+* **Smart history compaction**: instead of dropping old messages, older history is
+  folded into a rolling summary that is updated incrementally; recent turns stay verbatim.
 * **Documents / RAG**: send PDF, DOCX, PPTX, TXT and similar files; they are chunked,
   embedded and stored in ChromaDB. The bot searches them when answering (`/listfiles`,
   `/deletefiles`).
@@ -67,6 +74,25 @@ without vision or tools is selected, the history is adapted automatically
 
 Bot personalities live in the `styles` section and are switched with `/style`
 (switching a style clears the current session).
+
+History compaction is tuned in `chat`: `summarize_too_long: true` enables the rolling
+summary (`compact_threshold` — fraction of `max_history_tokens` that triggers
+compaction, `keep_recent_messages` — how many recent messages stay verbatim).
+
+User memory is enabled by the `memory` section (`max_items` per user). MCP servers
+are listed under `mcp_servers`:
+
+```yaml
+mcp_servers:
+  - name: filesystem
+    command: npx
+    args: ["-y", "@modelcontextprotocol/server-filesystem", "/data/shared"]
+  - name: remote-search
+    url: https://example.com/mcp
+    headers: {Authorization: "Bearer xxx"}
+```
+
+Each user can toggle individual built-in tools and whole MCP servers with `/tools`.
 
 ## Access control and limits
 

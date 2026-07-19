@@ -29,6 +29,12 @@ class FakeEngine:
     def count_tokens(self, messages):
         return sum(len(str(m.get('content', ''))) for m in messages)
 
+    async def summary(self, text, size=420, instruction=None):
+        result = await self.complete(
+            [{'role': 'system', 'content': instruction or 'summarize'},
+             {'role': 'user', 'content': str(text)}])
+        return result.message['content'] or '', result.usage
+
 
 def text_result(text):
     return ChatResult(message={'role': 'assistant', 'content': text},

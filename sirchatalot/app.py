@@ -73,9 +73,15 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
         files_proc = FilesProcessor()
         files_rag = FilesRAG(cfg.files, EmbeddingsEngine(cfg.files.embeddings))
 
+    memory = None
+    if cfg.memory is not None:
+        from sirchatalot.memory import MemoryStore
+        memory = MemoryStore(cfg.memory, db)
+
     chat = ChatManager(cfg, db, registry,
                        image_engine=image_engine, audio_engine=audio_engine,
-                       web_search=web_search, url_opener=url_opener, files_rag=files_rag)
+                       web_search=web_search, url_opener=url_opener,
+                       files_rag=files_rag, memory=memory)
     return Services(cfg=cfg, db=db, registry=registry, chat=chat,
                     files_proc=files_proc, files_rag=files_rag)
 
@@ -115,9 +121,13 @@ def register_handlers(application: Application) -> None:
     application.add_handler(CommandHandler('imagine', handlers.imagine_command))
     application.add_handler(CommandHandler('listfiles', handlers.list_files_command))
     application.add_handler(CommandHandler('deletefiles', handlers.delete_files_command))
+    application.add_handler(CommandHandler('memory', handlers.memory_command))
+    application.add_handler(CommandHandler('tools', handlers.tools_command))
 
     application.add_handler(CallbackQueryHandler(handlers.model_button, pattern=r'^model:'))
     application.add_handler(CallbackQueryHandler(handlers.style_button, pattern=r'^style:'))
+    application.add_handler(CallbackQueryHandler(handlers.memory_button, pattern=r'^memory:'))
+    application.add_handler(CallbackQueryHandler(handlers.tools_button, pattern=r'^tools:'))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.answer))
     application.add_handler(MessageHandler(
@@ -147,13 +157,23 @@ def run() -> None:
     os.makedirs('./data/chats', exist_ok=True)
     db = Database()
 
+    mcp_manager = None
+
     async def post_init(application: Application) -> None:
+        nonlocal mcp_manager
         await db.connect()
         services = build_services(cfg, db)
         application.bot_data['services'] = services
+        if cfg.mcp_servers:
+            from sirchatalot.mcp_client import MCPManager
+            from sirchatalot.tools import registry as tool_registry
+            mcp_manager = MCPManager(cfg.mcp_servers, tool_registry)
+            await mcp_manager.start()
         await ingest_common_files(services)
 
     async def post_shutdown(application: Application) -> None:
+        if mcp_manager is not None:
+            await mcp_manager.stop()
         await db.close()
 
     application = (Application.builder()

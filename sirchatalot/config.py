@@ -58,7 +58,12 @@ class ChatConfig(StrictModel):
         'You are a helpful assistant named Sir Chat-a-lot, '
         'who answers in a style of a knight in the middle ages.'
     )
-    summarize_too_long: bool = False
+    # smart history compaction: when the history exceeds compact_threshold of the
+    # model's max_history_tokens, older messages are folded into a rolling summary
+    # and only the last keep_recent_messages stay verbatim. false = plain trimming.
+    summarize_too_long: bool = True
+    compact_threshold: float = Field(default=0.75, gt=0.0, le=1.0)
+    keep_recent_messages: int = Field(default=8, ge=2)
     moderation: bool = False
     image_size: int = Field(default=512, gt=0)
     end_user_id: bool = True
@@ -139,6 +144,35 @@ class AgentConfig(StrictModel):
     max_iterations: int = Field(default=5, ge=1)
 
 
+class MemoryConfig(StrictModel):
+    max_items: int = Field(default=30, ge=1)
+
+
+class McpServerConfig(StrictModel):
+    name: str
+    # stdio transport
+    command: str | None = None
+    args: list[str] = []
+    env: dict[str, str] = {}
+    # streamable-http transport
+    url: str | None = None
+    headers: dict[str, str] = {}
+    timeout_seconds: float = Field(default=30.0, gt=0)
+
+    @field_validator('name')
+    @classmethod
+    def _name_is_identifier(cls, v):
+        if not v.replace('-', '_').isidentifier():
+            raise ValueError(f'MCP server name must be a simple identifier, got: {v}')
+        return v
+
+    @model_validator(mode='after')
+    def _one_transport(self):
+        if bool(self.command) == bool(self.url):
+            raise ValueError('MCP server needs exactly one of `command` (stdio) or `url` (http)')
+        return self
+
+
 class LoggingConfig(StrictModel):
     level: str = 'WARNING'
     log_chats: bool = False
@@ -163,6 +197,8 @@ class AppConfig(StrictModel):
     audio: AudioConfig | None = None
     web: WebConfig | None = None
     files: FilesConfig | None = None
+    memory: MemoryConfig | None = None
+    mcp_servers: list[McpServerConfig] = []
     agent: AgentConfig = AgentConfig()
     logging: LoggingConfig = LoggingConfig()
 
@@ -177,6 +213,9 @@ class AppConfig(StrictModel):
         for name in self.fallback_chain:
             if name not in names:
                 raise ValueError(f'fallback_chain entry "{name}" is not defined in models')
+        server_names = [s.name for s in self.mcp_servers]
+        if len(server_names) != len(set(server_names)):
+            raise ValueError('duplicate MCP server names')
         return self
 
     def model_spec(self, name: str) -> ModelSpec | None:
@@ -225,9 +264,10 @@ def main() -> int:
     print(f'Config OK: {path or config_path()}')
     print(f'  models: {", ".join(m.name for m in cfg.models)} (default: {cfg.default_model})')
     print(f'  fallback chain: {cfg.fallback_chain or "none"}')
-    for feature in ('rate_limit', 'image_generation', 'audio', 'web', 'files'):
+    for feature in ('rate_limit', 'image_generation', 'audio', 'web', 'files', 'memory'):
         state = 'enabled' if getattr(cfg, feature) is not None else 'disabled'
         print(f'  {feature}: {state}')
+    print(f'  mcp servers: {", ".join(s.name for s in cfg.mcp_servers) or "none"}')
     print(f'  styles: {", ".join(cfg.styles) or "none"}')
     return 0
 

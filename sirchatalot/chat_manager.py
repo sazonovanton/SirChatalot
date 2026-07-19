@@ -18,11 +18,19 @@ logger = get_logger('chat')
 ERROR_REPLY = ('Sorry, I could not get an answer to your message. '
                'Please try again or /delete your chat history.')
 
+SUMMARY_MARKER = '<Conversation summary>'
+COMPACT_INSTRUCTION = (
+    'You maintain a running summary of a conversation. The user message contains '
+    'the current summary (possibly empty) followed by newer messages. Produce an '
+    'updated summary that preserves important facts, decisions, names, numbers and '
+    'open questions. Answer with the updated summary only.'
+)
+
 
 class ChatManager:
     def __init__(self, cfg: AppConfig, db: Database, model_registry: ModelRegistry,
                  image_engine=None, audio_engine=None, web_search=None,
-                 url_opener=None, files_rag=None):
+                 url_opener=None, files_rag=None, memory=None):
         self.cfg = cfg
         self.db = db
         self.registry = model_registry
@@ -31,6 +39,7 @@ class ChatManager:
         self.web_search = web_search
         self.url_opener = url_opener
         self.files_rag = files_rag
+        self.memory = memory
         if cfg.chat.moderation and self.registry.engines[self.registry.default].spec.base_url:
             logger.warning('Moderation is enabled but the default model does not use '
                            'api.openai.com — moderation calls will likely fail and be '
@@ -54,6 +63,8 @@ class ChatManager:
             files_block = await self._files_block(user_id)
             if files_block:
                 text += files_block
+        if self.memory is not None:
+            text += await self.memory.prompt_block(user_id)
         return text
 
     async def _files_block(self, user_id: int) -> str:
@@ -100,28 +111,40 @@ class ChatManager:
     async def _shrink_if_needed(self, engine, messages: list) -> tuple[list, Usage]:
         usage = Usage()
         limit = engine.spec.max_history_tokens
-        if engine.count_tokens(messages) <= limit:
+        if engine.count_tokens(messages) <= int(limit * self.cfg.chat.compact_threshold):
             return messages, usage
         if self.cfg.chat.summarize_too_long:
-            messages, usage = await self._summarize(messages)
+            messages, usage = await self._compact(messages)
+        # safety net: trim if still over budget (huge tail messages, failed summary)
         while engine.count_tokens(messages) > int(limit * 0.8) and len(messages) > 2:
             messages = self._trim_one(messages)
         return messages, usage
 
     def _trim_one(self, messages: list) -> list:
-        '''Drop the oldest non-system message together with its tool-result tail.'''
-        head, rest = messages[0], messages[1:]
+        '''Drop the oldest non-system, non-summary message with its tool-result tail.'''
+        keep = 1
+        if len(messages) > 1 and self._is_summary(messages[1]):
+            keep = 2
+        head, rest = messages[:keep], messages[keep:]
         drop = 1
         while drop < len(rest) and rest[drop].get('role') == 'tool':
             drop += 1
-        return [head] + rest[drop:]
+        return head + rest[drop:]
 
-    async def _summarize(self, messages: list, leave: int = 2) -> tuple[list, Usage]:
-        if len(messages) <= leave + 1:
-            return messages, Usage()
-        head, middle, tail = messages[0], messages[1:-leave], messages[-leave:]
-        # a role:"tool" message must follow its assistant tool_calls message;
-        # move orphaned tool plumbing from the kept tail into the summarized middle
+    @staticmethod
+    def _is_summary(message: dict) -> bool:
+        content = message.get('content')
+        return (message.get('role') == 'assistant' and isinstance(content, str)
+                and content.startswith(SUMMARY_MARKER))
+
+    @staticmethod
+    def _split_tail(body: list, keep: int) -> tuple[list, list]:
+        '''
+        Split into (middle, tail) keeping the last `keep` messages, then move
+        orphaned tool plumbing from the tail into the middle: a role:"tool"
+        message must follow its assistant tool_calls message.
+        '''
+        middle, tail = body[:-keep] if keep < len(body) else [], body[-keep:]
         while tail and (
             tail[0].get('role') == 'tool'
             or (tail[0].get('tool_calls')
@@ -129,16 +152,33 @@ class ChatManager:
                 < len(tail[0]['tool_calls']))
         ):
             middle.append(tail.pop(0))
-        if not tail:
+        return middle, tail
+
+    async def _compact(self, messages: list) -> tuple[list, Usage]:
+        '''
+        Fold older messages into a rolling summary kept right after the system
+        message; the last chat.keep_recent_messages stay verbatim.
+        '''
+        head = messages[0]
+        body = messages[1:]
+        old_summary = ''
+        if body and self._is_summary(body[0]):
+            old_summary = body[0]['content'].removeprefix(SUMMARY_MARKER).strip(': ')
+            body = body[1:]
+        middle, tail = self._split_tail(body, self.cfg.chat.keep_recent_messages)
+        if not middle or not tail:
             return messages, Usage()
-        text = '\n'.join(f"{m.get('role')}: {message_text(m)}" for m in middle)
+        transcript = '\n'.join(f"{m.get('role')}: {message_text(m)}" for m in middle)
+        text = (f'Current summary:\n{old_summary or "(empty)"}\n\n'
+                f'Newer messages:\n{transcript}')
         try:
-            summary, usage = await summary_engine(self.registry).summary(text)
+            summary, usage = await summary_engine(self.registry).summary(
+                text, instruction=COMPACT_INSTRUCTION)
         except Exception:
-            logger.exception('Could not summarize history, falling back to trimming')
+            logger.exception('Could not compact history, falling back to trimming')
             return messages, Usage()
-        return ([head,
-                 {'role': 'assistant', 'content': f'<Previous conversation summary: {summary}>'}]
+        logger.debug(f'Compacted {len(middle)} messages into the rolling summary')
+        return ([head, {'role': 'assistant', 'content': f'{SUMMARY_MARKER}: {summary}'}]
                 + tail), usage
 
     # ---- moderation ----
@@ -181,10 +221,12 @@ class ChatManager:
                 user_id=user_id, user_message=text,
                 image_engine=self.image_engine, web_search=self.web_search,
                 url_opener=self.url_opener, files_rag=self.files_rag,
+                memory=self.memory,
                 summary=self.summarize_text,
                 url_summarize=bool(self.cfg.web and self.cfg.web.url_open
                                    and self.cfg.web.url_open.summarize),
                 rag_results=self.cfg.files.search_results if self.cfg.files else 4,
+                disabled=await self.db.get_disabled_tools(user_id),
             )
             outcome = await run_turn(
                 user_id, messages, self.registry, tool_registry, ctx,

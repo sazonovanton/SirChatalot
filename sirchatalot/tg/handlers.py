@@ -70,6 +70,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     text += '/limit - Check your rate limit\n'
     text += '/style - Choose a style for the bot\n'
     text += '/model - Choose the AI model\n'
+    text += '/tools - Enable/disable tools available to the AI\n'
+    if cfg.memory is not None:
+        text += '/memory - View and clear what the bot remembers about you\n'
     if cfg.image_generation is not None:
         text += '/imagine <prompt> - Generate an image\n'
     if cfg.files is not None:
@@ -160,6 +163,114 @@ async def model_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     logger.info(f'User {user_id} switched model to {name}')
     await query.edit_message_text(f'Model switched to {name}.')
+
+
+# ---- memory ----
+
+def _memory_keyboard(memories) -> InlineKeyboardMarkup | None:
+    if not memories:
+        return None
+    rows = []
+    row = []
+    for index, memory in enumerate(memories, 1):
+        row.append(InlineKeyboardButton(f'🗑 {index}',
+                                        callback_data=f'memory:del:{memory["id"]}'))
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton('🧹 Clear all', callback_data='memory:clear')])
+    return InlineKeyboardMarkup(rows)
+
+
+def _memory_text(memories) -> str:
+    if not memories:
+        return 'I have no memories about you.'
+    lines = ['What I remember about you:\n']
+    lines += [f'{i}. {m["content"]}' for i, m in enumerate(memories, 1)]
+    lines.append('\nUse the buttons to delete a memory by its number.')
+    return '\n'.join(lines)
+
+
+@is_authorized
+async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    services = get_services(context)
+    if services.chat.memory is None:
+        await update.effective_message.reply_text('Memory is not enabled.')
+        return
+    memories = await services.chat.memory.list(update.effective_user.id)
+    await update.effective_message.reply_text(
+        _memory_text(memories), reply_markup=_memory_keyboard(memories))
+
+
+@is_authorized
+async def memory_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    services = get_services(context)
+    query = update.callback_query
+    await query.answer()
+    if services.chat.memory is None:
+        return
+    user_id = update.effective_user.id
+    action = query.data.removeprefix('memory:')
+    if action == 'clear':
+        await services.chat.memory.clear(user_id)
+    elif action.startswith('del:'):
+        await services.chat.memory.delete(user_id, int(action.removeprefix('del:')))
+    memories = await services.chat.memory.list(user_id)
+    await query.edit_message_text(_memory_text(memories),
+                                  reply_markup=_memory_keyboard(memories))
+
+
+# ---- per-user tool toggles ----
+
+def _tool_groups(services) -> list[str]:
+    from sirchatalot.tools import ToolContext, registry as tool_registry
+    chat = services.chat
+    probe = ToolContext(user_id=0, image_engine=chat.image_engine,
+                        web_search=chat.web_search, url_opener=chat.url_opener,
+                        files_rag=chat.files_rag, memory=chat.memory)
+    return tool_registry.groups(probe)
+
+
+def _tools_view(services, disabled: set[str]):
+    groups = _tool_groups(services)
+    mcp_names = {s.name for s in services.cfg.mcp_servers}
+    if not groups:
+        return 'No tools are available in this deployment.', None
+    rows = []
+    for group in groups:
+        label = f'MCP: {group}' if group in mcp_names else group
+        mark = '🚫' if group in disabled else '✅'
+        rows.append([InlineKeyboardButton(f'{mark} {label}',
+                                          callback_data=f'tools:{group}')])
+    text = ('Tools available to the AI. Tap to enable/disable a tool '
+            '(or a whole MCP server) for your chats.')
+    return text, InlineKeyboardMarkup(rows)
+
+
+@is_authorized
+async def tools_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    services = get_services(context)
+    disabled = await services.db.get_disabled_tools(update.effective_user.id)
+    text, keyboard = _tools_view(services, disabled)
+    await update.effective_message.reply_text(text, reply_markup=keyboard)
+
+
+@is_authorized
+async def tools_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    services = get_services(context)
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    group = query.data.removeprefix('tools:')
+    disabled = await services.db.get_disabled_tools(user_id)
+    disabled ^= {group}
+    await services.db.set_disabled_tools(user_id, disabled)
+    logger.info(f'User {user_id} toggled tool group {group} '
+                f'({"off" if group in disabled else "on"})')
+    text, keyboard = _tools_view(services, disabled)
+    await query.edit_message_text(text, reply_markup=keyboard)
 
 
 # ---- styles ----

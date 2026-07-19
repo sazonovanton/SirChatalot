@@ -45,11 +45,33 @@ chat:
   system_message: >-
     You are a helpful assistant named Sir Chat-a-lot,
     who answers in a style of a knight in the middle ages.
-  summarize_too_long: false   # summarize long history instead of trimming it
+  # Smart history compaction: when the history exceeds compact_threshold of the
+  # model's max_history_tokens, older messages are folded into a rolling summary;
+  # the last keep_recent_messages stay verbatim. summarize_too_long: false = plain trim.
+  summarize_too_long: true
+  compact_threshold: 0.75
+  keep_recent_messages: 8
   moderation: false           # check user messages with the OpenAI moderation API
   image_size: 512             # long side for downscaling incoming photos (vision)
   end_user_id: true           # pass a hashed user id to the API
   # max_session_length: 15    # warn the user when the session gets this long
+
+# Persistent memory about the user: the model saves facts with the save_memory
+# tool, they are injected into the system prompt; users manage them with /memory.
+# Remove the section to disable.
+memory:
+  max_items: 30
+
+# MCP (Model Context Protocol) servers. Their tools become available to the
+# model; users can toggle each server with /tools. stdio (command) or
+# streamable-http (url) transports.
+mcp_servers: []
+#  - name: filesystem
+#    command: npx
+#    args: ["-y", "@modelcontextprotocol/server-filesystem", "/data/shared"]
+#  - name: remote-search
+#    url: https://example.com/mcp
+#    headers: {Authorization: "Bearer xxx"}
 
 # Bot personalities for the /style command.
 styles:

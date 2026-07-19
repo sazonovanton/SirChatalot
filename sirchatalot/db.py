@@ -51,7 +51,19 @@ CREATE TABLE IF NOT EXISTS files (
     added_at  TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (owner, filename)
 );
+CREATE TABLE IF NOT EXISTS memories (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    content    TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id);
 '''
+
+# columns added after the initial schema; applied idempotently on connect
+MIGRATIONS = (
+    'ALTER TABLE users ADD COLUMN disabled_tools TEXT',
+)
 
 
 class Database:
@@ -65,6 +77,11 @@ class Database:
         await self._conn.execute('PRAGMA journal_mode=WAL')
         await self._conn.execute('PRAGMA busy_timeout=5000')
         await self._conn.executescript(SCHEMA)
+        for migration in MIGRATIONS:
+            try:
+                await self._conn.execute(migration)
+            except aiosqlite.OperationalError:
+                pass  # column already exists
         await self._conn.commit()
         logger.info(f'Database connected: {self.path}')
 
@@ -110,6 +127,62 @@ class Database:
             (user_id, style_name),
         )
         await self.conn.commit()
+
+    async def get_disabled_tools(self, user_id: int) -> set[str]:
+        async with self.conn.execute(
+            'SELECT disabled_tools FROM users WHERE user_id = ?', (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        if not row or not row['disabled_tools']:
+            return set()
+        try:
+            return set(json.loads(row['disabled_tools']))
+        except json.JSONDecodeError:
+            return set()
+
+    async def set_disabled_tools(self, user_id: int, disabled: set[str]) -> None:
+        await self.conn.execute(
+            'INSERT INTO users (user_id, disabled_tools) VALUES (?, ?) '
+            'ON CONFLICT(user_id) DO UPDATE SET disabled_tools = excluded.disabled_tools',
+            (user_id, json.dumps(sorted(disabled))),
+        )
+        await self.conn.commit()
+
+    # ---- memories ----
+
+    async def list_memories(self, user_id: int) -> list[dict]:
+        async with self.conn.execute(
+            'SELECT id, content, created_at FROM memories WHERE user_id = ? ORDER BY id',
+            (user_id,),
+        ) as cur:
+            rows = await cur.fetchall()
+        return [dict(r) for r in rows]
+
+    async def add_memory(self, user_id: int, content: str, max_items: int) -> None:
+        await self.conn.execute(
+            'INSERT INTO memories (user_id, content) VALUES (?, ?)', (user_id, content)
+        )
+        # keep only the newest max_items entries
+        await self.conn.execute(
+            'DELETE FROM memories WHERE user_id = ? AND id NOT IN '
+            '(SELECT id FROM memories WHERE user_id = ? ORDER BY id DESC LIMIT ?)',
+            (user_id, user_id, max_items),
+        )
+        await self.conn.commit()
+
+    async def delete_memory(self, user_id: int, memory_id: int) -> bool:
+        cur = await self.conn.execute(
+            'DELETE FROM memories WHERE user_id = ? AND id = ?', (user_id, memory_id)
+        )
+        await self.conn.commit()
+        return cur.rowcount > 0
+
+    async def clear_memories(self, user_id: int) -> int:
+        cur = await self.conn.execute(
+            'DELETE FROM memories WHERE user_id = ?', (user_id,)
+        )
+        await self.conn.commit()
+        return cur.rowcount
 
     # ---- chat history ----
 

@@ -45,7 +45,7 @@ async def test_caption_merges_into_pending_image_after_restart(db):
 
 
 async def test_summarize_does_not_orphan_tool_messages(db):
-    cfg = make_config()
+    cfg = make_config(chat={'keep_recent_messages': 2})
     manager, _ = make_manager(db, [], cfg=cfg)
     messages = [
         {'role': 'system', 'content': 'sys'},
@@ -58,7 +58,7 @@ async def test_summarize_does_not_orphan_tool_messages(db):
         {'role': 'tool', 'tool_call_id': 't1', 'content': 'result'},
     ]
     manager.registry.engines['primary'].script = [text_result('summary text')]
-    summarized, _ = await manager._summarize(messages, leave=2)
+    summarized, _ = await manager._compact(messages)
     # no tool message may appear without its preceding assistant tool_calls
     for i, m in enumerate(summarized):
         if m.get('role') == 'tool':
