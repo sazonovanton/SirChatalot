@@ -5,6 +5,7 @@ pydantic>=2.5
 PyYAML>=6.0
 aiosqlite>=0.19
 mcp>=1.9
+telegramify-markdown>=0.5
 pydub>=0.25.1
 python-docx
 python-pptx

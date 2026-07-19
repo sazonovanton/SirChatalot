@@ -110,15 +110,27 @@ audio:
   transcribe_only: false      # true = reply with the transcript instead of answering
 
 web:
+  # provider: google (api_key + cse_id) | searxng (url) | tavily (api_key) | brave (api_key)
   search:
-    provider: google
-    api_key: "..."
-    cse_id: "..."
+    provider: searxng
+    url: http://localhost:8080
     results: 5
+  # search:
+  #   provider: tavily
+  #   api_key: "tvly-..."
+  # search:
+  #   provider: brave
+  #   api_key: "BSA..."
+  # search:
+  #   provider: google
+  #   api_key: "..."
+  #   cse_id: "..."
   url_open:
     enabled: true
     summarize: false
     trim_length: 3000
+    via_jina: true            # fetch pages through r.jina.ai (clean markdown);
+    # jina_api_key: "jina_..."  # optional, higher rate limits
 
 # Document upload + agentic RAG (semantic search over uploaded files).
 files:

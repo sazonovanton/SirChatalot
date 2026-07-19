@@ -13,7 +13,7 @@ from sirchatalot.logging_setup import get_logger
 from sirchatalot.tg import ratelimit
 from sirchatalot.tg.auth import check_user, is_authorized
 from sirchatalot.tg.services import get_services
-from sirchatalot.tg.utils import resize_image_b64, send_message
+from sirchatalot.tg.utils import resize_image_b64, send_message, typing_action
 
 logger = get_logger('handlers')
 
@@ -65,6 +65,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     text += 'Commands:\n'
     text += '/start - Start the bot\n'
     text += '/help - Show this message\n'
+    text += '/retry - Regenerate the answer to your last message\n'
+    text += '/undo - Remove the last exchange from the history\n'
     text += '/delete - Delete chat history\n'
     text += '/statistics - Show statistics\n'
     text += '/limit - Check your rate limit\n'
@@ -316,11 +318,33 @@ async def style_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 @is_authorized
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     services = get_services(context)
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id,
-                                       action=ChatAction.TYPING)
-    outcome = await services.chat.process_text(update.effective_user.id,
-                                               update.message.text)
+    async with typing_action(context, update.effective_chat.id):
+        outcome = await services.chat.process_text(update.effective_user.id,
+                                                   update.message.text)
     await _reply_outcome(update, context, outcome)
+
+
+@is_authorized
+async def retry_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''Regenerate the answer to the last message.'''
+    services = get_services(context)
+    async with typing_action(context, update.effective_chat.id):
+        outcome = await services.chat.retry(update.effective_user.id)
+    if outcome is None:
+        await update.effective_message.reply_text('Nothing to retry yet.')
+        return
+    await _reply_outcome(update, context, outcome)
+
+
+@is_authorized
+async def undo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    '''Remove the last exchange from the history.'''
+    services = get_services(context)
+    if await services.chat.undo(update.effective_user.id):
+        await update.effective_message.reply_text(
+            'Last exchange removed. The conversation continues from the previous point.')
+    else:
+        await update.effective_message.reply_text('Nothing to undo.')
 
 
 @is_authorized
@@ -329,20 +353,19 @@ async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TY
     if services.chat.audio_engine is None:
         await update.effective_message.reply_text('Sorry, speech-to-text is not available.')
         return
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id,
-                                       action=ChatAction.TYPING)
     media = update.message.voice or update.message.video or update.message.video_note
-    tg_file = await context.bot.get_file(media.file_id)
-    extension = os.path.splitext(tg_file.file_path or '')[1] or (
-        '.ogg' if update.message.voice else '.mp4')
-    os.makedirs(VOICE_DIR, exist_ok=True)
-    file_path = os.path.join(VOICE_DIR, f'{media.file_unique_id}{extension}')
-    try:
-        await tg_file.download_to_drive(custom_path=file_path)
-        result = await services.chat.process_audio(update.effective_user.id, file_path)
-    finally:
-        if os.path.exists(file_path):
-            os.remove(file_path)
+    async with typing_action(context, update.effective_chat.id):
+        tg_file = await context.bot.get_file(media.file_id)
+        extension = os.path.splitext(tg_file.file_path or '')[1] or (
+            '.ogg' if update.message.voice else '.mp4')
+        os.makedirs(VOICE_DIR, exist_ok=True)
+        file_path = os.path.join(VOICE_DIR, f'{media.file_unique_id}{extension}')
+        try:
+            await tg_file.download_to_drive(custom_path=file_path)
+            result = await services.chat.process_audio(update.effective_user.id, file_path)
+        finally:
+            if os.path.exists(file_path):
+                os.remove(file_path)
     if isinstance(result, str):
         await send_message(update, result,
                            reply_to_message=services.cfg.telegram.reply_to_message)
@@ -371,7 +394,8 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             return
         caption = update.message.caption
         if caption:
-            outcome = await services.chat.process_text(user_id, caption)
+            async with typing_action(context, update.effective_chat.id):
+                outcome = await services.chat.process_text(user_id, caption)
             await _reply_outcome(update, context, outcome)
         else:
             await update.effective_message.reply_text(
@@ -388,11 +412,10 @@ async def imagine_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if services.chat.image_engine is None:
         await update.effective_message.reply_text('Sorry, image generation is not supported.')
         return
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id,
-                                       action=ChatAction.TYPING)
     # strip the command itself, including the /imagine@botname group-chat form
     prompt = re.sub(r'^/\w+(@\w+)?\s*', '', update.message.text).strip()
-    image_bytes, text = await services.chat.imagine(update.effective_user.id, prompt)
+    async with typing_action(context, update.effective_chat.id):
+        image_bytes, text = await services.chat.imagine(update.effective_user.id, prompt)
     if image_bytes is None:
         await update.effective_message.reply_text(text or GENERIC_ERROR)
         return
@@ -409,8 +432,6 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     user_id = update.effective_user.id
     try:
-        await context.bot.send_chat_action(chat_id=update.effective_chat.id,
-                                           action=ChatAction.TYPING)
         document = update.message.document
         filename = sanitize_filename(document.file_name)
         tg_file = await context.bot.get_file(document.file_id)
@@ -428,17 +449,19 @@ async def downloader(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         progress = await update.effective_message.reply_text(
             f'File {filename} was saved. Processing the file...')
 
-        text = await services.files_proc.convert_to_text(file_path)
-        if text is None:
-            await progress.edit_text('Sorry, could not extract text from the file.')
-            return
-        processed = await services.files_rag.process_text(text, user_id=user_id,
-                                                          filename=filename)
-        if not processed:
-            await progress.edit_text('Sorry, could not process the file into the RAG dataset.')
-            return
-        summary = await services.chat.summarize_text(text[:4096]) or ''
-        await services.db.upsert_file(str(user_id), filename, summary, True)
+        async with typing_action(context, update.effective_chat.id):
+            text = await services.files_proc.convert_to_text(file_path)
+            if text is None:
+                await progress.edit_text('Sorry, could not extract text from the file.')
+                return
+            processed = await services.files_rag.process_text(text, user_id=user_id,
+                                                              filename=filename)
+            if not processed:
+                await progress.edit_text(
+                    'Sorry, could not process the file into the RAG dataset.')
+                return
+            summary = await services.chat.summarize_text(text[:4096]) or ''
+            await services.db.upsert_file(str(user_id), filename, summary, True)
         note = ''
         spec = await services.registry.spec_for_user(user_id)
         if not spec.tools:

@@ -21,25 +21,100 @@ logger = get_logger('web')
 
 MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
+# many sites (e.g. Wikipedia) reject the default python client User-Agent
+BROWSER_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0',
+    'Accept-Language': 'en,ru;q=0.8',
+}
 
 
-class GoogleSearch:
+class SearchEngine:
+    '''Base for web search providers: fetch JSON, parse into title/link/snippet.'''
+
     def __init__(self, cfg: WebSearchConfig):
         self.cfg = cfg
-        self.base_url = 'https://www.googleapis.com/customsearch/v1'
 
     async def search(self, query: str) -> list[dict] | None:
-        params = {'key': self.cfg.api_key, 'cx': self.cfg.cse_id,
-                  'q': query, 'num': self.cfg.results}
         try:
             async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
-                async with session.get(self.base_url, params=params) as response:
-                    data = await response.json()
-            return [{'title': item['title'], 'link': item['link'], 'snippet': item['snippet']}
-                    for item in data.get('items', [])]
+                data = await self._fetch(session, query)
+            return self._parse(data)[:self.cfg.results]
         except Exception as e:
-            logger.error(f'Web search failed: {e}')
+            logger.error(f'Web search failed ({self.cfg.provider}): {e}')
             return None
+
+    async def _fetch(self, session, query: str) -> dict:
+        raise NotImplementedError
+
+    def _parse(self, data: dict) -> list[dict]:
+        raise NotImplementedError
+
+
+class GoogleSearch(SearchEngine):
+    async def _fetch(self, session, query):
+        params = {'key': self.cfg.api_key, 'cx': self.cfg.cse_id,
+                  'q': query, 'num': self.cfg.results}
+        async with session.get('https://www.googleapis.com/customsearch/v1',
+                               params=params) as response:
+            return await response.json()
+
+    def _parse(self, data):
+        return [{'title': i['title'], 'link': i['link'], 'snippet': i.get('snippet', '')}
+                for i in data.get('items', [])]
+
+
+class SearxngSearch(SearchEngine):
+    async def _fetch(self, session, query):
+        params = {'q': query, 'format': 'json'}
+        async with session.get(f'{self.cfg.url.rstrip("/")}/search',
+                               params=params) as response:
+            return await response.json()
+
+    def _parse(self, data):
+        return [{'title': r.get('title', ''), 'link': r.get('url', ''),
+                 'snippet': r.get('content', '')}
+                for r in data.get('results', [])]
+
+
+class TavilySearch(SearchEngine):
+    async def _fetch(self, session, query):
+        payload = {'api_key': self.cfg.api_key, 'query': query,
+                   'max_results': self.cfg.results}
+        async with session.post('https://api.tavily.com/search',
+                                json=payload) as response:
+            return await response.json()
+
+    def _parse(self, data):
+        return [{'title': r.get('title', ''), 'link': r.get('url', ''),
+                 'snippet': r.get('content', '')}
+                for r in data.get('results', [])]
+
+
+class BraveSearch(SearchEngine):
+    async def _fetch(self, session, query):
+        headers = {'X-Subscription-Token': self.cfg.api_key,
+                   'Accept': 'application/json'}
+        params = {'q': query, 'count': self.cfg.results}
+        async with session.get('https://api.search.brave.com/res/v1/web/search',
+                               params=params, headers=headers) as response:
+            return await response.json()
+
+    def _parse(self, data):
+        return [{'title': r.get('title', ''), 'link': r.get('url', ''),
+                 'snippet': r.get('description', '')}
+                for r in (data.get('web') or {}).get('results', [])]
+
+
+SEARCH_PROVIDERS = {
+    'google': GoogleSearch,
+    'searxng': SearxngSearch,
+    'tavily': TavilySearch,
+    'brave': BraveSearch,
+}
+
+
+def make_search_engine(cfg: WebSearchConfig) -> SearchEngine:
+    return SEARCH_PROVIDERS[cfg.provider](cfg)
 
 
 def _host_is_private(host: str) -> bool:
@@ -92,6 +167,39 @@ class UrlOpener:
         return None
 
     async def open_url(self, url: str) -> str | None:
+        if self.cfg.via_jina:
+            text = await self._open_via_jina(url)
+            if text is not None:
+                return text
+            logger.warning(f'Jina Reader failed for {url}, falling back to direct fetch')
+        return await self._open_direct(url)
+
+    async def _open_via_jina(self, url: str) -> str | None:
+        '''Fetch the page through the Jina Reader (returns clean markdown).'''
+        reason = await self.check_url(url)
+        if reason is not None:
+            logger.warning(f'URL rejected ({reason}): {url}')
+            return None
+        headers = {}
+        if self.cfg.jina_api_key:
+            headers['Authorization'] = f'Bearer {self.cfg.jina_api_key}'
+        try:
+            async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
+                async with session.get(f'https://r.jina.ai/{url}',
+                                       headers=headers) as response:
+                    if response.status != 200:
+                        logger.warning(f'Jina Reader returned {response.status} for {url}')
+                        return None
+                    raw = await response.content.read(MAX_RESPONSE_BYTES)
+            text = raw.decode('utf-8', errors='replace').strip()
+            if self.cfg.trim_length is not None:
+                text = text[:self.cfg.trim_length]
+            return text if len(text) >= 5 else None
+        except Exception as e:
+            logger.error(f'Jina Reader error for {url}: {e}')
+            return None
+
+    async def _open_direct(self, url: str) -> str | None:
         try:
             connector = aiohttp.TCPConnector(resolver=_SafeResolver())
             async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT,
@@ -102,13 +210,17 @@ class UrlOpener:
                     if reason is not None:
                         logger.warning(f'URL rejected ({reason}): {url}')
                         return None
-                    async with session.get(url, allow_redirects=False) as response:
+                    async with session.get(url, allow_redirects=False,
+                                           headers=BROWSER_HEADERS) as response:
                         if response.status in (301, 302, 303, 307, 308):
                             location = response.headers.get('Location')
                             if not location:
                                 return None
                             url = str(response.url.join(aiohttp.client.URL(location)))
                             continue
+                        if response.status >= 400:
+                            logger.warning(f'URL returned {response.status}: {url}')
+                            return None
                         raw = await response.content.read(MAX_RESPONSE_BYTES)
                     return self._parse(raw)
             logger.warning(f'Too many redirects for URL: {url}')

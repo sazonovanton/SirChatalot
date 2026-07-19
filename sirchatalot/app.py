@@ -58,9 +58,9 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
     web_search = None
     url_opener = None
     if cfg.web is not None:
-        from sirchatalot.tools.web import GoogleSearch, UrlOpener
+        from sirchatalot.tools.web import UrlOpener, make_search_engine
         if cfg.web.search is not None:
-            web_search = GoogleSearch(cfg.web.search)
+            web_search = make_search_engine(cfg.web.search)
         if cfg.web.url_open is not None and cfg.web.url_open.enabled:
             url_opener = UrlOpener(cfg.web.url_open)
 
@@ -110,9 +110,34 @@ async def ingest_common_files(services: Services) -> None:
         logger.info(f'Common file {name} was processed into the RAG dataset')
 
 
+def bot_commands(cfg: AppConfig) -> list[tuple[str, str]]:
+    '''Commands shown in the Telegram command menu (set_my_commands).'''
+    commands = [
+        ('help', 'Show help'),
+        ('retry', 'Regenerate the last answer'),
+        ('undo', 'Remove the last exchange'),
+        ('delete', 'Delete chat history'),
+        ('model', 'Choose the AI model'),
+        ('style', 'Choose a bot style'),
+        ('tools', 'Enable/disable AI tools'),
+        ('statistics', 'Show usage statistics'),
+        ('limit', 'Check your rate limit'),
+    ]
+    if cfg.memory is not None:
+        commands.append(('memory', 'View/clear what the bot remembers'))
+    if cfg.image_generation is not None:
+        commands.append(('imagine', 'Generate an image'))
+    if cfg.files is not None:
+        commands.append(('listfiles', 'List your files'))
+        commands.append(('deletefiles', 'Delete all your files'))
+    return commands
+
+
 def register_handlers(application: Application) -> None:
     application.add_handler(CommandHandler('start', handlers.start))
     application.add_handler(CommandHandler('help', handlers.help_command))
+    application.add_handler(CommandHandler('retry', handlers.retry_command))
+    application.add_handler(CommandHandler('undo', handlers.undo_command))
     application.add_handler(CommandHandler('delete', handlers.delete_command))
     application.add_handler(CommandHandler('statistics', handlers.statistics_command))
     application.add_handler(CommandHandler('limit', handlers.limit_command))
@@ -169,6 +194,10 @@ def run() -> None:
             from sirchatalot.tools import registry as tool_registry
             mcp_manager = MCPManager(cfg.mcp_servers, tool_registry)
             await mcp_manager.start()
+        try:
+            await application.bot.set_my_commands(bot_commands(cfg))
+        except Exception:
+            logger.exception('Could not set the bot command menu')
         await ingest_common_files(services)
 
     async def post_shutdown(application: Application) -> None:

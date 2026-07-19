@@ -101,23 +101,38 @@ class AudioConfig(StrictModel):
 
 
 class WebSearchConfig(StrictModel):
-    provider: str = 'google'
-    api_key: str
-    cse_id: str
+    provider: str = 'google'          # google | searxng | tavily | brave
+    api_key: str | None = None        # google, tavily, brave
+    cse_id: str | None = None         # google
+    url: str | None = None            # searxng instance base URL
     results: int = Field(default=5, ge=1, le=10)
 
     @field_validator('provider')
     @classmethod
     def _known_provider(cls, v):
-        if v.lower() != 'google':
+        if v.lower() not in ('google', 'searxng', 'tavily', 'brave'):
             raise ValueError(f'unknown web search provider: {v}')
         return v.lower()
+
+    @model_validator(mode='after')
+    def _provider_requirements(self):
+        if self.provider == 'google' and not (self.api_key and self.cse_id):
+            raise ValueError('google search requires api_key and cse_id')
+        if self.provider == 'searxng' and not self.url:
+            raise ValueError('searxng search requires url (instance base URL)')
+        if self.provider in ('tavily', 'brave') and not self.api_key:
+            raise ValueError(f'{self.provider} search requires api_key')
+        return self
 
 
 class UrlOpenConfig(StrictModel):
     enabled: bool = True
     summarize: bool = False
     trim_length: int | None = Field(default=3000, gt=0)
+    # fetch pages through the Jina Reader (r.jina.ai) — returns clean markdown;
+    # falls back to direct fetching when Jina fails
+    via_jina: bool = True
+    jina_api_key: str | None = None
 
 
 class WebConfig(StrictModel):

@@ -1,38 +1,82 @@
-'''Telegram helpers: message sending with markdown fallback, image resizing.'''
+'''Telegram helpers: MarkdownV2 rendering with fallback, typing indicator,
+image resizing.'''
 
 import asyncio
 import base64
+import contextlib
 import io
 
+import telegramify_markdown
 from telegram import Update
-from telegram.helpers import escape_markdown
+from telegram.constants import ChatAction
 
 from sirchatalot.logging_setup import get_logger
 
 logger = get_logger('tg')
 
 MAX_MESSAGE_LENGTH = 4096
+# MarkdownV2 escaping can grow the text, keep headroom in source chunks
+SOURCE_CHUNK_LENGTH = 3400
+
+
+def split_for_telegram(text: str, limit: int = SOURCE_CHUNK_LENGTH) -> list[str]:
+    '''Split text into chunks, preferring paragraph and then line boundaries so
+    markdown structure survives the split.'''
+    parts = []
+    while len(text) > limit:
+        cut = text.rfind('\n\n', 0, limit)
+        if cut < limit // 2:
+            cut = text.rfind('\n', 0, limit)
+        if cut < limit // 2:
+            cut = limit
+        parts.append(text[:cut])
+        text = text[cut:].lstrip('\n')
+    if text:
+        parts.append(text)
+    return parts
 
 
 async def send_message(update: Update, text: str, reply_to_message: bool = False) -> None:
     '''
-    Send text in chunks, trying plain markdown first and falling back to
-    escaped MarkdownV2 and then to plain text.
+    Send text rendered as Telegram MarkdownV2 (converted from the model's
+    GitHub-style markdown), falling back to plain text per chunk.
     '''
     message = update.effective_message
     if message is None or not text:
         return
-    parts = [text[i:i + MAX_MESSAGE_LENGTH] for i in range(0, len(text), MAX_MESSAGE_LENGTH)]
-    for index, part in enumerate(parts):
+    for index, part in enumerate(split_for_telegram(text)):
         reply_id = message.message_id if (index == 0 and reply_to_message) else None
         try:
-            await message.reply_markdown(part, reply_to_message_id=reply_id)
-        except Exception:
+            rendered = telegramify_markdown.markdownify(part)
+            await message.reply_text(rendered, parse_mode='MarkdownV2',
+                                     reply_to_message_id=reply_id)
+        except Exception as e:
+            logger.debug(f'MarkdownV2 send failed ({e}), falling back to plain text')
+            for plain in split_for_telegram(part, MAX_MESSAGE_LENGTH):
+                await message.reply_text(plain, reply_to_message_id=reply_id)
+                reply_id = None
+
+
+@contextlib.asynccontextmanager
+async def typing_action(context, chat_id: int):
+    '''Keep the "typing..." indicator alive while the body runs (Telegram shows
+    it for ~5 seconds per send, so it is refreshed periodically).'''
+    async def loop():
+        while True:
             try:
-                await message.reply_markdown_v2(
-                    escape_markdown(part, version=2), reply_to_message_id=reply_id)
+                await context.bot.send_chat_action(chat_id=chat_id,
+                                                   action=ChatAction.TYPING)
             except Exception:
-                await message.reply_text(part, reply_to_message_id=reply_id)
+                pass
+            await asyncio.sleep(4.5)
+
+    task = asyncio.create_task(loop())
+    try:
+        yield
+    finally:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 async def resize_image_b64(image_bytes: bytes, max_side: int) -> str | None:

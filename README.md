@@ -22,6 +22,12 @@ Features:
   embedded and stored in ChromaDB. The bot searches them when answering (`/listfiles`,
   `/deletefiles`).
 * **Vision**: send photos to vision-capable models.
+* **Proper Telegram formatting**: model markdown is converted to valid MarkdownV2
+  (code blocks, lists, quotes) with a plain-text fallback; the bot keeps the
+  "typing…" indicator alive while generating.
+* **/retry and /undo**: regenerate the last answer or remove the last exchange.
+* **Web search providers**: Google CSE, SearXNG, Tavily or Brave; page opening
+  goes through the Jina Reader (clean markdown) with a direct-fetch fallback.
 * **Voice/video messages**: transcription via Whisper (or any compatible API), with
   optional transcript-only mode. Requires [ffmpeg](https://ffmpeg.org/).
 * **Image generation** with `/imagine` (OpenAI images API: DALL-E etc.).
@@ -93,6 +99,12 @@ mcp_servers:
 ```
 
 Each user can toggle individual built-in tools and whole MCP servers with `/tools`.
+
+Web search (`web.search`) supports four providers: `google` (api_key + cse_id),
+`searxng` (instance `url`), `tavily` (api_key), `brave` (api_key). URL opening
+(`web.url_open`) fetches pages through the [Jina Reader](https://jina.ai/reader)
+by default (`via_jina: true`, optional `jina_api_key`) and falls back to a direct
+SSRF-guarded fetch when Jina is unavailable.
 
 ## Access control and limits
 

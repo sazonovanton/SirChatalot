@@ -214,39 +214,7 @@ class ChatManager:
                 messages[-1]['content'].append({'type': 'text', 'text': text})
             else:
                 messages.append({'role': 'user', 'content': text})
-
-            messages, extra_usage = await self._shrink_if_needed(engine, messages)
-
-            ctx = ToolContext(
-                user_id=user_id, user_message=text,
-                image_engine=self.image_engine, web_search=self.web_search,
-                url_opener=self.url_opener, files_rag=self.files_rag,
-                memory=self.memory,
-                summary=self.summarize_text,
-                url_summarize=bool(self.cfg.web and self.cfg.web.url_open
-                                   and self.cfg.web.url_open.summarize),
-                rag_results=self.cfg.files.search_results if self.cfg.files else 4,
-                disabled=await self.db.get_disabled_tools(user_id),
-            )
-            outcome = await run_turn(
-                user_id, messages, self.registry, tool_registry, ctx,
-                max_iterations=self.cfg.agent.max_iterations,
-                end_user=str(user_id) if self.cfg.chat.end_user_id else None,
-                primary=engine,
-            )
-            outcome.usage += extra_usage
-            outcome.cost_usd += extra_usage.cost(engine.spec)
-            outcome.text = self._session_length_note(outcome)
-            await self.db.save_history(user_id, outcome.messages)
-            await self.db.add_stats(
-                user_id, messages_sent=1,
-                prompt_tokens=outcome.usage.prompt_tokens,
-                completion_tokens=outcome.usage.completion_tokens,
-                images_generated=outcome.images_generated,
-                cost_usd=outcome.cost_usd
-                + outcome.images_generated * self._image_price(),
-            )
-            return outcome
+            return await self._execute_turn(user_id, engine, messages, text)
         except AllModelsFailedError as e:
             logger.error(f'All models failed for user {user_id}: {e}')
             return AgentOutcome(
@@ -255,6 +223,77 @@ class ChatManager:
                 messages=[], spec=await self.registry.spec_for_user(user_id))
         except Exception:
             logger.exception(f'Could not process message from user {user_id}')
+            return None
+
+    async def _execute_turn(self, user_id: int, engine, messages: list,
+                            text: str) -> AgentOutcome:
+        messages, extra_usage = await self._shrink_if_needed(engine, messages)
+        ctx = ToolContext(
+            user_id=user_id, user_message=text,
+            image_engine=self.image_engine, web_search=self.web_search,
+            url_opener=self.url_opener, files_rag=self.files_rag,
+            memory=self.memory,
+            summary=self.summarize_text,
+            url_summarize=bool(self.cfg.web and self.cfg.web.url_open
+                               and self.cfg.web.url_open.summarize),
+            rag_results=self.cfg.files.search_results if self.cfg.files else 4,
+            disabled=await self.db.get_disabled_tools(user_id),
+        )
+        outcome = await run_turn(
+            user_id, messages, self.registry, tool_registry, ctx,
+            max_iterations=self.cfg.agent.max_iterations,
+            end_user=str(user_id) if self.cfg.chat.end_user_id else None,
+            primary=engine,
+        )
+        outcome.usage += extra_usage
+        outcome.cost_usd += extra_usage.cost(engine.spec)
+        outcome.text = self._session_length_note(outcome)
+        await self.db.save_history(user_id, outcome.messages)
+        await self.db.add_stats(
+            user_id, messages_sent=1,
+            prompt_tokens=outcome.usage.prompt_tokens,
+            completion_tokens=outcome.usage.completion_tokens,
+            images_generated=outcome.images_generated,
+            cost_usd=outcome.cost_usd
+            + outcome.images_generated * self._image_price(),
+        )
+        return outcome
+
+    async def undo(self, user_id: int) -> bool:
+        '''Remove the last exchange (the last user message and everything after it).'''
+        messages = await self.db.get_history(user_id)
+        if not messages:
+            return False
+        while messages and messages[-1].get('role') != 'user':
+            messages.pop()
+        if not messages:
+            return False
+        messages.pop()
+        await self.db.save_history(user_id, messages)
+        return True
+
+    async def retry(self, user_id: int) -> AgentOutcome | None:
+        '''Regenerate the answer to the last user message. None = nothing to retry.'''
+        try:
+            history = await self.db.get_history(user_id)
+            if not history or not any(m.get('role') == 'user' for m in history):
+                return None
+            engine = await self.registry.engine_for_user(user_id)
+            messages = await self._prepare_history(user_id, engine.spec)
+            while messages and messages[-1].get('role') != 'user':
+                messages.pop()
+            if not messages or messages[-1].get('role') != 'user':
+                return None
+            text = message_text(messages[-1])
+            return await self._execute_turn(user_id, engine, messages, text)
+        except AllModelsFailedError as e:
+            logger.error(f'All models failed for user {user_id}: {e}')
+            return AgentOutcome(
+                text='The AI service is currently unavailable or rate limited. '
+                     'Please try again later.',
+                messages=[], spec=await self.registry.spec_for_user(user_id))
+        except Exception:
+            logger.exception(f'Could not retry for user {user_id}')
             return None
 
     def _session_length_note(self, outcome: AgentOutcome) -> str:
