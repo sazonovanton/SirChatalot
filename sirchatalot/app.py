@@ -88,6 +88,59 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
                     files_proc=files_proc, files_rag=files_rag)
 
 
+def embeddings_fingerprint(cfg: AppConfig) -> str:
+    emb = cfg.files.embeddings
+    if emb.provider == 'local':
+        return 'local:onnx-minilm-l6-v2'
+    return f'{emb.provider}:{emb.model}:{emb.base_url or "default"}'
+
+
+async def reindex_if_embeddings_changed(services: Services,
+                                        files_dir: str = './data/files') -> None:
+    '''
+    Vectors from different embedding models are incompatible. Track the
+    configured embeddings identity in the DB; when it changes, drop the vector
+    store and re-embed every registered file from disk.
+    '''
+    if services.files_rag is None:
+        return
+    fingerprint = embeddings_fingerprint(services.cfg)
+    stored = await services.db.get_meta('embeddings_fingerprint')
+    if stored == fingerprint:
+        return
+    if stored is None and await services.files_rag.count() == 0:
+        await services.db.set_meta('embeddings_fingerprint', fingerprint)
+        return
+
+    logger.warning(f'Embeddings changed ({stored} -> {fingerprint}); '
+                   f'reindexing all files...')
+    print(f'Embeddings model changed — reindexing all uploaded files, please wait...')
+    await services.files_rag.reset()
+    reindexed = missing = failed = 0
+    for owner in await services.db.list_file_owners():
+        owner_dir = os.path.join(files_dir, owner)
+        for entry in await services.db.list_files(owner):
+            filename = entry['filename']
+            path = os.path.join(owner_dir, filename)
+            if not os.path.exists(path):
+                logger.warning(f'Source file missing, dropping from registry: {path}')
+                await services.db.delete_file(owner, filename)
+                missing += 1
+                continue
+            text = await services.files_proc.convert_to_text(path)
+            processed = bool(text) and await services.files_rag.process_text(
+                text, user_id=owner, filename=filename)
+            if processed:
+                reindexed += 1
+            else:
+                failed += 1
+                await services.db.upsert_file(owner, filename, entry['summary'], False)
+                logger.error(f'Could not reindex {path}')
+    await services.db.set_meta('embeddings_fingerprint', fingerprint)
+    logger.warning(f'Reindexing done: {reindexed} ok, {missing} missing, {failed} failed')
+    print(f'Reindexing done: {reindexed} ok, {missing} missing, {failed} failed')
+
+
 async def ingest_common_files(services: Services) -> None:
     '''Process files from ./data/files/common into the RAG database as user "common".'''
     if services.files_rag is None or not os.path.isdir(COMMON_FILES_DIR):
@@ -245,6 +298,7 @@ def run() -> None:
             await application.bot.set_my_commands(bot_commands(cfg))
         except Exception:
             logger.exception('Could not set the bot command menu')
+        await reindex_if_embeddings_changed(services)
         await ingest_common_files(services)
 
     async def post_shutdown(application: Application) -> None:

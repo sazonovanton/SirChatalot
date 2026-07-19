@@ -296,8 +296,13 @@ vectors and registry).
 
 `provider: local` computes embeddings on the bot's machine with the ONNX
 MiniLM model bundled with ChromaDB — no API calls at all (the model, ~80 MB,
-is downloaded on first use). Note: switching embedding providers/models makes
-old vectors incompatible — delete `./data/files/chromadb` and re-upload files.
+is downloaded on first use).
+
+The configured embeddings identity (provider/model/base_url) is tracked in the
+database: when it changes, the bot automatically drops the vector store on the
+next start and re-embeds every registered file from disk (a registered file whose
+source is missing is dropped from the registry with a log line). Depending on the
+number of documents this can take a while on startup.
 
 ### mcp_servers (optional)
 

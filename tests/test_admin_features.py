@@ -62,3 +62,56 @@ def test_error_notifier_distinct_errors():
     notifier = ErrorNotifier(admin_id=1)
     assert notifier._should_notify('error A') is True
     assert notifier._should_notify('error B') is True    # different key not throttled
+
+
+async def test_reindex_on_embeddings_change(db, tmp_path):
+    from sirchatalot.app import reindex_if_embeddings_changed, embeddings_fingerprint
+    from sirchatalot.files.extract import FilesProcessor
+    from sirchatalot.files.rag import FilesRAG
+    from sirchatalot.tg.services import Services
+    from tests.conftest import make_config
+    from tests.test_rag import FakeEmbeddings, files_config
+
+    cfg = make_config(files={'embeddings': {'api_key': 'k', 'model': 'model-A'}})
+    rag = FilesRAG(files_config(), FakeEmbeddings(), chromadb_path=str(tmp_path / 'c'))
+    services = Services(cfg=cfg, db=db, registry=None, chat=None,
+                        files_proc=FilesProcessor(), files_rag=rag)
+    files_dir = tmp_path / 'files'
+
+    # first start on an empty store: fingerprint recorded, no reindex needed
+    await reindex_if_embeddings_changed(services, files_dir=str(files_dir))
+    assert await db.get_meta('embeddings_fingerprint') == embeddings_fingerprint(cfg)
+
+    # user uploads a file (simulated)
+    (files_dir / '7').mkdir(parents=True)
+    (files_dir / '7' / 'doc.txt').write_text('apple pie recipe text', encoding='utf-8')
+    await rag.process_text('apple pie recipe text', '7', 'doc.txt')
+    await db.upsert_file('7', 'doc.txt', 'summary', True)
+    # plus a registered file whose source is gone
+    await db.upsert_file('7', 'ghost.txt', None, True)
+    assert await rag.count() > 0
+
+    # model changes -> reindex drops old vectors and re-embeds from disk
+    cfg2 = make_config(files={'embeddings': {'api_key': 'k', 'model': 'model-B'}})
+    services.cfg = cfg2
+    await reindex_if_embeddings_changed(services, files_dir=str(files_dir))
+
+    assert await db.get_meta('embeddings_fingerprint') == embeddings_fingerprint(cfg2)
+    assert await rag.user_files('7') == ['doc.txt']       # re-embedded
+    names = [f['filename'] for f in await db.list_files('7')]
+    assert names == ['doc.txt']                            # ghost dropped from registry
+    hits = await rag.semantic_search('apple', user_id='7')
+    assert hits and hits[0].filename == 'doc.txt'
+
+    # same fingerprint -> no-op (vectors survive)
+    await reindex_if_embeddings_changed(services, files_dir=str(files_dir))
+    assert await rag.user_files('7') == ['doc.txt']
+
+
+def test_fingerprint_shape():
+    from sirchatalot.app import embeddings_fingerprint
+    from tests.conftest import make_config
+    a = embeddings_fingerprint(make_config(files={'embeddings': {'model': 'm1'}}))
+    b = embeddings_fingerprint(make_config(files={'embeddings': {'model': 'm2'}}))
+    c = embeddings_fingerprint(make_config(files={'embeddings': {'provider': 'local'}}))
+    assert a != b and a != c and b != c

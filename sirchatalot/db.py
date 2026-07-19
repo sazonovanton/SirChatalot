@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS files (
     added_at  TEXT DEFAULT (datetime('now')),
     PRIMARY KEY (owner, filename)
 );
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 CREATE TABLE IF NOT EXISTS memories (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id    INTEGER NOT NULL,
@@ -95,6 +99,23 @@ class Database:
         if self._conn is None:
             raise RuntimeError('Database is not connected')
         return self._conn
+
+    # ---- meta (key-value) ----
+
+    async def get_meta(self, key: str) -> str | None:
+        async with self.conn.execute(
+            'SELECT value FROM meta WHERE key = ?', (key,)
+        ) as cur:
+            row = await cur.fetchone()
+        return row['value'] if row else None
+
+    async def set_meta(self, key: str, value: str) -> None:
+        await self.conn.execute(
+            'INSERT INTO meta (key, value) VALUES (?, ?) '
+            'ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+            (key, value),
+        )
+        await self.conn.commit()
 
     # ---- users ----
 
@@ -291,6 +312,11 @@ class Database:
             (owner, filename, summary, int(processed)),
         )
         await self.conn.commit()
+
+    async def list_file_owners(self) -> list[str]:
+        async with self.conn.execute('SELECT DISTINCT owner FROM files') as cur:
+            rows = await cur.fetchall()
+        return [r['owner'] for r in rows]
 
     async def delete_file(self, owner: str, filename: str) -> bool:
         cur = await self.conn.execute(

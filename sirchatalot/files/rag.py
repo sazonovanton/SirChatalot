@@ -103,6 +103,16 @@ class FilesRAG:
             logger.exception('Error performing semantic search')
             return None
 
+    async def reset(self) -> None:
+        '''Drop all vectors (used when the embeddings model changes).'''
+        await asyncio.to_thread(self.client.delete_collection, 'files')
+        self.collection = await asyncio.to_thread(
+            self.client.get_or_create_collection, name='files', embedding_function=None
+        )
+
+    async def count(self) -> int:
+        return await asyncio.to_thread(self.collection.count)
+
     async def remove_file(self, user_id, filename: str) -> bool:
         try:
             await asyncio.to_thread(
