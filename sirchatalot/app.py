@@ -68,12 +68,12 @@ def build_services(cfg: AppConfig, db: Database) -> Services:
     files_proc = None
     files_rag = None
     if cfg.files is not None:
-        from sirchatalot.files.embeddings import EmbeddingsEngine
+        from sirchatalot.files.embeddings import make_embeddings_engine
         from sirchatalot.files.extract import FilesProcessor
         from sirchatalot.files.rag import FilesRAG
         files_proc = FilesProcessor()
-        files_rag = FilesRAG(cfg.files, EmbeddingsEngine(cfg.files.embeddings,
-                                                         proxy=cfg.proxies.llm))
+        files_rag = FilesRAG(cfg.files, make_embeddings_engine(cfg.files.embeddings,
+                                                               proxy=cfg.proxies.llm))
 
     memory = None
     if cfg.memory is not None:
@@ -110,6 +110,50 @@ async def ingest_common_files(services: Services) -> None:
         summary = await services.chat.summarize_text(text[:4096]) or ''
         await services.db.upsert_file('common', name, summary, True)
         logger.info(f'Common file {name} was processed into the RAG dataset')
+
+
+class ErrorNotifier:
+    '''Global PTB error handler: log everything, tell the user something went
+    wrong, and notify the admin (throttled so an error storm does not flood).'''
+
+    THROTTLE_SECONDS = 300
+
+    def __init__(self, admin_id: int | None):
+        self.admin_id = admin_id
+        self._last_sent: dict[str, float] = {}
+
+    def _should_notify(self, key: str) -> bool:
+        import time
+        now = time.time()
+        last = self._last_sent.get(key)
+        if last is not None and now - last < self.THROTTLE_SECONDS:
+            return False
+        self._last_sent[key] = now
+        return True
+
+    async def __call__(self, update, context) -> None:
+        error = context.error
+        logger.error('Unhandled error in handler', exc_info=error)
+        message = getattr(update, 'effective_message', None)
+        if message is not None:
+            try:
+                await message.reply_text('Sorry, something went wrong. '
+                                         'The administrator has been notified.')
+            except Exception:
+                pass
+        if self.admin_id is None:
+            return
+        key = f'{type(error).__name__}: {error}'[:200]
+        if not self._should_notify(key):
+            return
+        user = getattr(update, 'effective_user', None)
+        text = (f'⚠️ SirChatalot error\n'
+                f'User: {user.id if user else "?"}\n'
+                f'{key}')
+        try:
+            await context.bot.send_message(chat_id=self.admin_id, text=text)
+        except Exception:
+            logger.exception('Could not notify admin about an error')
 
 
 def bot_commands(cfg: AppConfig) -> list[tuple[str, str]]:
@@ -155,6 +199,7 @@ def register_handlers(application: Application) -> None:
     application.add_handler(CallbackQueryHandler(handlers.style_button, pattern=r'^style:'))
     application.add_handler(CallbackQueryHandler(handlers.memory_button, pattern=r'^memory:'))
     application.add_handler(CallbackQueryHandler(handlers.tools_button, pattern=r'^tools:'))
+    application.add_handler(CallbackQueryHandler(handlers.files_button, pattern=r'^files:'))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handlers.answer))
     application.add_handler(MessageHandler(
@@ -216,4 +261,5 @@ def run() -> None:
                    .get_updates_proxy(cfg.proxies.telegram))
     application = builder.build()
     register_handlers(application)
+    application.add_error_handler(ErrorNotifier(cfg.telegram.admin_id))
     application.run_polling()

@@ -103,6 +103,17 @@ class FilesRAG:
             logger.exception('Error performing semantic search')
             return None
 
+    async def remove_file(self, user_id, filename: str) -> bool:
+        try:
+            await asyncio.to_thread(
+                self.collection.delete,
+                where={'$and': [{'user_id': str(user_id)}, {'filename': filename}]},
+            )
+            return True
+        except Exception:
+            logger.exception(f'Error removing {filename} for user {user_id}')
+            return False
+
     async def remove_user(self, user_id) -> bool:
         try:
             await asyncio.to_thread(self.collection.delete, where={'user_id': str(user_id)})

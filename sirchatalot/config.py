@@ -28,6 +28,7 @@ class TelegramConfig(StrictModel):
     access_codes: list[str] = []
     banlist_enabled: bool = False
     reply_to_message: bool = False
+    admin_id: int | None = None   # gets error notifications when set
 
 
 class RateLimitConfig(StrictModel):
@@ -169,9 +170,19 @@ class WebConfig(StrictModel):
 
 
 class EmbeddingsConfig(StrictModel):
+    # 'openai' = any OpenAI-compatible embeddings API; 'local' = the ONNX
+    # MiniLM model bundled with ChromaDB — no API calls at all
+    provider: str = 'openai'
     api_key: str = 'not-needed'  # keyless endpoints (Ollama, local vLLM) can omit this
     base_url: str | None = None
     model: str = 'text-embedding-3-small'
+
+    @field_validator('provider')
+    @classmethod
+    def _known_provider(cls, v):
+        if v not in ('openai', 'local'):
+            raise ValueError(f'embeddings.provider must be "openai" or "local", got: {v}')
+        return v
 
 
 class FilesConfig(StrictModel):

@@ -84,6 +84,7 @@ telegram:
   access_codes: [somecode]          # remove/empty = the bot is open to everyone
   banlist_enabled: false            # ban users listed in ./data/banlist.txt
   reply_to_message: false           # reply directly to the user's message
+  # admin_id: 123456789             # gets error notifications (throttled)
 ```
 
 If `access_codes` is set, the bot answers only whitelisted users; sending a code
@@ -275,6 +276,7 @@ resolution time, response size is capped.
 ```yaml
 files:
   embeddings:
+    provider: openai          # openai | local
     api_key: "sk-..."
     base_url: null
     model: text-embedding-3-small
@@ -289,7 +291,13 @@ Send a document (PDF, DOCX, DOC, PPTX, PPT, TXT, MD, CSV, LOG) and it is chunked
 embedded and stored in ChromaDB; the bot gets a `semantic_search` tool and a list
 of available files in its system prompt. Files placed in `./data/files/common/`
 are ingested at startup and are visible to all users. `/listfiles` shows your
-files, `/deletefiles` removes them (files, vectors and registry).
+files, `/deletefiles` lets you delete them one by one or all at once (files,
+vectors and registry).
+
+`provider: local` computes embeddings on the bot's machine with the ONNX
+MiniLM model bundled with ChromaDB — no API calls at all (the model, ~80 MB,
+is downloaded on first use). Note: switching embedding providers/models makes
+old vectors incompatible — delete `./data/files/chromadb` and re-upload files.
 
 ### mcp_servers (optional)
 

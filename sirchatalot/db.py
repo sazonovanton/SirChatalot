@@ -292,6 +292,13 @@ class Database:
         )
         await self.conn.commit()
 
+    async def delete_file(self, owner: str, filename: str) -> bool:
+        cur = await self.conn.execute(
+            'DELETE FROM files WHERE owner = ? AND filename = ?', (owner, filename)
+        )
+        await self.conn.commit()
+        return cur.rowcount > 0
+
     async def delete_files(self, owner: str) -> int:
         cur = await self.conn.execute('DELETE FROM files WHERE owner = ?', (owner,))
         await self.conn.commit()

@@ -500,25 +500,70 @@ async def list_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await send_message(update, text)
 
 
+def _file_key(filename: str) -> str:
+    '''Short stable id for callback_data (which is limited to 64 bytes).'''
+    import hashlib
+    return hashlib.sha1(filename.encode('utf-8')).hexdigest()[:16]
+
+
+async def _files_view(services, user_id: int):
+    files = await services.db.list_files(str(user_id))
+    if not files:
+        return 'No files found.', None
+    lines = ['Your files — tap to delete one:\n']
+    rows = []
+    for i, f in enumerate(files, 1):
+        lines.append(f'{i}. {f["filename"]}')
+        rows.append([InlineKeyboardButton(f'🗑 {i}. {f["filename"][:40]}',
+                                          callback_data=f'files:del:{_file_key(f["filename"])}')])
+    rows.append([InlineKeyboardButton('🧹 Delete all files', callback_data='files:clear')])
+    return '\n'.join(lines), InlineKeyboardMarkup(rows)
+
+
+async def _delete_one_file(services, user_id: int, filename: str) -> None:
+    path = os.path.join(FILES_DIR, str(user_id), filename)
+    if os.path.exists(path):
+        os.remove(path)
+    await services.files_rag.remove_file(user_id, filename)
+    await services.db.delete_file(str(user_id), filename)
+    logger.info(f'File {filename} deleted for user {user_id}')
+
+
 @is_authorized
 async def delete_files_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     services = get_services(context)
     if services.files_rag is None:
         await update.effective_message.reply_text('Sorry, working with files is not enabled.')
         return
+    text, keyboard = await _files_view(services, update.effective_user.id)
+    await update.effective_message.reply_text(text, reply_markup=keyboard)
+
+
+@is_authorized
+async def files_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    services = get_services(context)
+    query = update.callback_query
+    await query.answer()
+    if services.files_rag is None:
+        return
     user_id = update.effective_user.id
+    action = query.data.removeprefix('files:')
     try:
-        user_dir = os.path.join(FILES_DIR, str(user_id))
-        if os.path.exists(user_dir):
-            for name in os.listdir(user_dir):
-                os.remove(os.path.join(user_dir, name))
-        removed = await services.files_rag.remove_user(user_id)
-        await services.db.delete_files(str(user_id))
-        if removed:
-            await update.effective_message.reply_text('Files and RAG dataset were deleted.')
-        else:
-            await update.effective_message.reply_text('Error removing the RAG dataset.')
+        if action == 'clear':
+            user_dir = os.path.join(FILES_DIR, str(user_id))
+            if os.path.exists(user_dir):
+                for name in os.listdir(user_dir):
+                    os.remove(os.path.join(user_dir, name))
+            await services.files_rag.remove_user(user_id)
+            await services.db.delete_files(str(user_id))
+        elif action.startswith('del:'):
+            key = action.removeprefix('del:')
+            for f in await services.db.list_files(str(user_id)):
+                if _file_key(f['filename']) == key:
+                    await _delete_one_file(services, user_id, f['filename'])
+                    break
+        text, keyboard = await _files_view(services, user_id)
+        await query.edit_message_text(text, reply_markup=keyboard)
     except Exception:
         logger.exception(f'Error deleting files for user {user_id}')
-        await update.effective_message.reply_text(
-            'Sorry, something went wrong while deleting files.')
+        await query.edit_message_text('Sorry, something went wrong while deleting files.')

@@ -10,6 +10,7 @@ telegram:
   access_codes: [whitelistcode, secondwhitelistcode]
   banlist_enabled: false
   reply_to_message: false
+  # admin_id: 123456789       # this user gets error notifications
 
 # Any OpenAI-compatible API works: OpenAI, OpenRouter, Ollama, vLLM,
 # Anthropic/Yandex via their OpenAI-compatible endpoints, etc.
@@ -148,9 +149,14 @@ web:
 # Document upload + agentic RAG (semantic search over uploaded files).
 files:
   embeddings:
+    provider: openai          # openai = any OpenAI-compatible API;
+                              # local = bundled ONNX model, no API calls at all
     api_key: "sk-..."
     # base_url: null
     model: text-embedding-3-small
+  # Fully local RAG (embeddings computed on the bot's machine):
+  # embeddings:
+  #   provider: local
   max_file_size_mb: 20
   chunk_size: 600
   overlap_percent: 0.1
