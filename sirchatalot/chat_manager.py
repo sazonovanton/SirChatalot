@@ -1,0 +1,301 @@
+'''
+ChatManager: orchestrates a conversation turn — history, styles, moderation,
+trimming/summarizing, the agent loop and statistics.
+'''
+
+import base64
+
+from sirchatalot.agent import AgentOutcome, run_turn
+from sirchatalot.config import AppConfig
+from sirchatalot.db import Database
+from sirchatalot.engine import Usage, message_text
+from sirchatalot.logging_setup import get_logger
+from sirchatalot.model_registry import AllModelsFailedError, ModelRegistry, summary_engine
+from sirchatalot.tools import ToolContext, registry as tool_registry
+
+logger = get_logger('chat')
+
+ERROR_REPLY = ('Sorry, I could not get an answer to your message. '
+               'Please try again or /delete your chat history.')
+
+
+class ChatManager:
+    def __init__(self, cfg: AppConfig, db: Database, model_registry: ModelRegistry,
+                 image_engine=None, audio_engine=None, web_search=None,
+                 url_opener=None, files_rag=None):
+        self.cfg = cfg
+        self.db = db
+        self.registry = model_registry
+        self.image_engine = image_engine
+        self.audio_engine = audio_engine
+        self.web_search = web_search
+        self.url_opener = url_opener
+        self.files_rag = files_rag
+        self.pending_images: dict[int, bool] = {}
+
+    # ---- system message ----
+
+    async def _base_system_message(self, user_id: int) -> str:
+        style_name = await self.db.get_style(user_id)
+        if style_name and style_name in self.cfg.styles:
+            return self.cfg.styles[style_name].system_message
+        return self.cfg.chat.system_message
+
+    async def _build_system_message(self, user_id: int) -> str:
+        text = await self._base_system_message(user_id)
+        spec = await self.registry.spec_for_user(user_id)
+        if spec.vision:
+            text += '\n# You have vision capabilities enabled'
+        if spec.tools:
+            text += '\n# You have function calling (tools) enabled'
+        if self.files_rag is not None:
+            files_block = await self._files_block(user_id)
+            if files_block:
+                text += files_block
+        return text
+
+    async def _files_block(self, user_id: int) -> str:
+        user_files = await self.db.list_files(str(user_id))
+        common_files = await self.db.list_files('common')
+        if not user_files and not common_files:
+            return ''
+        lines = ['\n# Available files:']
+        if user_files:
+            lines.append('## User files:')
+            lines += [f'- {f["filename"]}: {f["summary"] or ""}' for f in user_files]
+        if common_files:
+            lines.append('## Common files:')
+            lines += [f'- {f["filename"]}: {f["summary"] or ""}' for f in common_files]
+        lines.append('---\nUse semantic search to find information in the files '
+                     'when you think it can be there.')
+        return '\n'.join(lines)
+
+    async def _prepare_history(self, user_id: int) -> list:
+        messages = await self.db.get_history(user_id) or []
+        system = {'role': 'system', 'content': await self._build_system_message(user_id)}
+        if messages and messages[0].get('role') == 'system':
+            messages[0] = system
+        else:
+            messages.insert(0, system)
+        return messages
+
+    # ---- history size management ----
+
+    async def _shrink_if_needed(self, user_id: int, messages: list) -> tuple[list, Usage]:
+        usage = Usage()
+        engine = await self.registry.engine_for_user(user_id)
+        limit = engine.spec.max_history_tokens
+        if engine.count_tokens(messages) <= limit:
+            return messages, usage
+        if self.cfg.chat.summarize_too_long:
+            messages, usage = await self._summarize(messages)
+        while engine.count_tokens(messages) > int(limit * 0.8) and len(messages) > 2:
+            messages = self._trim_one(messages)
+        return messages, usage
+
+    def _trim_one(self, messages: list) -> list:
+        '''Drop the oldest non-system message together with its tool-result tail.'''
+        head, rest = messages[0], messages[1:]
+        drop = 1
+        while drop < len(rest) and rest[drop].get('role') == 'tool':
+            drop += 1
+        return [head] + rest[drop:]
+
+    async def _summarize(self, messages: list, leave: int = 2) -> tuple[list, Usage]:
+        if len(messages) <= leave + 1:
+            return messages, Usage()
+        head, middle, tail = messages[0], messages[1:-leave], messages[-leave:]
+        text = '\n'.join(f"{m.get('role')}: {message_text(m)}" for m in middle)
+        try:
+            summary, usage = await summary_engine(self.registry).summary(text)
+        except Exception:
+            logger.exception('Could not summarize history, falling back to trimming')
+            return messages, Usage()
+        return ([head,
+                 {'role': 'assistant', 'content': f'<Previous conversation summary: {summary}>'}]
+                + tail), usage
+
+    # ---- moderation ----
+
+    async def _moderation_blocked(self, user_id: int, text: str) -> bool:
+        if not self.cfg.chat.moderation or not text:
+            return False
+        flagged = await summary_engine(self.registry).moderation_flagged(text, user_id)
+        if flagged:
+            logger.info(f'Message from user {user_id} was flagged: {flagged}')
+            try:
+                with open('./data/moderation.txt', 'a', encoding='utf-8') as f:
+                    f.write(f'{user_id}\t{flagged}\n')
+            except OSError:
+                logger.exception('Could not write moderation log')
+            return True
+        return False
+
+    # ---- main entry points ----
+
+    async def process_text(self, user_id: int, text: str) -> AgentOutcome | None:
+        '''One conversation turn. Returns the outcome, or None on failure.'''
+        try:
+            if await self._moderation_blocked(user_id, text):
+                return AgentOutcome(
+                    text='Your message was flagged by moderation and was not sent. '
+                         'Please try again.',
+                    messages=[], spec=await self.registry.spec_for_user(user_id))
+
+            messages = await self._prepare_history(user_id)
+            if self.pending_images.pop(user_id, None) and isinstance(
+                    messages[-1].get('content'), list):
+                messages[-1]['content'].append({'type': 'text', 'text': text})
+            else:
+                messages.append({'role': 'user', 'content': text})
+
+            messages, extra_usage = await self._shrink_if_needed(user_id, messages)
+
+            ctx = ToolContext(
+                user_id=user_id, user_message=text,
+                image_engine=self.image_engine, web_search=self.web_search,
+                url_opener=self.url_opener, files_rag=self.files_rag,
+                summary=self.summarize_text,
+                url_summarize=bool(self.cfg.web and self.cfg.web.url_open
+                                   and self.cfg.web.url_open.summarize),
+                rag_results=self.cfg.files.search_results if self.cfg.files else 4,
+            )
+            outcome = await run_turn(
+                user_id, messages, self.registry, tool_registry, ctx,
+                max_iterations=self.cfg.agent.max_iterations,
+                end_user=str(user_id) if self.cfg.chat.end_user_id else None,
+            )
+            outcome.usage += extra_usage
+            outcome.text = self._session_length_note(outcome)
+            await self.db.save_history(user_id, outcome.messages)
+            await self.db.add_stats(
+                user_id, messages_sent=1,
+                prompt_tokens=outcome.usage.prompt_tokens,
+                completion_tokens=outcome.usage.completion_tokens,
+                images_generated=outcome.images_generated,
+                cost_usd=outcome.usage.cost(outcome.spec)
+                + outcome.images_generated * self._image_price(),
+            )
+            return outcome
+        except AllModelsFailedError as e:
+            logger.error(f'All models failed for user {user_id}: {e}')
+            return None
+        except Exception:
+            logger.exception(f'Could not process message from user {user_id}')
+            return None
+
+    def _session_length_note(self, outcome: AgentOutcome) -> str:
+        text = outcome.text
+        limit = self.cfg.chat.max_session_length
+        if limit is not None:
+            used = len([m for m in outcome.messages if m.get('role') == 'user'])
+            if limit - used <= 3:
+                text += (f'\n*System*: You are close to the session limit. '
+                         f'Messages left: {max(limit - used, 0)}. '
+                         f'Use /delete to start a new session.')
+        return text
+
+    def _image_price(self) -> float:
+        return self.cfg.image_generation.base_price if self.cfg.image_generation else 0.0
+
+    async def summarize_text(self, text: str) -> str | None:
+        try:
+            summary, _ = await summary_engine(self.registry).summary(text)
+            return summary
+        except Exception:
+            logger.exception('Summary failed')
+            return None
+
+    async def process_audio(self, user_id: int, file_path: str) -> str | AgentOutcome | None:
+        '''Voice/video message: transcribe, then answer (or transcript only).'''
+        if self.audio_engine is None:
+            return 'Sorry, speech-to-text is not available.'
+        try:
+            duration = await self.audio_engine.duration_seconds(file_path)
+        except Exception:
+            logger.exception('Could not read audio duration')
+            duration = 0
+        transcript = await self.audio_engine.transcribe(file_path)
+        if transcript is None:
+            return 'Sorry, I could not convert your audio/video to text.'
+        await self.db.add_stats(
+            user_id, voice_messages_sent=1, speech2text_seconds=round(duration),
+            cost_usd=duration / 60 * self.audio_engine.cfg.price_per_minute,
+        )
+        if self.audio_engine.cfg.transcribe_only:
+            return f'Transcription: {transcript}'
+        return await self.process_text(user_id, transcript)
+
+    async def add_image(self, user_id: int, image_b64: str) -> bool:
+        '''Store an incoming photo in history; the caption may follow separately.'''
+        try:
+            messages = await self._prepare_history(user_id)
+            messages.append({
+                'role': 'user',
+                'content': [{'type': 'image_url',
+                             'image_url': {'url': f'data:image/jpeg;base64,{image_b64}'}}],
+            })
+            await self.db.save_history(user_id, messages)
+            self.pending_images[user_id] = True
+            return True
+        except Exception:
+            logger.exception(f'Could not add image for user {user_id}')
+            return False
+
+    async def imagine(self, user_id: int, prompt: str) -> tuple[bytes | None, str | None]:
+        '''/imagine command. Returns (image_bytes, caption/error text).'''
+        if self.image_engine is None:
+            return None, 'Sorry, image generation is not available.'
+        b64_image, text = await self.image_engine.imagine(prompt, user_id=user_id)
+        if b64_image is None:
+            return None, text or 'Sorry, I could not generate an image from your prompt.'
+        await self.db.add_stats(user_id, images_generated=1, cost_usd=self._image_price())
+        try:
+            messages = await self._prepare_history(user_id)
+            messages.append({'role': 'assistant',
+                             'content': f'<system: an image was generated from the prompt: {prompt}>'})
+            await self.db.save_history(user_id, messages)
+        except Exception:
+            logger.exception('Could not record generated image in history')
+        return base64.b64decode(b64_image), text
+
+    async def delete_chat(self, user_id: int) -> bool:
+        if self.cfg.logging.log_chats:
+            await self._dump_chat(user_id)
+        self.pending_images.pop(user_id, None)
+        return await self.db.delete_history(user_id)
+
+    async def _dump_chat(self, user_id: int) -> None:
+        from datetime import datetime
+        messages = await self.db.get_history(user_id)
+        if not messages:
+            return
+        try:
+            stamp = datetime.now().strftime('%Y%m%d-%H%M%S')
+            with open(f'./data/chats/{user_id}_{stamp}.txt', 'w', encoding='utf-8') as f:
+                for m in messages:
+                    f.write(f"{m.get('role')}: {message_text(m)}\n")
+        except OSError:
+            logger.exception(f'Could not dump chat for user {user_id}')
+
+    async def set_style(self, user_id: int, style_name: str | None) -> bool:
+        if style_name is not None and style_name not in self.cfg.styles:
+            return False
+        await self.db.set_style(user_id, style_name)
+        await self.delete_chat(user_id)
+        return True
+
+    async def stats_text(self, user_id: int) -> str | None:
+        stats = await self.db.get_stats(user_id)
+        if stats is None:
+            return None
+        lines = [f"Messages sent: {stats['messages_sent']}"]
+        if self.audio_engine is not None:
+            lines.append(f"Voice messages sent: {stats['voice_messages_sent']}")
+            lines.append(f"Speech to text seconds: {round(stats['speech2text_seconds'])}")
+        lines.append(f"Prompt tokens used: {stats['prompt_tokens']}")
+        lines.append(f"Completion tokens used: {stats['completion_tokens']}")
+        if self.image_engine is not None:
+            lines.append(f"Images generated: {stats['images_generated']}")
+        lines.append(f"\nApproximate cost of usage is ${round(stats['cost_usd'], 4)}")
+        return '\n'.join(lines)
