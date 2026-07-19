@@ -111,9 +111,15 @@ audio:
   api_key: "sk-..."
   # base_url: null
   model: whisper-1
+  api: transcriptions         # transcriptions = OpenAI audio endpoint (Whisper etc.)
   price_per_minute: 0.006
-  format: mp3
+  format: mp3                 # chat mode requires wav or mp3
   transcribe_only: false      # true = reply with the transcript instead of answering
+  # OpenRouter has no transcriptions endpoint — use a multimodal model instead:
+  # api: chat
+  # model: google/gemini-2.5-flash
+  # base_url: https://openrouter.ai/api/v1
+  # api_key: "sk-or-..."
 
 web:
   # provider: google (api_key + cse_id) | searxng (url) | tavily (api_key) | brave (api_key)

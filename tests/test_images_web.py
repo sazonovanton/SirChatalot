@@ -59,3 +59,13 @@ def test_parse_falls_back_to_bs4_on_garbage():
     opener = UrlOpener(UrlOpenConfig(trim_length=None))
     html = b'<body><p>tiny but real text of the page</p></body>'
     assert 'tiny but real' in (opener._parse(html) or '')
+
+
+def test_audio_api_config_validation():
+    from sirchatalot.config import AudioConfig
+    assert AudioConfig(api_key='k').api == 'transcriptions'
+    assert AudioConfig(api_key='k', api='chat', format='wav').api == 'chat'
+    with pytest.raises(Exception, match='transcriptions.*chat'):
+        AudioConfig(api_key='k', api='whisper')
+    with pytest.raises(Exception, match='wav or mp3'):
+        AudioConfig(api_key='k', api='chat', format='ogg')

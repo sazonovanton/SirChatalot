@@ -106,9 +106,26 @@ class AudioConfig(StrictModel):
     api_key: str
     base_url: str | None = None
     model: str = 'whisper-1'
+    # 'transcriptions' = the OpenAI audio endpoint (/v1/audio/transcriptions).
+    # 'chat' = transcription by a multimodal model via chat completions with
+    # input_audio (OpenRouter models like google/gemini-2.5-flash).
+    api: str = 'transcriptions'
     price_per_minute: float = 0.0
     format: str = 'mp3'
     transcribe_only: bool = False
+
+    @field_validator('api')
+    @classmethod
+    def _known_api(cls, v):
+        if v not in ('transcriptions', 'chat'):
+            raise ValueError(f'audio.api must be "transcriptions" or "chat", got: {v}')
+        return v
+
+    @model_validator(mode='after')
+    def _chat_format(self):
+        if self.api == 'chat' and self.format not in ('wav', 'mp3'):
+            raise ValueError('audio.api: chat requires format wav or mp3 (input_audio)')
+        return self
 
 
 class WebSearchConfig(StrictModel):

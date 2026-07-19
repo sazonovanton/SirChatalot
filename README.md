@@ -218,10 +218,28 @@ audio:
   api_key: "sk-..."
   base_url: null
   model: whisper-1
+  api: transcriptions       # transcriptions | chat (see below)
   price_per_minute: 0.006
-  format: mp3               # what to convert Telegram audio into (needs ffmpeg)
+  format: mp3               # what to convert Telegram audio into (needs ffmpeg);
+                            # chat mode requires wav or mp3
   transcribe_only: false    # true = reply with the transcript, don't answer
 ```
+
+Two API modes, mirroring image generation:
+
+* `api: transcriptions` — the OpenAI audio endpoint (`/v1/audio/transcriptions`):
+  Whisper, gpt-4o-transcribe or any compatible provider.
+* `api: chat` — transcription by a multimodal model via chat completions with
+  `input_audio`. This is the way to do it on **OpenRouter**:
+
+  ```yaml
+  audio:
+    api: chat
+    model: google/gemini-2.5-flash
+    base_url: https://openrouter.ai/api/v1
+    api_key: "sk-or-..."
+    format: mp3
+  ```
 
 ### web (optional)
 

@@ -42,6 +42,8 @@ class AudioEngine:
         converted = None
         try:
             converted = await self._convert(file_path)
+            if self.cfg.api == 'chat':
+                return await self._transcribe_via_chat(converted)
             with open(converted, 'rb') as audio:
                 transcript = await self.client.audio.transcriptions.create(
                     model=self.cfg.model, file=audio,
@@ -56,3 +58,22 @@ class AudioEngine:
         finally:
             if converted is not None and os.path.exists(converted):
                 os.remove(converted)
+
+    async def _transcribe_via_chat(self, file_path: str) -> str | None:
+        '''Transcription by a multimodal model via chat completions with an
+        input_audio content part (the OpenRouter way).'''
+        import base64
+        with open(file_path, 'rb') as f:
+            audio_b64 = base64.b64encode(f.read()).decode('utf-8')
+        response = await self.client.chat.completions.create(
+            model=self.cfg.model,
+            messages=[{'role': 'user', 'content': [
+                {'type': 'text',
+                 'text': 'Transcribe this audio recording. Output the transcript '
+                         'text only, in the original language, without commentary.'},
+                {'type': 'input_audio',
+                 'input_audio': {'data': audio_b64, 'format': self.cfg.format}},
+            ]}],
+        )
+        text = (response.choices[0].message.content or '').strip()
+        return text or None
