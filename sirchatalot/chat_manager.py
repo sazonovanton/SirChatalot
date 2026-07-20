@@ -199,7 +199,8 @@ class ChatManager:
 
     # ---- main entry points ----
 
-    async def process_text(self, user_id: int, text: str) -> AgentOutcome | None:
+    async def process_text(self, user_id: int, text: str,
+                           on_status=None) -> AgentOutcome | None:
         '''One conversation turn. Returns the outcome, or None on failure.'''
         try:
             if await self._moderation_blocked(user_id, text):
@@ -214,7 +215,8 @@ class ChatManager:
                 messages[-1]['content'].append({'type': 'text', 'text': text})
             else:
                 messages.append({'role': 'user', 'content': text})
-            return await self._execute_turn(user_id, engine, messages, text)
+            return await self._execute_turn(user_id, engine, messages, text,
+                                            on_status=on_status)
         except AllModelsFailedError as e:
             logger.error(f'All models failed for user {user_id}: {e}')
             return AgentOutcome(
@@ -226,8 +228,9 @@ class ChatManager:
             return None
 
     async def _execute_turn(self, user_id: int, engine, messages: list,
-                            text: str) -> AgentOutcome:
+                            text: str, on_status=None) -> AgentOutcome:
         messages, extra_usage = await self._shrink_if_needed(engine, messages)
+        turn_start = len(messages)
         ctx = ToolContext(
             user_id=user_id, user_message=text,
             image_engine=self.image_engine, web_search=self.web_search,
@@ -244,10 +247,13 @@ class ChatManager:
             max_iterations=self.cfg.agent.max_iterations,
             end_user=str(user_id) if self.cfg.chat.end_user_id else None,
             primary=engine,
+            on_status=on_status,
+            max_turn_tokens=self.cfg.agent.max_turn_tokens,
         )
         outcome.usage += extra_usage
         outcome.cost_usd += extra_usage.cost(engine.spec)
         outcome.text = self._session_length_note(outcome)
+        self._truncate_old_tool_results(outcome.messages, turn_start)
         await self.db.save_history(user_id, outcome.messages)
         await self.db.add_stats(
             user_id, messages_sent=1,
@@ -258,6 +264,19 @@ class ChatManager:
             + outcome.images_generated * self._image_price(),
         )
         return outcome
+
+    def _truncate_old_tool_results(self, messages: list, turn_start: int) -> None:
+        '''Tool results from previous turns are kept only as short stubs: the model
+        already used them, and re-sending full dumps every turn wastes tokens.
+        The current turn's results (index >= turn_start) stay full.'''
+        keep = self.cfg.agent.tool_result_keep_chars
+        if not keep:
+            return
+        for message in messages[:turn_start]:
+            content = message.get('content')
+            if (message.get('role') == 'tool' and isinstance(content, str)
+                    and len(content) > keep):
+                message['content'] = content[:keep] + '… [truncated]'
 
     async def undo(self, user_id: int) -> bool:
         '''Remove the last exchange (the last user message and everything after it).'''
@@ -272,7 +291,7 @@ class ChatManager:
         await self.db.save_history(user_id, messages)
         return True
 
-    async def retry(self, user_id: int) -> AgentOutcome | None:
+    async def retry(self, user_id: int, on_status=None) -> AgentOutcome | None:
         '''Regenerate the answer to the last user message. None = nothing to retry.'''
         try:
             history = await self.db.get_history(user_id)
@@ -285,7 +304,8 @@ class ChatManager:
             if not messages or messages[-1].get('role') != 'user':
                 return None
             text = message_text(messages[-1])
-            return await self._execute_turn(user_id, engine, messages, text)
+            return await self._execute_turn(user_id, engine, messages, text,
+                                            on_status=on_status)
         except AllModelsFailedError as e:
             logger.error(f'All models failed for user {user_id}: {e}')
             return AgentOutcome(
@@ -318,7 +338,8 @@ class ChatManager:
             logger.exception('Summary failed')
             return None
 
-    async def process_audio(self, user_id: int, file_path: str) -> str | AgentOutcome | None:
+    async def process_audio(self, user_id: int, file_path: str,
+                            on_status=None) -> str | AgentOutcome | None:
         '''Voice/video message: transcribe, then answer (or transcript only).'''
         if self.audio_engine is None:
             return 'Sorry, speech-to-text is not available.'
@@ -336,7 +357,7 @@ class ChatManager:
         )
         if self.audio_engine.cfg.transcribe_only:
             return f'Transcription: {transcript}'
-        return await self.process_text(user_id, transcript)
+        return await self.process_text(user_id, transcript, on_status=on_status)
 
     async def add_image(self, user_id: int, image_b64: str) -> bool:
         '''Store an incoming photo in history; the caption may follow separately.'''

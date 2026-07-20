@@ -172,7 +172,10 @@ proxies:
   jina: null       # URL opening (Jina Reader and the direct fallback)
 
 agent:
-  max_iterations: 5
+  max_iterations: 5           # max tool-calling rounds per turn
+  # max_turn_tokens: 30000    # hard token budget per turn; exceeded -> forced final answer
+  tool_result_keep_chars: 300 # older turns' tool results are truncated to this in history
+                              # (0 = keep full)
 
 logging:
   level: WARNING

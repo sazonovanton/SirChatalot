@@ -10,8 +10,11 @@ define a fallback chain that is tried automatically when the primary model error
 ## Features
 
 * **Multiple models** — per-user runtime switching (`/model`) and an optional fallback chain.
-* **Agentic tool use** — the model can generate images, search the web, open URLs and
-  search your uploaded documents, across several tool-calling iterations per turn.
+* **Agentic tool use** — the model can generate images, search the web, open URLs,
+  search and read your uploaded documents, across several tool-calling iterations per
+  turn — with live status updates in the chat ("🔍 Searching the web…"), deduplication
+  of repeated calls, and an optional per-turn token budget. Tool results from older
+  turns are automatically shrunk in history to save tokens.
 * **MCP servers** — declare [Model Context Protocol](https://modelcontextprotocol.io)
   servers (stdio or streamable-http) and their tools become available to the model.
 * **Per-user tool control** — `/tools` lets every user enable/disable individual
@@ -338,7 +341,9 @@ proxies:                    # http://user:pass@host:port; all optional
 
 ```yaml
 agent:
-  max_iterations: 5         # max tool-calling rounds per turn
+  max_iterations: 5           # max tool-calling rounds per turn
+  # max_turn_tokens: 30000    # token budget per turn; exceeded -> forced final answer
+  tool_result_keep_chars: 300 # truncate older turns' tool results in history (0 = off)
 
 logging:
   level: WARNING            # DEBUG | INFO | WARNING | ERROR | CRITICAL

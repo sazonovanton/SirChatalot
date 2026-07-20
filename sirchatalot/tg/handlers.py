@@ -13,7 +13,12 @@ from sirchatalot.logging_setup import get_logger
 from sirchatalot.tg import ratelimit
 from sirchatalot.tg.auth import check_user, is_authorized
 from sirchatalot.tg.services import get_services
-from sirchatalot.tg.utils import resize_image_b64, send_message, typing_action
+from sirchatalot.tg.utils import (
+    StatusReporter,
+    resize_image_b64,
+    send_message,
+    typing_action,
+)
 
 logger = get_logger('handlers')
 
@@ -318,9 +323,12 @@ async def style_button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 @is_authorized
 async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     services = get_services(context)
+    status = StatusReporter(update)
     async with typing_action(context, update.effective_chat.id):
         outcome = await services.chat.process_text(update.effective_user.id,
-                                                   update.message.text)
+                                                   update.message.text,
+                                                   on_status=status)
+    await status.cleanup()
     await _reply_outcome(update, context, outcome)
 
 
@@ -328,8 +336,10 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def retry_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Regenerate the answer to the last message.'''
     services = get_services(context)
+    status = StatusReporter(update)
     async with typing_action(context, update.effective_chat.id):
-        outcome = await services.chat.retry(update.effective_user.id)
+        outcome = await services.chat.retry(update.effective_user.id, on_status=status)
+    await status.cleanup()
     if outcome is None:
         await update.effective_message.reply_text('Nothing to retry yet.')
         return
@@ -360,10 +370,13 @@ async def answer_voice_or_video(update: Update, context: ContextTypes.DEFAULT_TY
             '.ogg' if update.message.voice else '.mp4')
         os.makedirs(VOICE_DIR, exist_ok=True)
         file_path = os.path.join(VOICE_DIR, f'{media.file_unique_id}{extension}')
+        status = StatusReporter(update)
         try:
             await tg_file.download_to_drive(custom_path=file_path)
-            result = await services.chat.process_audio(update.effective_user.id, file_path)
+            result = await services.chat.process_audio(update.effective_user.id, file_path,
+                                                       on_status=status)
         finally:
+            await status.cleanup()
             if os.path.exists(file_path):
                 os.remove(file_path)
     if isinstance(result, str):
@@ -394,8 +407,11 @@ async def process_image(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             return
         caption = update.message.caption
         if caption:
+            status = StatusReporter(update)
             async with typing_action(context, update.effective_chat.id):
-                outcome = await services.chat.process_text(user_id, caption)
+                outcome = await services.chat.process_text(user_id, caption,
+                                                           on_status=status)
+            await status.cleanup()
             await _reply_outcome(update, context, outcome)
         else:
             await update.effective_message.reply_text(

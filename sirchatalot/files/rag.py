@@ -103,6 +103,33 @@ class FilesRAG:
             logger.exception('Error performing semantic search')
             return None
 
+    async def read_file(self, user_id, filename: str, part: int = 1,
+                        part_chars: int = 3000) -> tuple[str, int, int] | None:
+        '''
+        Read a file's text (reassembled from its chunks) page by page.
+        Returns (text, part, total_parts) or None when the file is unknown.
+        '''
+        try:
+            result = await asyncio.to_thread(
+                self.collection.get,
+                where={'$and': [{'filename': filename},
+                                {'user_id': {'$in': [str(user_id), COMMON_USER]}}]},
+                include=['documents', 'metadatas'],
+            )
+            documents = result.get('documents') or []
+            metadatas = result.get('metadatas') or []
+            if not documents:
+                return None
+            ordered = sorted(zip(metadatas, documents),
+                             key=lambda p: (p[0] or {}).get('chunk_number', 0))
+            text = '\n'.join(doc for _, doc in ordered)
+            parts = [text[i:i + part_chars] for i in range(0, len(text), part_chars)] or ['']
+            part = max(1, min(part, len(parts)))
+            return parts[part - 1], part, len(parts)
+        except Exception:
+            logger.exception(f'Error reading {filename} for user {user_id}')
+            return None
+
     async def reset(self) -> None:
         '''Drop all vectors (used when the embeddings model changes).'''
         await asyncio.to_thread(self.client.delete_collection, 'files')

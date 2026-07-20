@@ -205,6 +205,13 @@ class ProxiesConfig(StrictModel):
 
 class AgentConfig(StrictModel):
     max_iterations: int = Field(default=5, ge=1)
+    # hard token budget per turn (prompt+completion across all iterations);
+    # when exceeded the agent is forced to give a final answer. None = no budget
+    max_turn_tokens: int | None = Field(default=None, gt=0)
+    # tool results from PREVIOUS turns are truncated to this many characters
+    # in the stored history (the model sees full results within the turn).
+    # 0 = never truncate
+    tool_result_keep_chars: int = Field(default=300, ge=0)
 
 
 class MemoryConfig(StrictModel):

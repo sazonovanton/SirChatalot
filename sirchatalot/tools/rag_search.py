@@ -28,6 +28,42 @@ SCHEMA = {
 }
 
 
+READ_SCHEMA = {
+    'type': 'function',
+    'function': {
+        'name': 'read_file',
+        'description': 'Read an uploaded document page by page (reassembled from its '
+                       'chunks). Use it when semantic search is not enough — e.g. to '
+                       'summarize a whole document or read it sequentially.',
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'filename': {
+                    'type': 'string',
+                    'description': 'Exact name of the file (see the available files list)',
+                },
+                'part': {
+                    'type': 'integer',
+                    'description': 'Page number to read, starting from 1',
+                    'default': 1,
+                },
+            },
+            'required': ['filename'],
+        },
+    },
+}
+
+
+@registry.register(READ_SCHEMA, requires='files_rag')
+async def read_file(ctx: ToolContext, filename: str, part: int | None = None) -> ToolResult:
+    result = await ctx.files_rag.read_file(filename=filename, user_id=ctx.user_id,
+                                           part=part or 1)
+    if result is None:
+        return ToolResult(for_model=f'File not found: {filename}')
+    text, current, total = result
+    return ToolResult(for_model=f'[{filename} — part {current} of {total}]\n{text}')
+
+
 @registry.register(SCHEMA, requires='files_rag')
 async def semantic_search(ctx: ToolContext, text: str, n_results: int | None = None) -> ToolResult:
     hits = await ctx.files_rag.semantic_search(

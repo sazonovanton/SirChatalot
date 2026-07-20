@@ -57,6 +57,36 @@ async def send_message(update: Update, text: str, reply_to_message: bool = False
                 reply_id = None
 
 
+class StatusReporter:
+    '''Live tool-activity status: a small message created on first update,
+    edited on subsequent ones and deleted before the final answer.'''
+
+    def __init__(self, update: Update):
+        self.update = update
+        self.message = None
+        self._last_text = None
+
+    async def __call__(self, text: str) -> None:
+        if not text or text == self._last_text:
+            return
+        self._last_text = text
+        try:
+            if self.message is None:
+                self.message = await self.update.effective_message.reply_text(text)
+            else:
+                await self.message.edit_text(text)
+        except Exception:
+            logger.debug('Could not update status message', exc_info=True)
+
+    async def cleanup(self) -> None:
+        if self.message is not None:
+            try:
+                await self.message.delete()
+            except Exception:
+                logger.debug('Could not delete status message', exc_info=True)
+            self.message = None
+
+
 @contextlib.asynccontextmanager
 async def typing_action(context, chat_id: int):
     '''Keep the "typing..." indicator alive while the body runs (Telegram shows
