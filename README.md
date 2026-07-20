@@ -201,7 +201,9 @@ Two API modes:
 * `api: images` — the OpenAI images endpoint (`/v1/images/generations`): OpenAI
   DALL-E / gpt-image-1, xAI, Together and other providers that implement it.
 * `api: chat` — image generation through chat completions with modalities. This is
-  how **OpenRouter** serves image models:
+  how **OpenRouter** serves image models. The bot requests image+text output (so it
+  can show the model's caption) and automatically retries with image-only for models
+  that don't support the combination (e.g. FLUX variants):
 
   ```yaml
   image_generation:

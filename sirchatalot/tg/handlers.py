@@ -95,10 +95,18 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if cfg.web is not None and cfg.web.url_open is not None and cfg.web.url_open.enabled:
         text += 'The bot can also open links you send it.\n'
     if cfg.image_generation is not None:
-        text += ('\nImage generation flags for /imagine: `--natural`, `--vivid`, `--sd`, '
-                 '`--hd`, `--horizontal`, `--vertical`, `--revision`.\n'
-                 'Example: `/imagine a cat on a table --natural`\n'
-                 'You can also just ask the bot to draw something.\n')
+        from sirchatalot.media.images import _is_dalle
+        text += '\nImage generation: `/imagine <prompt>`'
+        if cfg.image_generation.api == 'images' and _is_dalle(cfg.image_generation.model):
+            text += (' with flags `--natural`, `--vivid`, `--sd`, `--hd`, '
+                     '`--horizontal`, `--vertical`, `--revision`.\n'
+                     'Example: `/imagine a cat on a table --natural`\n')
+        elif cfg.image_generation.api == 'images':
+            text += (' with flags `--horizontal`, `--vertical`.\n'
+                     'Example: `/imagine a cat on a table --horizontal`\n')
+        else:
+            text += '.\nExample: `/imagine a cat on a table`\n'
+        text += 'You can also just ask the bot to draw something.\n'
     await send_message(update, text)
 
 

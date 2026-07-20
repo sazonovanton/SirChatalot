@@ -67,6 +67,8 @@ CREATE INDEX IF NOT EXISTS idx_memories_user ON memories(user_id);
 # columns added after the initial schema; applied idempotently on connect
 MIGRATIONS = (
     'ALTER TABLE users ADD COLUMN disabled_tools TEXT',
+    'ALTER TABLE users ADD COLUMN full_name TEXT',
+    'ALTER TABLE users ADD COLUMN username TEXT',
 )
 
 
@@ -148,6 +150,23 @@ class Database:
             (user_id, style_name),
         )
         await self.conn.commit()
+
+    async def set_user_identity(self, user_id: int, full_name: str | None,
+                                username: str | None) -> None:
+        await self.conn.execute(
+            'INSERT INTO users (user_id, full_name, username) VALUES (?, ?, ?) '
+            'ON CONFLICT(user_id) DO UPDATE SET '
+            'full_name = excluded.full_name, username = excluded.username',
+            (user_id, full_name, username),
+        )
+        await self.conn.commit()
+
+    async def get_user_identity(self, user_id: int) -> tuple[str | None, str | None]:
+        async with self.conn.execute(
+            'SELECT full_name, username FROM users WHERE user_id = ?', (user_id,)
+        ) as cur:
+            row = await cur.fetchone()
+        return (row['full_name'], row['username']) if row else (None, None)
 
     async def get_disabled_tools(self, user_id: int) -> set[str]:
         async with self.conn.execute(

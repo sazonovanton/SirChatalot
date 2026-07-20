@@ -58,6 +58,12 @@ async def check_user(update: Update, context: ContextTypes.DEFAULT_TYPE,
     if user is None:
         return False
 
+    # keep the stored identity fresh for the system-prompt context block
+    try:
+        await services.db.set_user_identity(user.id, user.full_name, user.username)
+    except Exception:
+        logger.debug('Could not store user identity', exc_info=True)
+
     if cfg.telegram.banlist_enabled and str(user.id) in _read_ids(BANLIST_PATH):
         logger.warning(f'Restricted access to banned user: {user.id}')
         if reply_target is not None:

@@ -98,7 +98,9 @@ image_generation:
   # base_url: null
   model: dall-e-3
   api: images                 # images = OpenAI images endpoint (OpenAI, xAI, Together...)
-  # OpenRouter image models work through chat completions instead:
+  # OpenRouter image models work through chat completions instead
+  # (image-only models like FLUX are supported too — the bot retries with
+  # image-only output if the model rejects image+text):
   # api: chat
   # model: google/gemini-2.5-flash-image
   # base_url: https://openrouter.ai/api/v1

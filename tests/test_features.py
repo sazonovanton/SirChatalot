@@ -143,3 +143,12 @@ def test_unregister_group():
     reg.unregister_group('srv')
     ctx = ToolContext(user_id=1)
     assert reg.groups(ctx) == ['alpha']
+
+
+async def test_memory_dedup(db):
+    store = MemoryStore(MemoryConfig(max_items=10), db)
+    assert await store.save(1, 'likes cats') is True
+    assert await store.save(1, 'likes cats') is False        # exact duplicate
+    assert await store.save(1, '  Likes Cats  ') is False    # case/space-insensitive
+    assert await store.save(1, 'likes dogs') is True
+    assert [m['content'] for m in await store.list(1)] == ['likes cats', 'likes dogs']

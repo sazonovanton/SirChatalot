@@ -53,8 +53,21 @@ class ChatManager:
             return self.cfg.styles[style_name].system_message
         return self.cfg.chat.system_message
 
+    async def _context_block(self, user_id: int) -> str:
+        from datetime import datetime
+        now = datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z')
+        lines = [f'\n# Current date and time: {now}']
+        full_name, username = await self.db.get_user_identity(user_id)
+        if full_name or username:
+            who = full_name or ''
+            if username:
+                who = f'{who} (@{username})'.strip()
+            lines.append(f'# You are talking to: {who}')
+        return '\n'.join(lines)
+
     async def _build_system_message(self, user_id: int, spec) -> str:
         text = await self._base_system_message(user_id)
+        text += await self._context_block(user_id)
         if spec.vision:
             text += '\n# You have vision capabilities enabled'
         if spec.tools:

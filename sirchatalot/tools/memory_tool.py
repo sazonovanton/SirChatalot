@@ -26,5 +26,6 @@ SCHEMA = {
 
 @registry.register(SCHEMA, requires='memory')
 async def save_memory(ctx: ToolContext, content: str) -> ToolResult:
-    await ctx.memory.save(ctx.user_id, content)
-    return ToolResult(for_model='Memory saved.')
+    saved = await ctx.memory.save(ctx.user_id, content)
+    return ToolResult(for_model='Memory saved.' if saved
+                      else 'That is already saved in memory.')

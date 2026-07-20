@@ -14,12 +14,19 @@ class MemoryStore:
         self.cfg = cfg
         self.db = db
 
-    async def save(self, user_id: int, content: str) -> None:
+    async def save(self, user_id: int, content: str) -> bool:
+        '''Save a fact unless an identical one already exists. Returns whether it
+        was actually saved (models sometimes call save_memory twice).'''
         content = content.strip()
         if not content:
-            return
+            return False
+        existing = {m['content'].strip().casefold() for m in await self.list(user_id)}
+        if content[:1000].casefold() in existing:
+            logger.debug(f'Duplicate memory ignored for user {user_id}')
+            return False
         await self.db.add_memory(user_id, content[:1000], self.cfg.max_items)
         logger.debug(f'Saved memory for user {user_id}')
+        return True
 
     async def list(self, user_id: int) -> list[dict]:
         return await self.db.list_memories(user_id)

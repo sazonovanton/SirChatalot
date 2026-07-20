@@ -115,3 +115,45 @@ def test_fingerprint_shape():
     b = embeddings_fingerprint(make_config(files={'embeddings': {'model': 'm2'}}))
     c = embeddings_fingerprint(make_config(files={'embeddings': {'provider': 'local'}}))
     assert a != b and a != c and b != c
+
+
+async def test_context_block_has_time_and_username(db):
+    from tests.conftest import make_config
+    from tests.test_chat_manager import make_manager
+    from tests.test_agent import text_result
+    cfg = make_config()
+    manager, _ = make_manager(db, [text_result('hi')], cfg=cfg)
+    await db.set_user_identity(1, 'John Doe', 'johnd')
+    await manager.process_text(1, 'hello')
+    system = (await db.get_history(1))[0]['content']
+    assert 'Current date and time' in system
+    assert 'John Doe' in system and '@johnd' in system
+
+
+async def test_user_identity_storage(db):
+    assert await db.get_user_identity(1) == (None, None)
+    await db.set_user_identity(1, 'Alice', 'alice_tg')
+    assert await db.get_user_identity(1) == ('Alice', 'alice_tg')
+    # updates in place, does not clobber other user columns
+    await db.set_selected_model(1, 'backup')
+    await db.set_user_identity(1, 'Alice Smith', 'alice_tg')
+    assert await db.get_user_identity(1) == ('Alice Smith', 'alice_tg')
+    assert await db.get_selected_model(1) == 'backup'
+
+
+async def test_image_not_found_message():
+    from types import SimpleNamespace
+    import openai
+    from sirchatalot.config import ImageGenConfig
+    from sirchatalot.media.images import ImageEngine
+
+    engine = ImageEngine(ImageGenConfig(api_key='k', api='chat', model='text-only-model'))
+
+    async def raise_not_found(*a, **k):
+        raise openai.NotFoundError(
+            'no modalities', response=SimpleNamespace(status_code=404, request=None,
+                                                      headers={}), body=None)
+    engine.client.chat.completions.create = raise_not_found
+    b64, text = await engine._generate('a cat', '1024x1024', 'vivid', 'standard', None)
+    assert b64 is None
+    assert 'does not support image generation' in text

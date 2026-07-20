@@ -126,26 +126,46 @@ class ImageEngine:
         except openai.RateLimitError as e:
             logger.error(f'Image generation rate limited by API: {e}')
             return None, 'Service is getting rate limited. Please try again later.'
+        except openai.NotFoundError as e:
+            logger.error(f'Image model/endpoint not found: {e}')
+            return None, (f'The configured image model "{self.cfg.model}" does not support '
+                          f'image generation on this endpoint. Please check the '
+                          f'image_generation section of the config (model and api mode).')
         except Exception:
             logger.exception('Could not generate image')
             return None, None
 
     async def _generate_via_chat(self, prompt):
-        '''Image generation through chat completions with modalities
-        (the OpenRouter way for models like google/gemini-2.5-flash-image).'''
-        response = await self.client.chat.completions.create(
-            model=self.cfg.model,
-            messages=[{'role': 'user', 'content': prompt}],
-            extra_body={'modalities': ['image', 'text']},
-        )
-        message = response.choices[0].message
-        b64 = extract_b64_from_chat_message(message)
-        caption = (message.content or '').strip() or None
-        if b64 is None:
-            logger.error(f'Chat image generation returned no image '
-                         f'(model {self.cfg.model}): {caption}')
-            return None, caption
-        return b64, caption
+        '''
+        Image generation through chat completions with modalities (the OpenRouter
+        way, e.g. google/gemini-2.5-flash-image). Try image+text first so we can
+        return a caption; image-only models (some FLUX variants) reject that
+        combination, so fall back to image-only.
+        '''
+        not_found = None
+        for modalities in (['image', 'text'], ['image']):
+            try:
+                response = await self.client.chat.completions.create(
+                    model=self.cfg.model,
+                    messages=[{'role': 'user', 'content': prompt}],
+                    extra_body={'modalities': modalities},
+                )
+            except openai.NotFoundError as e:
+                not_found = e
+                logger.warning(f'Model {self.cfg.model} rejected modalities '
+                               f'{modalities}: {e}')
+                continue
+            message = response.choices[0].message
+            b64 = extract_b64_from_chat_message(message)
+            if b64 is not None:
+                caption = (message.content or '').strip() or None
+                return b64, caption
+            logger.error(f'Chat image generation returned no image (model '
+                         f'{self.cfg.model}, modalities {modalities})')
+        if not_found is not None:
+            raise not_found   # handled by _generate's NotFoundError branch
+        return None, (f'The model "{self.cfg.model}" did not return an image. '
+                      f'Check that it is an image-capable model.')
 
 
 def extract_b64_from_chat_message(message) -> str | None:
