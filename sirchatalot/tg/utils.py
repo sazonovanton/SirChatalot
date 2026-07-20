@@ -36,25 +36,28 @@ def split_for_telegram(text: str, limit: int = SOURCE_CHUNK_LENGTH) -> list[str]
     return parts
 
 
-async def send_message(update: Update, text: str, reply_to_message: bool = False) -> None:
+async def send_message(update: Update, text: str, reply_to_message: bool = False) -> list:
     '''
     Send text rendered as Telegram MarkdownV2 (converted from the model's
     GitHub-style markdown), falling back to plain text per chunk.
+    Returns the sent Message objects.
     '''
     message = update.effective_message
     if message is None or not text:
-        return
+        return []
+    sent = []
     for index, part in enumerate(split_for_telegram(text)):
         reply_id = message.message_id if (index == 0 and reply_to_message) else None
         try:
             rendered = telegramify_markdown.markdownify(part)
-            await message.reply_text(rendered, parse_mode='MarkdownV2',
-                                     reply_to_message_id=reply_id)
+            sent.append(await message.reply_text(rendered, parse_mode='MarkdownV2',
+                                                 reply_to_message_id=reply_id))
         except Exception as e:
             logger.debug(f'MarkdownV2 send failed ({e}), falling back to plain text')
             for plain in split_for_telegram(part, MAX_MESSAGE_LENGTH):
-                await message.reply_text(plain, reply_to_message_id=reply_id)
+                sent.append(await message.reply_text(plain, reply_to_message_id=reply_id))
                 reply_id = None
+    return sent
 
 
 class StatusReporter:

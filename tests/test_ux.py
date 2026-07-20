@@ -133,3 +133,42 @@ def test_url_open_config_jina_defaults():
     cfg = UrlOpenConfig()
     assert cfg.via_jina is True
     assert cfg.jina_api_key is None
+
+
+async def test_answer_message_tracking_and_deletion():
+    from types import SimpleNamespace
+    from sirchatalot.tg.handlers import _track, _delete_tracked
+
+    deleted = []
+    app = SimpleNamespace(bot_data={})
+    bot = SimpleNamespace()
+    async def delete_message(chat_id, message_id):
+        deleted.append(message_id)
+    bot.delete_message = delete_message
+    context = SimpleNamespace(application=app, bot=bot)
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=42))
+
+    _track(context, user_id=7, messages=[SimpleNamespace(message_id=101),
+                                         SimpleNamespace(message_id=102)])
+    assert app.bot_data['answer_ids'][7] == [101, 102]
+
+    await _delete_tracked(update, context, user_id=7)
+    assert deleted == [101, 102]
+    # popped: a second call deletes nothing and does not raise
+    await _delete_tracked(update, context, user_id=7)
+    assert deleted == [101, 102]
+
+
+async def test_delete_tracked_swallows_errors():
+    from types import SimpleNamespace
+    from sirchatalot.tg.handlers import _track, _delete_tracked
+
+    app = SimpleNamespace(bot_data={})
+    bot = SimpleNamespace()
+    async def delete_message(chat_id, message_id):
+        raise RuntimeError('message too old to delete')
+    bot.delete_message = delete_message
+    context = SimpleNamespace(application=app, bot=bot)
+    update = SimpleNamespace(effective_chat=SimpleNamespace(id=1))
+    _track(context, 7, [SimpleNamespace(message_id=1)])
+    await _delete_tracked(update, context, 7)  # must not raise

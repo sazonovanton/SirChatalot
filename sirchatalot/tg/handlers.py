@@ -38,16 +38,35 @@ def sanitize_filename(filename: str | None) -> str:
     return name
 
 
+def _track(context, user_id: int, messages) -> None:
+    '''Remember the ids of the bot's answer messages for this user's last turn,
+    so /retry and /undo can delete them (best effort, in-memory).'''
+    ids = [m.message_id for m in messages if m is not None]
+    context.application.bot_data.setdefault('answer_ids', {})[user_id] = ids
+
+
+async def _delete_tracked(update, context, user_id: int) -> None:
+    ids = context.application.bot_data.get('answer_ids', {}).pop(user_id, [])
+    for message_id in ids:
+        try:
+            await context.bot.delete_message(chat_id=update.effective_chat.id,
+                                             message_id=message_id)
+        except Exception:
+            logger.debug(f'Could not delete message {message_id}', exc_info=True)
+
+
 async def _reply_outcome(update: Update, context, outcome) -> None:
     services = get_services(context)
     if outcome is None:
         await update.effective_message.reply_text(GENERIC_ERROR)
         return
+    sent = []
     for image_bytes in outcome.media:
-        await update.effective_message.reply_photo(photo=image_bytes)
+        sent.append(await update.effective_message.reply_photo(photo=image_bytes))
     if outcome.text:
-        await send_message(update, outcome.text,
-                           reply_to_message=services.cfg.telegram.reply_to_message)
+        sent += await send_message(update, outcome.text,
+                                   reply_to_message=services.cfg.telegram.reply_to_message)
+    _track(context, update.effective_user.id, sent)
 
 
 # ---- commands ----
@@ -344,13 +363,16 @@ async def answer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def retry_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Regenerate the answer to the last message.'''
     services = get_services(context)
+    user_id = update.effective_user.id
     status = StatusReporter(update)
     async with typing_action(context, update.effective_chat.id):
-        outcome = await services.chat.retry(update.effective_user.id, on_status=status)
+        outcome = await services.chat.retry(user_id, on_status=status)
     await status.cleanup()
     if outcome is None:
         await update.effective_message.reply_text('Nothing to retry yet.')
         return
+    # drop the previous answer from the chat, then post the new one
+    await _delete_tracked(update, context, user_id)
     await _reply_outcome(update, context, outcome)
 
 
@@ -358,7 +380,9 @@ async def retry_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def undo_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     '''Remove the last exchange from the history.'''
     services = get_services(context)
-    if await services.chat.undo(update.effective_user.id):
+    user_id = update.effective_user.id
+    if await services.chat.undo(user_id):
+        await _delete_tracked(update, context, user_id)
         await update.effective_message.reply_text(
             'Last exchange removed. The conversation continues from the previous point.')
     else:
