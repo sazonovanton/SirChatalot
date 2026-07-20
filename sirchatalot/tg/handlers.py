@@ -124,7 +124,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             text += (' with flags `--horizontal`, `--vertical`.\n'
                      'Example: `/imagine a cat on a table --horizontal`\n')
         else:
-            text += '.\nExample: `/imagine a cat on a table`\n'
+            text += (' with flags `--ratio 16:9` (aspect ratio), `--res 2K` '
+                     '(512/1K/2K/4K), `--horizontal`, `--vertical`, `--square`.\n'
+                     'Example: `/imagine a cat on a table --ratio 16:9 --res 2K`\n'
+                     '(support depends on the model)\n')
         text += 'You can also just ask the bot to draw something.\n'
     await send_message(update, text)
 

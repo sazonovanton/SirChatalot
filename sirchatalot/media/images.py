@@ -3,6 +3,7 @@ Image generation via the OpenAI images API (DALL-E / gpt-image-1 / any
 OpenAI-compatible image provider).
 '''
 
+import re
 import time
 
 import openai
@@ -24,6 +25,35 @@ ORIENTATION_SIZES = {
 
 def _is_dalle(model: str) -> bool:
     return model.lower().startswith('dall-e')
+
+
+# OpenRouter chat-mode image_config (providers clamp to their supported subset)
+ALLOWED_RATIOS = {'1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3',
+                  '4:5', '5:4', '21:9', '9:21'}
+ALLOWED_SIZES = {'512': '512', '1K': '1K', '2K': '2K', '4K': '4K'}
+ORIENTATION_RATIOS = {'landscape': '16:9', 'portrait': '9:16', 'square': '1:1'}
+
+
+def parse_image_config(prompt: str) -> tuple[str, dict]:
+    '''
+    Extract chat-mode image flags from a prompt, returning (cleaned_prompt, config).
+    Flags: --ratio W:H, --res 512|1K|2K|4K, --horizontal/--vertical/--square.
+    '''
+    config = {}
+    m = re.search(r'--ratio\s+(\d+:\d+)', prompt)
+    if m and m.group(1) in ALLOWED_RATIOS:
+        config['aspect_ratio'] = m.group(1)
+    prompt = re.sub(r'--ratio\s+\S+', '', prompt)
+    m = re.search(r'--res\s+(\S+)', prompt)
+    if m and m.group(1).upper().replace('к', 'K') in ALLOWED_SIZES:
+        config['image_size'] = ALLOWED_SIZES[m.group(1).upper().replace('к', 'K')]
+    prompt = re.sub(r'--res\s+\S+', '', prompt)
+    for flag, ratio in (('--horizontal', '16:9'), ('--vertical', '9:16'),
+                        ('--square', '1:1')):
+        if flag in prompt:
+            config.setdefault('aspect_ratio', ratio)
+            prompt = prompt.replace(flag, '')
+    return prompt.strip(), config
 
 
 class ImageEngine:
@@ -67,9 +97,16 @@ class ImageEngine:
         '''
         if self.rate_limited(user_id):
             return None, self._rate_limit_message()
+        prompt = prompt.replace('—', '--')
+        if self.cfg.api == 'chat':
+            prompt, image_config = parse_image_config(prompt)
+            if not prompt:
+                return None, 'No text prompt was given. Please try again.'
+            b64_image, caption = await self._generate(
+                prompt, None, None, None, user_id, image_config=image_config)
+            return (b64_image, caption) if b64_image else (None, caption)
         sizes = ORIENTATION_SIZES['dall-e' if _is_dalle(self.cfg.model) else 'other']
         size, style, quality = self.cfg.size, self.cfg.style, self.cfg.quality
-        prompt = prompt.replace('—', '--')
         revision = '--revision' in prompt
         flags = {'--revision': None, '--natural': ('style', 'natural'), '--vivid': ('style', 'vivid'),
                  '--sd': ('quality', 'standard'), '--hd': ('quality', 'hd'),
@@ -98,15 +135,21 @@ class ImageEngine:
         '''Tool entry point. Returns (b64_image, revised_prompt/error message).'''
         if self.rate_limited(user_id):
             return None, self._rate_limit_message()
+        if self.cfg.api == 'chat':
+            image_config = {}
+            if image_orientation in ORIENTATION_RATIOS:
+                image_config['aspect_ratio'] = ORIENTATION_RATIOS[image_orientation]
+            return await self._generate(prompt, None, None, None, user_id,
+                                        image_config=image_config)
         sizes = ORIENTATION_SIZES['dall-e' if _is_dalle(self.cfg.model) else 'other']
         size = sizes.get(image_orientation, '1024x1024')
         style = image_style if image_style in ('natural', 'vivid') else self.cfg.style
         return await self._generate(prompt, size, style, self.cfg.quality, user_id)
 
-    async def _generate(self, prompt, size, style, quality, user_id):
+    async def _generate(self, prompt, size, style, quality, user_id, image_config=None):
         try:
             if self.cfg.api == 'chat':
-                return await self._generate_via_chat(prompt)
+                return await self._generate_via_chat(prompt, image_config)
             kwargs = {}
             if self.end_user_id and user_id is not None:
                 kwargs['user'] = hashed_user(user_id)
@@ -135,25 +178,33 @@ class ImageEngine:
             logger.exception('Could not generate image')
             return None, None
 
-    async def _generate_via_chat(self, prompt):
+    async def _generate_via_chat(self, prompt, image_config=None):
         '''
         Image generation through chat completions with modalities (the OpenRouter
-        way, e.g. google/gemini-2.5-flash-image). Try image+text first so we can
-        return a caption; image-only models (some FLUX variants) reject that
-        combination, so fall back to image-only.
+        way, e.g. google/gemini-2.5-flash-image). Tries in order, stopping at the
+        first success:
+          * image+text with image_config (aspect ratio / size)
+          * image+text without config (models that reject image_config)
+          * image-only variants of both (some FLUX models reject image+text)
         '''
-        not_found = None
+        attempts = []
         for modalities in (['image', 'text'], ['image']):
+            if image_config:
+                attempts.append({'modalities': modalities, 'image_config': image_config})
+            attempts.append({'modalities': modalities})
+
+        last_error = None
+        for extra in attempts:
             try:
                 response = await self.client.chat.completions.create(
                     model=self.cfg.model,
                     messages=[{'role': 'user', 'content': prompt}],
-                    extra_body={'modalities': modalities},
+                    extra_body=extra,
                 )
-            except openai.NotFoundError as e:
-                not_found = e
-                logger.warning(f'Model {self.cfg.model} rejected modalities '
-                               f'{modalities}: {e}')
+            except (openai.NotFoundError, openai.BadRequestError) as e:
+                last_error = e
+                logger.warning(f'Model {self.cfg.model} rejected image request '
+                               f'({list(extra)}): {e}')
                 continue
             message = response.choices[0].message
             b64 = extract_b64_from_chat_message(message)
@@ -161,9 +212,9 @@ class ImageEngine:
                 caption = (message.content or '').strip() or None
                 return b64, caption
             logger.error(f'Chat image generation returned no image (model '
-                         f'{self.cfg.model}, modalities {modalities})')
-        if not_found is not None:
-            raise not_found   # handled by _generate's NotFoundError branch
+                         f'{self.cfg.model}, {list(extra)})')
+        if last_error is not None:
+            raise last_error   # formatted by _generate's error branches
         return None, (f'The model "{self.cfg.model}" did not return an image. '
                       f'Check that it is an image-capable model.')
 

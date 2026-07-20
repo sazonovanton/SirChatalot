@@ -213,9 +213,16 @@ Two API modes:
     api_key: "sk-or-..."
   ```
 
-`/imagine` prompt flags (images mode): `--natural`/`--vivid`, `--sd`/`--hd`,
-`--horizontal`/`--vertical`, `--revision` (show the revised prompt). The model can
-also generate images by itself via the `generate_image` tool.
+`/imagine` prompt flags:
+* images mode (DALL-E): `--natural`/`--vivid`, `--sd`/`--hd`,
+  `--horizontal`/`--vertical`, `--revision` (show the revised prompt).
+* chat mode (OpenRouter): `--ratio 16:9` (aspect ratio: 1:1, 16:9, 9:16, 4:3,
+  3:4, 3:2, 2:3, 4:5, 5:4, 21:9, 9:21), `--res 512|1K|2K|4K`, and the
+  `--horizontal`/`--vertical`/`--square` shortcuts. These map to OpenRouter's
+  `image_config`; if a model rejects it the bot retries without it. Support
+  depends on the model.
+
+The model can also generate images by itself via the `generate_image` tool.
 
 ### audio (optional)
 
