@@ -6,3 +6,17 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
+    # The image ships a HEALTHCHECK (see Dockerfile). Docker only *reports*
+    # unhealthy containers; uncomment the label and the autoheal service below
+    # to have them restarted automatically.
+    # labels:
+    #   - autoheal=true
+
+  # autoheal:
+  #   image: willfarrell/autoheal:latest
+  #   container_name: SirChatalot-autoheal
+  #   environment:
+  #     AUTOHEAL_CONTAINER_LABEL: autoheal
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   restart: unless-stopped

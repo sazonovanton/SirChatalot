@@ -135,6 +135,18 @@ cython_debug/
 # Built Visual Studio Code Extensions
 *.vsix
 
+# JetBrains IDEs
+.idea/
+
+# Claude Code project settings
+.claude/
+
+# Linter cache
+.ruff_cache/
+
+# macOS
+.DS_Store
+
 # Project specific
 data/.config
 data/config.yaml
@@ -146,6 +158,8 @@ data/whitelist.txt
 data/banlist.txt
 data/rates.txt
 data/moderation.txt
+data/heartbeat
+data/heartbeat.tmp
 *.pickle
 *.bak
 

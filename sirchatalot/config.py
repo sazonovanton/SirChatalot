@@ -23,12 +23,41 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid')
 
 
+class TelegramNetworkConfig(StrictModel):
+    '''
+    Bot API connectivity. The python-telegram-bot defaults (5 second timeouts,
+    a single getUpdates connection with a 1 second pool timeout) assume a direct
+    connection; behind a proxy they turn every hiccup into TimedOut/PoolTimeout,
+    so everything here is deliberately more patient.
+    '''
+    connect_timeout: float = Field(default=20.0, gt=0)
+    read_timeout: float = Field(default=30.0, gt=0)
+    write_timeout: float = Field(default=30.0, gt=0)
+    pool_timeout: float = Field(default=20.0, gt=0)
+    connection_pool_size: int = Field(default=256, ge=1)
+    get_updates_pool_size: int = Field(default=8, ge=1)
+    poll_interval: float = Field(default=1.0, ge=0)   # pause between getUpdates calls
+    poll_timeout: float = Field(default=30.0, gt=0)   # long polling timeout
+    # how often the bot pings the API and refreshes the heartbeat file
+    heartbeat_seconds: float = Field(default=60.0, gt=0)
+    # reconnect from scratch after the API has been unreachable this long (0 = never)
+    watchdog_seconds: float = Field(default=900.0, ge=0)
+
+    @model_validator(mode='after')
+    def _watchdog_above_heartbeat(self):
+        if self.watchdog_seconds and self.watchdog_seconds < self.heartbeat_seconds:
+            raise ValueError('telegram.network.watchdog_seconds must be 0 or '
+                             '>= heartbeat_seconds')
+        return self
+
+
 class TelegramConfig(StrictModel):
     token: str
     access_codes: list[str] = []
     banlist_enabled: bool = False
     reply_to_message: bool = False
     admin_id: int | None = None   # gets error notifications when set
+    network: TelegramNetworkConfig = TelegramNetworkConfig()
 
 
 class RateLimitConfig(StrictModel):

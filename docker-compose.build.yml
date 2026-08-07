@@ -9,3 +9,5 @@ services:
       - ./data:/app/data
       - ./logs:/app/logs
     restart: unless-stopped
+    # See docker-compose.yml for the optional autoheal setup that restarts the
+    # container when the built-in HEALTHCHECK reports unhealthy.

@@ -2,9 +2,13 @@
 Application wiring: build services from config, register handlers, run polling.
 '''
 
+import asyncio
+import contextlib
 import os
 import sys
+import time
 
+from telegram.error import InvalidToken
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -14,8 +18,9 @@ from telegram.ext import (
 )
 
 from sirchatalot.chat_manager import ChatManager
-from sirchatalot.config import AppConfig, ConfigError, load_config
+from sirchatalot.config import AppConfig, ConfigError, TelegramNetworkConfig, load_config
 from sirchatalot.db import Database
+from sirchatalot.health import HEARTBEAT_PATH, write_heartbeat
 from sirchatalot.logging_setup import get_logger, setup_logging
 from sirchatalot.model_registry import ModelRegistry
 from sirchatalot.tg import handlers
@@ -209,6 +214,81 @@ class ErrorNotifier:
             logger.exception('Could not notify admin about an error')
 
 
+class ConnectionWatchdog:
+    '''
+    Liveness for the Telegram connection.
+
+    Every heartbeat_seconds it pings the Bot API and rewrites the heartbeat file
+    the container HEALTHCHECK reads. If the API stays unreachable for
+    watchdog_seconds it stops polling and asks run() for a full reconnect —
+    python-telegram-bot retries getUpdates forever, but a proxy that dropped the
+    underlying connections is only really fixed by rebuilding the HTTP clients.
+    '''
+
+    def __init__(self, net: TelegramNetworkConfig, path: str = HEARTBEAT_PATH):
+        self.net = net
+        self.path = path
+        self.restart_requested = False
+        self._task: asyncio.Task | None = None
+        self._last_ok = 0.0
+        self._failures = 0
+
+    def start(self, application: Application) -> None:
+        self.restart_requested = False
+        self._last_ok = time.time()
+        self._failures = 0
+        write_heartbeat(self.path, ok=True, last_ok=self._last_ok)
+        self._task = asyncio.create_task(self._loop(application))
+
+    async def stop(self) -> None:
+        if self._task is None:
+            return
+        self._task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await self._task
+        self._task = None
+
+    async def _loop(self, application: Application) -> None:
+        while True:
+            await asyncio.sleep(self.net.heartbeat_seconds)
+            error = await self._probe(application)
+            ok = error is None
+            now = time.time()
+            if ok:
+                if self._failures:
+                    logger.warning(f'Telegram API is reachable again after '
+                                   f'{self._failures} failed probe(s)')
+                self._failures = 0
+                self._last_ok = now
+            else:
+                self._failures += 1
+                # an outage can last hours; report it without filling the log
+                if self._failures == 1 or self._failures % 10 == 0:
+                    logger.warning(f'Telegram API probe failed '
+                                   f'({self._failures} in a row): {error}')
+            write_heartbeat(self.path, ok=ok, last_ok=self._last_ok, now=now)
+            if ok or not self.net.watchdog_seconds:
+                continue
+            down_for = now - self._last_ok
+            if down_for >= self.net.watchdog_seconds:
+                logger.critical(f'Telegram API unreachable for {down_for:.0f}s — '
+                                f'reconnecting from scratch')
+                self.restart_requested = True
+                application.stop_running()
+                return
+
+    async def _probe(self, application: Application) -> str | None:
+        '''Ping the Bot API; returns None on success or a description of the failure.'''
+        limit = self.net.connect_timeout + self.net.read_timeout + 5
+        try:
+            await asyncio.wait_for(application.bot.get_me(), timeout=limit)
+            return None
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            return f'{type(e).__name__}: {e}'
+
+
 def bot_commands(cfg: AppConfig) -> list[tuple[str, str]]:
     '''Commands shown in the Telegram command menu (set_my_commands).'''
     commands = [
@@ -261,6 +341,69 @@ def register_handlers(application: Application) -> None:
     application.add_handler(MessageHandler(DOCUMENT_FILTER, handlers.downloader))
 
 
+def build_application(cfg: AppConfig, db: Database,
+                      watchdog: ConnectionWatchdog) -> Application:
+    '''Build a ready-to-poll Application. Called again on every reconnect, so
+    everything bound to the event loop (HTTP clients, DB, MCP) is created here
+    and torn down in post_shutdown.'''
+    mcp_manager = None
+
+    async def post_init(application: Application) -> None:
+        nonlocal mcp_manager
+        await db.connect()
+        services = build_services(cfg, db)
+        application.bot_data['services'] = services
+        if cfg.mcp_servers:
+            from sirchatalot.mcp_client import MCPManager
+            from sirchatalot.tools import registry as tool_registry
+            mcp_manager = MCPManager(cfg.mcp_servers, tool_registry)
+            await mcp_manager.start()
+        try:
+            await application.bot.set_my_commands(bot_commands(cfg))
+        except Exception:
+            logger.exception('Could not set the bot command menu')
+        await reindex_if_embeddings_changed(services)
+        await ingest_common_files(services)
+        watchdog.start(application)
+
+    async def post_shutdown(application: Application) -> None:
+        await watchdog.stop()
+        if mcp_manager is not None:
+            await mcp_manager.stop()
+        await db.close()
+
+    net = cfg.telegram.network
+    builder = (Application.builder()
+               .token(cfg.telegram.token)
+               .connect_timeout(net.connect_timeout)
+               .read_timeout(net.read_timeout)
+               .write_timeout(net.write_timeout)
+               .pool_timeout(net.pool_timeout)
+               .connection_pool_size(net.connection_pool_size)
+               # getUpdates gets its own client: PTB defaults it to a single
+               # connection with a 1s pool timeout, which a proxy easily exhausts
+               .get_updates_connect_timeout(net.connect_timeout)
+               .get_updates_read_timeout(net.read_timeout)
+               .get_updates_write_timeout(net.write_timeout)
+               .get_updates_pool_timeout(net.pool_timeout)
+               .get_updates_connection_pool_size(net.get_updates_pool_size)
+               .post_init(post_init)
+               .post_shutdown(post_shutdown))
+    if cfg.proxies.telegram:
+        builder = (builder.proxy(cfg.proxies.telegram)
+                   .get_updates_proxy(cfg.proxies.telegram))
+    application = builder.build()
+    register_handlers(application)
+    application.add_error_handler(ErrorNotifier(cfg.telegram.admin_id))
+    return application
+
+
+# backoff between reconnects; the last value repeats
+RESTART_DELAYS = (5, 15, 30, 60, 120)
+# a run that lasted this long counts as healthy: the next failure starts over
+RESTART_BACKOFF_RESET = 300
+
+
 def run() -> None:
     try:
         cfg = load_config()
@@ -280,40 +423,46 @@ def run() -> None:
         print('No access codes set. The bot is available to everyone.')
 
     os.makedirs('./data/chats', exist_ok=True)
+    net = cfg.telegram.network
+    watchdog = ConnectionWatchdog(net)
     db = Database()
+    attempt = 0
 
-    mcp_manager = None
-
-    async def post_init(application: Application) -> None:
-        nonlocal mcp_manager
-        await db.connect()
-        services = build_services(cfg, db)
-        application.bot_data['services'] = services
-        if cfg.mcp_servers:
-            from sirchatalot.mcp_client import MCPManager
-            from sirchatalot.tools import registry as tool_registry
-            mcp_manager = MCPManager(cfg.mcp_servers, tool_registry)
-            await mcp_manager.start()
+    while True:
         try:
-            await application.bot.set_my_commands(bot_commands(cfg))
+            application = build_application(cfg, db, watchdog)
         except Exception:
-            logger.exception('Could not set the bot command menu')
-        await reindex_if_embeddings_changed(services)
-        await ingest_common_files(services)
+            logger.exception('Could not build the application')
+            print('Could not build the application, see the log', file=sys.stderr)
+            sys.exit(1)
 
-    async def post_shutdown(application: Application) -> None:
-        if mcp_manager is not None:
-            await mcp_manager.stop()
-        await db.close()
+        started = time.monotonic()
+        try:
+            # bootstrap_retries=-1: keep retrying the initial connection instead
+            # of dying when Telegram (or the proxy) is down at startup
+            application.run_polling(poll_interval=net.poll_interval,
+                                    timeout=int(net.poll_timeout),
+                                    bootstrap_retries=-1)
+        except InvalidToken:
+            logger.critical('Invalid Telegram token')
+            print('Invalid Telegram token', file=sys.stderr)
+            sys.exit(1)
+        except (KeyboardInterrupt, SystemExit):
+            raise
+        except Exception:
+            logger.exception('Polling stopped with an error')
+            if time.monotonic() - started > RESTART_BACKOFF_RESET:
+                attempt = 0
+            delay = RESTART_DELAYS[min(attempt, len(RESTART_DELAYS) - 1)]
+            attempt += 1
+            logger.warning(f'Restarting the bot in {delay}s')
+            print(f'Polling stopped with an error, restarting in {delay}s', file=sys.stderr)
+            time.sleep(delay)
+            continue
 
-    builder = (Application.builder()
-               .token(cfg.telegram.token)
-               .post_init(post_init)
-               .post_shutdown(post_shutdown))
-    if cfg.proxies.telegram:
-        builder = (builder.proxy(cfg.proxies.telegram)
-                   .get_updates_proxy(cfg.proxies.telegram))
-    application = builder.build()
-    register_handlers(application)
-    application.add_error_handler(ErrorNotifier(cfg.telegram.admin_id))
-    application.run_polling()
+        if not watchdog.restart_requested:
+            logger.info('***** Bot stopped *****')
+            return
+        attempt = 0
+        logger.warning('Reconnecting to Telegram after a connectivity outage')
+        time.sleep(RESTART_DELAYS[0])

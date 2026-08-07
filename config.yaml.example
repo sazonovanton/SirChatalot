@@ -11,6 +11,19 @@ telegram:
   banlist_enabled: false
   reply_to_message: false
   # admin_id: 123456789       # this user gets error notifications
+  # Bot API connectivity. The defaults below are already tuned for a proxied,
+  # flaky link — override only if you know why.
+  # network:
+  #   connect_timeout: 20      # seconds; PTB's own default is a very tight 5
+  #   read_timeout: 30
+  #   write_timeout: 30
+  #   pool_timeout: 20         # PTB's default of 1s causes "Pool timeout" errors
+  #   connection_pool_size: 256
+  #   get_updates_pool_size: 8 # PTB's default of 1 connection is easily exhausted
+  #   poll_interval: 1.0       # pause between getUpdates calls
+  #   poll_timeout: 30         # long polling timeout
+  #   heartbeat_seconds: 60    # API ping + heartbeat file for the container healthcheck
+  #   watchdog_seconds: 900    # reconnect after the API is unreachable this long (0 = off)
 
 # Any OpenAI-compatible API works: OpenAI, OpenRouter, Ollama, vLLM,
 # Anthropic/Yandex via their OpenAI-compatible endpoints, etc.

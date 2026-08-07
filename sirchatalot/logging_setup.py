@@ -22,6 +22,7 @@ def setup_logging(level: str = 'WARNING') -> None:
     root = logging.getLogger('sirchatalot')
     root.setLevel(getattr(logging, level.upper(), logging.WARNING))
     root.addHandler(handler)
+    root.propagate = False   # the same handler sits on the root logger below
     # keep third-party noise (httpx, telegram, chromadb) at WARNING in the same file
     lib_root = logging.getLogger()
     if not lib_root.handlers:

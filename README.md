@@ -94,6 +94,35 @@ If `access_codes` is set, the bot answers only whitelisted users; sending a code
 whitelists the sender (stored in `./data/whitelist.txt`, one id per line, editable
 by hand).
 
+Connectivity is configured under `telegram.network`. The defaults are tuned for a
+proxied, unstable link (python-telegram-bot's own defaults — 5 second timeouts and
+a single `getUpdates` connection with a 1 second pool timeout — produce endless
+`TimedOut` / `Pool timeout` errors behind a proxy), so override only if you need to:
+
+```yaml
+telegram:
+  network:
+    connect_timeout: 20       # seconds
+    read_timeout: 30
+    write_timeout: 30
+    pool_timeout: 20
+    connection_pool_size: 256
+    get_updates_pool_size: 8  # separate pool for long polling
+    poll_interval: 1.0        # pause between getUpdates calls
+    poll_timeout: 30          # long polling timeout
+    heartbeat_seconds: 60     # API ping + heartbeat file for the healthcheck
+    watchdog_seconds: 900     # reconnect after this long without the API (0 = off)
+```
+
+How the bot survives a flaky link:
+
+- the initial connection is retried forever, so starting with the proxy down is fine;
+- polling errors are retried by python-telegram-bot itself;
+- every `heartbeat_seconds` the bot pings the Bot API and writes `./data/heartbeat`;
+- after `watchdog_seconds` without a reachable API it rebuilds the connection from
+  scratch (new HTTP clients), and if polling dies outright the process restarts it
+  with a 5 → 120 second backoff.
+
 ### models, default_model, fallback_chain (required)
 
 Any OpenAI-compatible endpoint works. Each entry:
@@ -388,6 +417,21 @@ Both compose files mount `./data` (config, database, files) and `./logs`. The
 image includes ffmpeg (voice) and catdoc (legacy `.doc`/`.ppt` conversion); for
 npx-based stdio MCP servers uncomment the nodejs block in the Dockerfile and
 build your own image.
+
+### Healthcheck
+
+The image runs `healthcheck.py` every minute: the container is healthy while the
+heartbeat file is fresh **and** the Bot API was reachable within
+`SIRCHATALOT_HEARTBEAT_MAX_AGE` (default 300 s; keep it a few times
+`telegram.network.heartbeat_seconds`). Check it with `docker ps` or:
+
+```
+docker inspect --format '{{json .State.Health}}' SirChatalot
+```
+
+Docker only *reports* unhealthy containers. To have one restarted automatically,
+uncomment the `autoheal=true` label and the `autoheal` service in
+`docker-compose.yml`.
 
 ## Development
 
